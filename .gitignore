@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+work/
+corpus/
+build/
+out/
+*.nvda-addon

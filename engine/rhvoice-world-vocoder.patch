@@ -1,0 +1,297 @@
+diff --git a/src/core/CMakeLists.txt b/src/core/CMakeLists.txt
+index f5fadd2..e5c8114 100644
+--- a/src/core/CMakeLists.txt
++++ b/src/core/CMakeLists.txt
+@@ -35,7 +35,7 @@ endif()
+ add_library(RHVoice_core SHARED "${SRCFILES}")
+ set_target_properties(RHVoice_core PROPERTIES VERSION "${RHVOICE_VERSION}" SOVERSION "${RHVOICE_VERSION_MAJOR}")
+ set(libs2link "libhts_engine")
+-target_include_directories(RHVoice_core PUBLIC "${INCLUDE_DIR}" PRIVATE "${HTS_LABELS_KIT_INCLUDES}")
++target_include_directories(RHVoice_core PUBLIC "${INCLUDE_DIR}" PRIVATE "${HTS_LABELS_KIT_INCLUDES}" "${CMAKE_CURRENT_SOURCE_DIR}/world")
+ 
+ set(package_name "RHVoice_core")
+ 
+diff --git a/src/core/hts_vocoder_wrapper.cpp b/src/core/hts_vocoder_wrapper.cpp
+index eeadbe7..7530327 100644
+--- a/src/core/hts_vocoder_wrapper.cpp
++++ b/src/core/hts_vocoder_wrapper.cpp
+@@ -18,6 +18,8 @@
+ #include <iostream>
+ #include "core/hts_vocoder_wrapper.hpp"
+ #include "HTS_hidden.h"
++#include <cstring>
++#include "world/synthesisrealtime.h"
+ 
+ namespace RHVoice
+ {
+@@ -36,6 +38,10 @@ namespace RHVoice
+                            0,
+                            HTS_Engine_get_sampling_frequency(engine),
+                            HTS_Engine_get_fperiod(engine));
++    const char* fmt=HTS_Engine_get_fullcontext_label_format(engine);
++    world=(fmt!=nullptr && std::strstr(fmt, "WORLD")!=nullptr);
++    if(world)
++      world_init();
+ }
+ 
+   void hts_vocoder_wrapper::clear()
+@@ -44,6 +50,7 @@ namespace RHVoice
+       return;
+     HTS_Vocoder_clear(vocoder.get());
+     vocoder.reset();
++    world_clear();
+     engine=nullptr;
+     pitch_editor=nullptr;
+     count=0;
+@@ -109,6 +116,8 @@ namespace RHVoice
+   {
+     pitch_editor->finish();
+     do_synth();
++    if(world && !engine->condition.stop)
++      world_flush();
+   }
+ 
+   void hts_vocoder_wrapper::do_synth()
+@@ -128,6 +137,12 @@ namespace RHVoice
+           }
+         if(f.voiced)
+           lf0+=pitch_shift;
++        if(world)
++          {
++            world_frame(f, lf0);
++            fq.pop();
++            continue;
++          }
+         HTS_Vocoder_synthesize(vocoder.get(),
+                                nspec - 1,
+                                lf0,
+@@ -142,4 +157,164 @@ namespace RHVoice
+         fq.pop();
+       }
+   }
++
++  // ======================= WORLD vocoder =======================
++  // Mel-cepstrum -> power spectrum: log|H| = sum_m c_m cos(m * warped(w)),
++  // band aperiodicity (7 bands, as linear power weights) -> per-bin amplitude.
++  // WORLD generates the aperiodic part pulse by pulse, i.e. pitch-synchronously.
++
++  void hts_vocoder_wrapper::world_init()
++  {
++    const int fs=HTS_Engine_get_sampling_frequency(engine);
++    const int fp=HTS_Engine_get_fperiod(engine);
++    const int nspec=HTS_ModelSet_get_vector_length(&engine->ms, 0);
++    const int nbap=HTS_ModelSet_get_vector_length(&engine->ms, 2);
++    const double alpha=engine->condition.alpha;
++    world_fft=(fs>32000)?2048:1024;
++    const int nb=world_fft/2+1;
++    world_cos.assign(nb*nspec, 0.0);
++    for(int k=0; k<nb; ++k)
++      {
++        const double w=M_PI*k/(nb-1);
++        const double ww=w+2.0*std::atan(alpha*std::sin(w)/(1.0-alpha*std::cos(w)));
++        for(int m=0; m<nspec; ++m)
++          world_cos[k*nspec+m]=std::cos(m*ww);
++      }
++    // band centres (Hz) of the 7-band set used by our voices; generic split otherwise
++    std::vector<double> cent;
++    if(nbap==7)
++      cent={500, 1500, 3000, 5000, 7000, 9000, 11000};
++    else
++      for(int i=0; i<nbap; ++i)
++        cent.push_back((i+0.5)*fs/2.0/nbap);
++    world_bapw.assign(nb*2, 0.0);   // for each bin: lower band index, weight of upper band
++    for(int k=0; k<nb; ++k)
++      {
++        const double f=0.5*fs*k/(nb-1);
++        int i=0;
++        while(i+1<nbap && cent[i+1]<f) ++i;
++        double t=0;
++        if(i+1<nbap && f>cent[i])
++          t=(f-cent[i])/(cent[i+1]-cent[i]);
++        if(t<0) t=0;
++        if(t>1) t=1;
++        world_bapw[2*k]=i;
++        world_bapw[2*k+1]=(i+1<nbap)?t:0.0;
++      }
++    auto* s=new WorldSynthesizer;
++    InitializeSynthesizer(fs, 1000.0*fp/fs, world_fft, fp, 4096, s);
++    ws=s;
++  }
++
++  void hts_vocoder_wrapper::world_clear()
++  {
++    if(ws!=nullptr)
++      {
++        auto* s=static_cast<WorldSynthesizer*>(ws);
++        DestroySynthesizer(s);
++        delete s;
++        ws=nullptr;
++      }
++    world_frames.clear();
++    world=false;
++  }
++
++  void hts_vocoder_wrapper::world_frame(const frame_t& f, double lf0)
++  {
++    auto* s=static_cast<WorldSynthesizer*>(ws);
++    const int nspec=f.spec.size();
++    const int nb=world_fft/2+1;
++    std::unique_ptr<world_frame_t> wf(new world_frame_t);
++    wf->f0[0]=f.voiced?std::exp(lf0):0.0;
++    // spectral envelope with cepstral postfilter (HTS-style beta, energy preserved)
++    std::vector<double> c(f.spec.begin(), f.spec.end());
++    const double beta=engine->condition.beta;
++    wf->sp.assign(nb, 0.0);
++    std::vector<double> la(nb, 0.0);
++    double e0=0, e1=0;
++    for(int k=0; k<nb; ++k)
++      {
++        double a=0;
++        for(int m=0; m<nspec; ++m) a+=c[m]*world_cos[k*nspec+m];
++        la[k]=a; e0+=std::exp(2*a);
++      }
++    if(beta!=0)
++      {
++        for(int k=0; k<nb; ++k)
++          {
++            double d=0;
++            for(int m=2; m<nspec; ++m) d+=beta*c[m]*world_cos[k*nspec+m];
++            la[k]+=d; e1+=std::exp(2*la[k]);
++          }
++        const double g=0.5*std::log(e0/e1);
++        for(int k=0; k<nb; ++k) la[k]+=g;
++      }
++    for(int k=0; k<nb; ++k)
++      wf->sp[k]=std::exp(2*la[k]);
++    // aperiodicity (amplitude): bap arrives as linear power weights
++    wf->ap.assign(nb, 1.0);
++    if(f.voiced)
++      {
++        const int nbap=f.bap.size();
++        for(int k=0; k<nb; ++k)
++          {
++            const int i=static_cast<int>(world_bapw[2*k]);
++            const double t=world_bapw[2*k+1];
++            const double lo=10.0*std::log10(std::max(f.bap[i], 1e-10));
++            const double hi=(i+1<nbap)?10.0*std::log10(std::max(f.bap[i+1], 1e-10)):lo;
++            const double db=(1-t)*lo+t*hi;
++            double a=std::pow(10.0, db/20.0);
++            if(a<0.001) a=0.001;
++            if(a>1) a=1;
++            wf->ap[k]=a;
++          }
++      }
++    wf->spp[0]=wf->sp.data();
++    wf->app[0]=wf->ap.data();
++    while(AddParameters(wf->f0, 1, wf->spp, wf->app, s)==0)
++      {
++        if(Synthesis2(s)==0)
++          {
++            if(IsLocked(s)) RefreshSynthesizer(s);
++            break;
++          }
++        world_drain();
++      }
++    wf->pointer=s->head_pointer;
++    world_frames.push_back(std::move(wf));
++    world_drain();
++  }
++
++  void hts_vocoder_wrapper::world_drain()
++  {
++    auto* s=static_cast<WorldSynthesizer*>(ws);
++    const double vol=engine->condition.volume;
++    while(Synthesis2(s)!=0)
++      {
++        for(int i=0; i<s->buffer_size; ++i)
++          {
++            double x=s->buffer[i]*vol;
++            if(x>32767) x=32767;
++            if(x<-32768) x=-32768;
++            HTS_Audio_write(&engine->audio, static_cast<short>(x));
++          }
++        if(engine->condition.stop)
++          return;
++      }
++    // frames whose buffers WORLD has released can go
++    while(!world_frames.empty() && world_frames.front()->pointer + 2 < s->current_pointer2)
++      world_frames.pop_front();
++  }
++
++  void hts_vocoder_wrapper::world_flush()
++  {
++    // push a little silence so the last real frames are synthesized
++    frame_t z;
++    z.voiced=false;
++    z.spec.assign(HTS_ModelSet_get_vector_length(&engine->ms, 0), 0.0);
++    z.spec[0]=-10.0;
++    z.bap.assign(HTS_ModelSet_get_vector_length(&engine->ms, 2), 1.0);
++    for(int i=0; i<8; ++i)
++      world_frame(z, 0.0);
++  }
+ }
+diff --git a/src/include/core/hts_vocoder_wrapper.hpp b/src/include/core/hts_vocoder_wrapper.hpp
+index ec29cb4..add4470 100644
+--- a/src/include/core/hts_vocoder_wrapper.hpp
++++ b/src/include/core/hts_vocoder_wrapper.hpp
+@@ -19,6 +19,7 @@
+ #include <memory>
+ #include <vector>
+ #include <queue>
++#include <deque>
+ #include "pitch.hpp"
+ 
+ struct _HTS_Vocoder;
+@@ -56,6 +57,26 @@ namespace RHVoice
+     std::size_t count{0};
+     std::queue<frame_t> fq;
+     double pitch_shift{0};
++
++    // ---- WORLD vocoder (voices whose FULLCONTEXT_FORMAT contains "WORLD") ----
++    struct world_frame_t
++    {
++      int pointer{0};
++      double f0[1]{0};
++      std::vector<double> sp, ap;
++      double* spp[1]{nullptr};
++      double* app[1]{nullptr};
++    };
++    void world_init();
++    void world_frame(const frame_t& f, double lf0);
++    void world_drain();
++    void world_flush();
++    void world_clear();
++    bool world{false};
++    void* ws{nullptr};
++    int world_fft{1024};
++    std::vector<double> world_cos, world_bapw;
++    std::deque<std::unique_ptr<world_frame_t>> world_frames;
+   };
+ }
+ #endif
+diff --git a/src/third-party/tclap/tclap/MultiArg.h b/src/third-party/tclap/tclap/MultiArg.h
+index 34bb2d7..c612a25 100644
+--- a/src/third-party/tclap/tclap/MultiArg.h
++++ b/src/third-party/tclap/tclap/MultiArg.h
+@@ -225,7 +225,7 @@ private:
+ 	/**
+ 	 * Prevent accidental copying
+ 	 */
+-	MultiArg<T>(const MultiArg<T>& rhs);
++	MultiArg(const MultiArg<T>& rhs);
+ 	MultiArg<T>& operator=(const MultiArg<T>& rhs);
+ 
+ };
+diff --git a/src/third-party/tclap/tclap/ValueArg.h b/src/third-party/tclap/tclap/ValueArg.h
+index 7ac2952..e4c120d 100644
+--- a/src/third-party/tclap/tclap/ValueArg.h
++++ b/src/third-party/tclap/tclap/ValueArg.h
+@@ -240,7 +240,7 @@ private:
+        /**
+         * Prevent accidental copying
+         */
+-       ValueArg<T>(const ValueArg<T>& rhs);
++       ValueArg(const ValueArg<T>& rhs);
+        ValueArg<T>& operator=(const ValueArg<T>& rhs);
+ };
+ 
