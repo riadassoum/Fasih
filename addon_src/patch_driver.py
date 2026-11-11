@@ -219,7 +219,7 @@ rep('''    supportedSettings = [
         SynthDriver.VolumeSetting(),
         NumericDriverSetting("clarity", "Clarity (postfilter)", defaultVal=50, availableInSettingsRing=True),
         DriverSetting("breathiness", "Breathiness", defaultVal="b0", availableInSettingsRing=True),
-        BooleanDriverSetting("sharpening", "Sharpening (may click on some syllables)", defaultVal=False, availableInSettingsRing=True),
+        BooleanDriverSetting("sharpening", "Sharpening (crisper sound)", defaultVal=False, availableInSettingsRing=True),
     ]''')
 rep('''class SynthDriver(SynthDriver):''', '''_reload_timer = None
 _BREATH = [("b0", "Natural (recommended)"), ("b6", "Less"), ("b12", "Low"), ("b20", "Very low")]
@@ -251,12 +251,32 @@ def _apply_quality(st):
     beta = st["clarity"] * 0.6 / 100.0
     for name in os.listdir(vdir):
         vd = os.path.join(vdir, name)
-        var = os.path.join(data_dir, "variants", name, st["breathiness"] + ".data")
+        vdir2 = os.path.join(data_dir, "variants", name)
+        var = os.path.join(vdir2, "base.data")
         if not os.path.isfile(var):
             continue                      # e.g. the English voice keeps its own files
         with open(var, "rb") as f:
-            b = f.read()
-        b = b.replace(b"USE_GV[MCP]:1", b"USE_GV[MCP]:0") if not st["sharpening"] else b.replace(b"USE_GV[MCP]:0", b"USE_GV[MCP]:1")
+            b = bytearray(f.read())
+        patches = []
+        if st["breathiness"] != "b0":
+            patches.append(st["breathiness"] + ".patch")
+        if st["sharpening"]:
+            patches.append("sharp.patch")
+        for pn in patches:
+            pf = os.path.join(vdir2, pn)
+            if not os.path.isfile(pf):
+                continue
+            with open(pf, "rb") as f:
+                pd = f.read()
+            if pd[:4] != b"FPAT":
+                continue
+            (cnt,) = struct.unpack_from("<I", pd, 4)
+            pos = 8
+            for _i in range(cnt):
+                off, ln = struct.unpack_from("<QI", pd, pos)
+                pos += 12
+                b[off:off + ln] = pd[pos:pos + ln]
+                pos += ln
         with open(os.path.join(vd, "24000", "voice.data"), "wb") as f:
             f.write(b)
         with open(os.path.join(vd, "voice.params"), "w", encoding="utf-8") as f:
@@ -343,7 +363,7 @@ try:
 except Exception:
     _post_filter = None''')
 # 3) settings: read emojis, pausal ending; dictionaries
-rep('''        BooleanDriverSetting("sharpening", "Sharpening (may click on some syllables)", defaultVal=False, availableInSettingsRing=True),''', '''        BooleanDriverSetting("sharpening", "Sharpening (may click on some syllables)", defaultVal=False, availableInSettingsRing=True),
+rep('''        BooleanDriverSetting("sharpening", "Sharpening (crisper sound)", defaultVal=False, availableInSettingsRing=True),''', '''        BooleanDriverSetting("sharpening", "Sharpening (crisper sound)", defaultVal=False, availableInSettingsRing=True),
         BooleanDriverSetting("readEmojis", "Read emojis and symbols by name", defaultVal=True),
         BooleanDriverSetting("pausalEnding", "Pausal ending (waqf) at end of sentences", defaultVal=True),''')
 rep('''    def terminate(self):''', '''    def _get_readEmojis(self):
@@ -361,6 +381,112 @@ rep('''    def terminate(self):''', '''    def _get_readEmojis(self):
     def terminate(self):''')
 rep('''        arabic_pipeline.preload()''', '''        arabic_pipeline.init_dictionaries(config_path)
         arabic_pipeline.preload()''')
+# --- 1.1: one "done" per utterance, and no dead air -------------------------------------
+# An utterance may be several engine messages (Arabic part, English part...). Only the last
+# one may tell NVDA that speech is done or let the audio device go idle.
+rep('''            self.__player.on_done()
+            self.__player.idle()
+            if self.__cancel_flag.is_set():
+                return
+            synthDoneSpeaking.notify(synth=self.__synth)''', '''            self.__player.on_done()
+            if not self.__player.final:
+                return
+            self.__player.idle()
+            if self.__cancel_flag.is_set():
+                return
+            synthDoneSpeaking.notify(synth=self.__synth)''')
+rep('''        if msg:
+            self.__player.on_new_message()''', '''        if msg:
+            self.__player.final = getattr(self, "final", True)
+            self.__player.on_new_message()''')
+# Silence gate: the engine starts every message with ~40 ms of silence and ends it with
+# ~130 ms. The leading part is dropped (speech starts sooner), and the trailing part is
+# shortened (and nearly removed between the parts of one utterance).
+rep('''    def play(self, data):
+        if self.__prev_data is None:''', '''    final = True
+    _TH = 50            # 16-bit amplitude under which a sample counts as silence
+
+    def _gate(self, data):
+        a = array.array("h")
+        a.frombytes(data[:len(data) & ~1])
+        if not a:
+            return b""
+        quiet = max(a) < self._TH and min(a) > -self._TH
+        if self.__lead:
+            if quiet:
+                return b""
+            th = self._TH
+            i = next(k for k, v in enumerate(a) if v >= th or v <= -th)
+            i = max(0, i - self.__sample_rate // 125)          # keep 8 ms before the first sound
+            self.__lead = False
+            return a[i:].tobytes()
+        if quiet:
+            self.__held.append(data)
+            return b""
+        if self.__held:
+            data = b"".join(self.__held) + data
+            self.__held = []
+        return data
+
+    def _tail(self):
+        # what is kept of the silence that ended the message
+        held, self.__held = b"".join(self.__held), []
+        keep = (self.__sample_rate * (60 if self.final else 15) // 1000) * 2
+        return held[:keep]
+
+    def play(self, data):
+        try:
+            data = self._gate(data)
+        except Exception:
+            pass
+        if not data:
+            return
+        if self.__prev_data is None:''')
+rep('''    def on_new_message(self):
+        self.__prev_data = None''', '''    def on_new_message(self):
+        self.__lead = True
+        self.__held = []
+        self.__prev_data = None''')
+rep('''    def on_done(self):
+        if self.__prev_data is None:
+            return
+        self.do_play(self.__prev_data)''', '''    def on_done(self):
+        tail = self._tail()
+        if self.__prev_data is None:
+            return
+        self.do_play(self.__prev_data + tail)''')
+rep('''        self.__players = {}
+        self.__lock = threading.Lock()''', '''        self.__players = {}
+        self.__lead = True
+        self.__held = []
+        self.__prev_data = None
+        self.__lock = threading.Lock()''')
+rep('''    def on_index(self, index):
+        data = self.__prev_data
+        self.__prev_data = None
+        if data is None:
+            data = b""''', '''    def on_index(self, index):
+        data = self.__prev_data
+        self.__prev_data = None
+        if data is None:
+            data = b""
+        if self.__held and not self.__lead:      # keep pauses in step with the index marks
+            data += b"".join(self.__held)
+            self.__held = []''')
+rep('''import languageHandler
+''', '''import languageHandler
+import array
+import struct
+''')
+# an utterance with nothing to say must still report that it is done
+rep('''            for i, (voice, items) in enumerate(segs):
+                if self.__cancel_flag.is_set():
+                    return''', '''            if not segs:
+                synthDoneSpeaking.notify(synth=self)
+                return
+            for i, (voice, items) in enumerate(segs):
+                if self.__cancel_flag.is_set():
+                    return''')
 compile(s, dst, "exec")  # fail the build if the driver does not parse
 open(dst, "w", encoding="utf-8").write(s)
 print("patched driver written")

@@ -260,6 +260,18 @@ def cmd_trees(mdl=1.0):
     mats = question_matrices(codes, vocab, names, qs)
     print(len(qs), "questions", flush=True)
     jobs = [("dur", None)] + [(k, j) for k in ("mgc", "lf0", "bap") for j in range(NS)]
+    # held-out utterances (for objective tests): their statistics are zeroed, so they train nothing
+    held = np.zeros(len(codes), bool)
+    hf = os.environ.get("RHV_HOLDOUT")
+    if hf:
+        offsets = json.load(open(os.path.join(TR, "offsets.json")))
+        for u in open(hf).read().split():
+            if u in offsets:
+                o, n = offsets[u]; held[o:o + n] = True
+        print("held out", int(held.sum()), "phones", flush=True)
+    only = os.environ.get("RHV_ONLY_STREAMS")
+    if only:
+        jobs = [j for j in jobs if j[0] in only.split(",")]
     for kind, j in jobs:
         out = os.path.join(TR, f"tree_{kind}_{j}.pkl")
         if os.path.exists(out):
@@ -268,10 +280,12 @@ def cmd_trees(mdl=1.0):
         if kind == "dur":
             d = np.load(os.path.join(TR, "durs.npy")).astype(np.float64)
             S = np.hstack([np.ones((len(d), 1)), d, d ** 2])
+            S[held] = 0
             st = Stream("dur", S)
             nodes = grow_tree(st, codes, mats, qs, mdl, min_occ=5.0)
         else:
             S = np.load(os.path.join(TR, f"st_{kind}_{j}.npy"))
+            S[held] = 0
             st = Stream(kind, S)
             mo = float(os.environ.get("RHV_MIN_OCC_MGC", "10")) if kind == "mgc" else 10.0
             nodes = grow_tree(st, codes, mats, qs, mdl, min_occ=mo)
@@ -354,6 +368,32 @@ def cmd_write(out_path):
             for li, n in enumerate(leaves):
                 if share[li] > 0.8:
                     n["pdf"] = n["pdf"].copy(); n["pdf"][0] += boost / 8.686
+    # Variance scaling: HMM averaging flattens the spectrum (muffled sound). Every mean is moved
+    # away from the voice's average spectrum by a per-coefficient factor, which restores the
+    # natural variance. It is a purely linear change of the output, so unlike GV it cannot click.
+    # RHV_VSCALE = .npy of variance ratios synth/natural (from eval_voice.py); RHV_VSCALE_W = strength 0..1
+    vs = os.environ.get("RHV_VSCALE")
+    if vs:
+        ratio = np.load(vs).astype(np.float64)
+        wgt = float(os.environ.get("RHV_VSCALE_W", "1"))
+        alpha = np.ones(D_MGC)
+        k = min(len(ratio), D_MGC)
+        alpha[:k] = np.clip(ratio[:k], 0.2, 1.0) ** (-0.5 * wgt)
+        alpha[k:] = alpha[k - 1]
+        alpha[0] = 1.0                                   # loudness contour is left alone
+        tot = np.zeros(1 + 2 * 3 * D_MGC)
+        for j in range(NS):
+            tot += np.load(os.path.join(TR, f"st_mgc_{j}.npy"), mmap_mode="r").sum(0, dtype=np.float64)
+        gmean = tot[1:1 + D_MGC] / tot[0]
+        a3 = np.tile(alpha, 3)
+        for j in range(NS):
+            for n in trees["mgc"][j]:
+                if n.get("leaf"):
+                    p = n["pdf"].astype(np.float64).copy(); dd = 3 * D_MGC
+                    p[:D_MGC] = gmean + alpha * (p[:D_MGC] - gmean)
+                    p[D_MGC:dd] *= a3[D_MGC:]
+                    p[dd:] *= a3 ** 2
+                    n["pdf"] = p.astype(np.float32)
     # overall level of the voice (RHVoice clamps gain to 0.5..2): RHV_LEVEL_DB
     lvl = float(os.environ.get("RHV_LEVEL_DB", "0"))
     if lvl:

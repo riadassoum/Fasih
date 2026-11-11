@@ -25,7 +25,7 @@ These are in NVDA's voice settings. The secondary voice, Clarity, Breathiness an
 - **Secondary voice**: which voice reads non-Arabic text (Automatic, None, or any installed voice).
 - **Clarity**: how strongly the voice is sharpened by the postfilter.
 - **Breathiness**: from natural down to very low breath noise.
-- **Sharpening**: a crisper spectrum, which may click on some syllables.
+- **Sharpening**: a crisper, more detailed spectrum.
 - **Read emojis and symbols by name**.
 - **Pausal ending (waqf)**: the last word of a sentence is read in its pausal form.
 
@@ -36,7 +36,7 @@ Put a file called `user-dic.json` in `%APPDATA%\nvda\Fasih-config\`. It is a lis
 ## How it is made
 
 - **Language**: I wrote a data-only Arabic language for RHVoice with foma rules. It covers shadda, sun and moon letters, hamzat al-wasl in connected speech, tanween, ta marbuta, long vowels including the hidden ones, Classical stress and word classes.
-- **Training**: the voices were trained with my own HTS-style trainer, without HTK. It uses WORLD analysis, 5-state alignment with pauses, MDL decision trees and re-alignment with context-dependent models, with 40 mel-cepstral coefficients.
+- **Training**: the voices were trained with my own HTS-style trainer, without HTK. It uses WORLD analysis, 5-state alignment with pauses, MDL decision trees and re-alignment with context-dependent models, with 40 mel-cepstral coefficients. The averaging that makes HMM voices sound muffled is countered by variance scaling: the spectrum is moved away from the voice's average by a measured amount per coefficient, which cannot click the way global variance did.
 - **Engine**: RHVoice is built from source with the WORLD vocoder (Masanori Morise, BSD) added for these voices, so the breath noise is generated pulse by pulse, as in a real voice.
 
 ## Credits
@@ -48,7 +48,7 @@ Put a file called `user-dic.json` in `%APPDATA%\nvda\Fasih-config\`. It is a lis
 
 ## What is in this repository
 
-- `voices/`: the three trained voices, ready for RHVoice. Each has its `voice.data` and, in `variants/`, the versions used by the Breathiness setting.
+- `voices/`: the three trained voices, ready for RHVoice. Each has its `voice.data` and, in `variants/`, the base file with small patches used by the Breathiness and Sharpening settings.
 - `lang/`: the Arabic language for RHVoice. `build_lang.sh` regenerates it from the generators (it needs foma and RHVoice's att2bin and dtree2bin).
 - `scripts/`: corpus download, WORLD feature extraction, alignment, labels and training (`run_voice.sh`). The corpora themselves are not included; the scripts download them from their original sources.
 - `engine/`: `rhvoice-world-vocoder.patch` for RHVoice (at the commit in `RHVOICE_BASE_COMMIT`) and the WORLD sources to copy into `src/core/world/`. I cross-built the Windows DLLs with zig.

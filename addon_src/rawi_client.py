@@ -7,7 +7,7 @@ class _Rawi(object):
     limit, and if the helper hangs or dies it is killed and restarted later,
     while the text is spoken without added diacritics. So speech can never block."""
 
-    TIMEOUT = 3.0
+    TIMEOUT = 3.0            # first call (the model is still loading); 1 s afterwards
 
     def __init__(self, onnx_path):
         import threading
@@ -42,6 +42,7 @@ class _Rawi(object):
             stderr=subprocess.DEVNULL, creationflags=flags, bufsize=0)
 
     def _kill(self):
+        self._warm = False
         p, self._proc = self._proc, None
         if p is not None:
             try:
@@ -70,7 +71,7 @@ class _Rawi(object):
                 box["err"] = True
         t = threading.Thread(target=io, daemon=True)
         t.start()
-        t.join(self.TIMEOUT)
+        t.join(self.TIMEOUT if not getattr(self, "_warm", False) else 1.0)
         if t.is_alive() or "res" not in box:
             self._kill()                  # hung or broken: drop it, the io thread ends with the pipe
             return None
@@ -102,6 +103,7 @@ class _Rawi(object):
                 self._fails += 1
             else:
                 self._fails = 0
+                self._warm = True
             return res
 
     def _encode(self, text):

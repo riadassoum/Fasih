@@ -18,17 +18,18 @@ for spec in $VOICES; do
   mkdir -p "$D/data/voices/$VN/24000" "$D/data/variants/$VN"
   cp "$RHV/voice/bpf.txt" "$D/data/voices/$VN/24000/"
   printf 'name=%s\nlanguage=Arabic\ngender=%s\nformat=4\nrevision=1\n' "$VN" "$( [ "$VN" = Nour ] && echo female || echo male )" > "$D/data/voices/$VN/voice.info"
-  for n in 0 6 12 20; do
-    (cd "$VROOT" && RHV_TRAIN_DIR=$VTR RHV_MGC_DIR=$VMG RHV_MGC_DIM=$VDIM RHV_VOCODER=world RHV_LEVEL_DB=$VLVL RHV_BAP_OFFSET_DB=-$n python3 scripts/train.py write "$D/data/variants/$VN/b$n.data" >/dev/null)
-  done
-  echo "$VGAIN" > "$D/data/variants/$VN/gain.txt"
-  python3 - "$D" "$VN" "$VGAIN" <<'PY'
-import sys
-d, vn, g = sys.argv[1], sys.argv[2], sys.argv[3]
-b = open(f"{d}/data/variants/{vn}/b0.data", "rb").read().replace(b"USE_GV[MCP]:1", b"USE_GV[MCP]:0")
-open(f"{d}/data/voices/{vn}/24000/voice.data", "wb").write(b)
-open(f"{d}/data/voices/{vn}/voice.params", "w").write("beta=0.300\ngain=" + g + "\n")
-PY
+  # One base file per voice, plus small patches for the Breathiness levels and for Sharpening
+  # (the settings only change some numbers inside the file, never its size or layout).
+  VS=""; [ -s "$VROOT/work/$VTR/vratio.npy" ] && VS="$VROOT/work/$VTR/vratio.npy"
+  W="$D/data/variants/$VN"; TMPV=$(mktemp -d)
+  wr() { (cd "$VROOT" && RHV_TRAIN_DIR=$VTR RHV_MGC_DIR=$VMG RHV_MGC_DIM=$VDIM RHV_VOCODER=world RHV_LEVEL_DB=$VLVL RHV_BAP_OFFSET_DB=$1 RHV_VSCALE=$VS RHV_VSCALE_W=$2 python3 scripts/train.py write "$3" >/dev/null); }
+  wr 0 ${VSCALE_W:-0.7} "$W/base.data"
+  for n in 6 12 20; do wr -$n ${VSCALE_W:-0.7} "$TMPV/b$n.data"; python3 "$HERE/mkpatch.py" "$W/base.data" "$TMPV/b$n.data" "$W/b$n.patch"; done
+  if [ -n "$VS" ]; then wr 0 1.0 "$TMPV/sharp.data"; python3 "$HERE/mkpatch.py" "$W/base.data" "$TMPV/sharp.data" "$W/sharp.patch"; fi
+  rm -rf "$TMPV"
+  echo "$VGAIN" > "$W/gain.txt"
+  cp "$W/base.data" "$D/data/voices/$VN/24000/voice.data"
+  printf 'beta=0.300\ngain=%s\n' "$VGAIN" > "$D/data/voices/$VN/voice.params"
 done
 printf 'clarity=50\nbreathiness=b0\nsharpening=0\n' > "$D/data/quality.txt"
 # English (RHVoice language data, LGPL) + SLT voice (CMU license), 24 kHz only
