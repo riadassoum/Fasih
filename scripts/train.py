@@ -513,6 +513,24 @@ def cmd_write(out_path):
             for n in trees["bap"][j]:
                 if n.get("leaf"):
                     p = n["pdf"].copy(); p[1:D_BAP] = np.minimum(p[1:D_BAP] + bofs, 0.0); n["pdf"] = p
+    pc0 = os.environ.get("RHV_PHONE_C0", "")
+    if pc0:
+        # RHV_PHONE_C0="Q:1-3:-3" lowers the loudness (c0) of states 1-3 of the hamza by 3
+        # (about 26 dB): a glottal stop is a brief closure, not a croak or a burst of noise.
+        codes_ = np.load(os.path.join(TR, "codes.npy"))
+        vocab_ = json.load(open(os.path.join(TR, "vocab.json"), encoding="utf-8"))
+        ni_ = [f[0] for f in LabelSet(LANG).fields].index("name")
+        nm_ = np.array(vocab_["name"], dtype=object)[codes_[:, ni_]]
+        for spec in pc0.split(","):
+            ph, rng, off = spec.split(":")
+            a, b = map(int, rng.split("-"))
+            for j in range(a, b + 1):
+                lo = np.load(os.path.join(TR, f"leafof_mgc_{j}.npy"))
+                lv = [n for n in trees["mgc"][j] if n.get("leaf")]
+                for li, n in enumerate(lv):
+                    mem = nm_[lo == li]
+                    if len(mem) and (mem == ph).mean() >= 0.6:
+                        p = n["pdf"].astype(np.float64).copy(); p[0] += float(off); n["pdf"] = p.astype(np.float32)
     lvs = float(os.environ.get("RHV_LF0_VAR_SCALE", "1"))
     if lvs != 1.0:
         # Wider pitch variances on the static term let the smoothness constraints (deltas) win:

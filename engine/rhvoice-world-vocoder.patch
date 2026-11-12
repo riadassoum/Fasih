@@ -12,7 +12,7 @@ index f5fadd2..e5c8114 100644
  set(package_name "RHVoice_core")
  
 diff --git a/src/core/hts_vocoder_wrapper.cpp b/src/core/hts_vocoder_wrapper.cpp
-index eeadbe7..7530327 100644
+index eeadbe7..4e170c9 100644
 --- a/src/core/hts_vocoder_wrapper.cpp
 +++ b/src/core/hts_vocoder_wrapper.cpp
 @@ -18,6 +18,8 @@
@@ -65,7 +65,7 @@ index eeadbe7..7530327 100644
          HTS_Vocoder_synthesize(vocoder.get(),
                                 nspec - 1,
                                 lf0,
-@@ -142,4 +157,164 @@ namespace RHVoice
+@@ -142,4 +157,179 @@ namespace RHVoice
          fq.pop();
        }
    }
@@ -163,6 +163,21 @@ index eeadbe7..7530327 100644
 +      }
 +    for(int k=0; k<nb; ++k)
 +      wf->sp[k]=std::exp(2*la[k]);
++    if(!f.voiced)
++      {
++        // Voiceless sounds have little energy below about 1 kHz. Where the model gives an
++        // unvoiced frame a vowel-like envelope (edges of ق ط ش next to a vowel), that low
++        // energy is heard as a breathy cough, so it is turned down smoothly: -18 dB at 0 Hz,
++        // -6 dB at 500 Hz, nothing above 1200 Hz.
++        for(int k=0; k<nb; ++k)
++          {
++            const double hz=k*static_cast<double>(HTS_Engine_get_sampling_frequency(engine))/world_fft;
++            if(hz>=1200.0) break;
++            const double x=hz/1200.0;
++            const double db=-18.0*(1.0-x)*(1.0-x);
++            wf->sp[k]*=std::pow(10.0, db/10.0);
++          }
++      }
 +    // aperiodicity (amplitude): bap arrives as linear power weights
 +    wf->ap.assign(nb, 1.0);
 +    if(f.voiced)

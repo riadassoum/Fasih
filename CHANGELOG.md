@@ -8,7 +8,8 @@
 - **Clearer sound in all voices.** The spectrum models are about 2.5 times larger, and variance scaling restores the natural liveliness of the spectrum that statistical voices tend to flatten. Unlike the old global variance option, it cannot click.
 - **ه and the hamza no longer sound like a dry cough.** They were forced to be voiceless, so they were synthesized as a burst of noise. They are now voiced where the speaker voiced them.
 - **No more dragged sounds.** The last word of a long sentence could be stretched to 0.6 s per sound in Faris and Huda, and some sounds in rare contexts (such as the ه of يَهْوَاهُ in Jamal) were held far too long. No speech sound now lasts longer than twice its usual length, or than it ever does in nearly all of the recordings.
-- **Huda's ق** has a crisper release instead of a slow, cough-like rise.
+- **Less coughing on voiceless sounds.** Where a voiceless frame (the edges of ق ط ش next to a vowel) kept a vowel-like sound, its low frequencies are now turned down in the vocoder, and Huda's ق has a crisper release.
+- **The hamza at the end of a word** (طاء، سماء) is a short closure instead of a croak.
 - **Steadier pitch.** The pitch models are built from more examples each, so the pitch no longer jumps up and down between neighbouring parts of a syllable (the shake in رياض, العلم نور, وَمِنَ).
 - **Louder.** Fasih now plays about 6 dB louder, so volume 100 matches other screen-reader voices. A look-ahead limiter turns the gain down on the loudest peaks instead of clipping them.
 
