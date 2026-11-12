@@ -193,6 +193,9 @@ def process(text, diacritize=True):
         out = _step(dm.replace_emojis, out)
     if not _AR.search(out):
         # numbers on their own (no Latin letters) are read as Arabic words
+        # ("secondary voice first" leaves them to the secondary voice, as the setting says)
+        if options.get("mixed_priority", "auto") == "secondary":
+            return out
         if re.search(r"[0-9\u0660-\u0669]", out) and not re.search(r"[A-Za-z]", out):
             try:
                 from .arabic import ar_textnorm

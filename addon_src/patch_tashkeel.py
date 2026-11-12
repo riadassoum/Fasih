@@ -21,5 +21,41 @@ s = s.replace(old_run, """        # whitespace, punctuation and digits join whic
         if not ch.isalpha() and unicodedata.category(ch)[0] != "M":
             cur.append(ch)
             continue""", 1)
+# 1.1: the space fallback dropped the space at each cut, and one word longer than the
+# limit went through whole. Keep every character (spaces stay on the piece before the
+# cut) and cut any over-long word at the limit.
+old_sp = """                    words = seg.split(" ")
+                    p2 = ""
+                    for w in words:
+                        if p2 and len(p2) + 1 + len(w) > hard_limit:
+                            out.append(p2)
+                            p2 = w
+                        else:
+                            p2 = (p2 + " " + w) if p2 else w
+                    piece = p2"""
+assert old_sp in s, "space splitter not found"
+s = s.replace(old_sp, """                    p2 = ""
+                    for w in _re.findall(r"\\S+\\s*|\\s+", seg):
+                        while len(w) > hard_limit:
+                            if p2:
+                                out.append(p2)
+                                p2 = ""
+                            out.append(w[:hard_limit])
+                            w = w[hard_limit:]
+                        if p2 and len(p2) + len(w) > hard_limit:
+                            out.append(p2)
+                            p2 = w
+                        else:
+                            p2 += w
+                    piece = p2""", 1)
+# 1.1: look in Fasih's own bundled models first, so a ClaritySynth install (or its
+# downloads folder) can never hand Fasih a different model file.
+old_fp = """    cands = []
+    try:
+        data_paths = _import_data_paths()"""
+assert old_fp in s, "model search not found"
+s = s.replace(old_fp, """    cands = [os.path.join(_VOWELIZERS, fname), os.path.join(_LIB, "tts_arabic", "data", fname)]
+    try:
+        data_paths = _import_data_paths()""", 1)
 compile(s, p, "exec")
 open(p, "w", encoding="utf-8").write(s)

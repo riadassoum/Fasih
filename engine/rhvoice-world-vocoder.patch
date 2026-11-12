@@ -12,7 +12,7 @@ index f5fadd2..e5c8114 100644
  set(package_name "RHVoice_core")
  
 diff --git a/src/core/hts_vocoder_wrapper.cpp b/src/core/hts_vocoder_wrapper.cpp
-index eeadbe7..4e170c9 100644
+index eeadbe7..b49b911 100644
 --- a/src/core/hts_vocoder_wrapper.cpp
 +++ b/src/core/hts_vocoder_wrapper.cpp
 @@ -18,6 +18,8 @@
@@ -24,18 +24,19 @@ index eeadbe7..4e170c9 100644
  
  namespace RHVoice
  {
-@@ -36,6 +38,10 @@ namespace RHVoice
+@@ -36,6 +38,11 @@ namespace RHVoice
                             0,
                             HTS_Engine_get_sampling_frequency(engine),
                             HTS_Engine_get_fperiod(engine));
 +    const char* fmt=HTS_Engine_get_fullcontext_label_format(engine);
 +    world=(fmt!=nullptr && std::strstr(fmt, "WORLD")!=nullptr);
++    world_soft_unvoiced=(fmt!=nullptr && std::strstr(fmt, "WORLD1")!=nullptr);
 +    if(world)
 +      world_init();
  }
  
    void hts_vocoder_wrapper::clear()
-@@ -44,6 +50,7 @@ namespace RHVoice
+@@ -44,6 +51,7 @@ namespace RHVoice
        return;
      HTS_Vocoder_clear(vocoder.get());
      vocoder.reset();
@@ -43,7 +44,7 @@ index eeadbe7..4e170c9 100644
      engine=nullptr;
      pitch_editor=nullptr;
      count=0;
-@@ -109,6 +116,8 @@ namespace RHVoice
+@@ -109,6 +117,8 @@ namespace RHVoice
    {
      pitch_editor->finish();
      do_synth();
@@ -52,7 +53,7 @@ index eeadbe7..4e170c9 100644
    }
  
    void hts_vocoder_wrapper::do_synth()
-@@ -128,6 +137,12 @@ namespace RHVoice
+@@ -128,6 +138,12 @@ namespace RHVoice
            }
          if(f.voiced)
            lf0+=pitch_shift;
@@ -65,7 +66,7 @@ index eeadbe7..4e170c9 100644
          HTS_Vocoder_synthesize(vocoder.get(),
                                 nspec - 1,
                                 lf0,
-@@ -142,4 +157,179 @@ namespace RHVoice
+@@ -142,4 +158,179 @@ namespace RHVoice
          fq.pop();
        }
    }
@@ -163,7 +164,7 @@ index eeadbe7..4e170c9 100644
 +      }
 +    for(int k=0; k<nb; ++k)
 +      wf->sp[k]=std::exp(2*la[k]);
-+    if(!f.voiced)
++    if(!f.voiced && world_soft_unvoiced)
 +      {
 +        // Voiceless sounds have little energy below about 1 kHz. Where the model gives an
 +        // unvoiced frame a vowel-like envelope (edges of ق ط ش next to a vowel), that low
@@ -246,7 +247,7 @@ index eeadbe7..4e170c9 100644
 +  }
  }
 diff --git a/src/include/core/hts_vocoder_wrapper.hpp b/src/include/core/hts_vocoder_wrapper.hpp
-index ec29cb4..add4470 100644
+index ec29cb4..c3f1711 100644
 --- a/src/include/core/hts_vocoder_wrapper.hpp
 +++ b/src/include/core/hts_vocoder_wrapper.hpp
 @@ -19,6 +19,7 @@
@@ -257,7 +258,7 @@ index ec29cb4..add4470 100644
  #include "pitch.hpp"
  
  struct _HTS_Vocoder;
-@@ -56,6 +57,26 @@ namespace RHVoice
+@@ -56,6 +57,27 @@ namespace RHVoice
      std::size_t count{0};
      std::queue<frame_t> fq;
      double pitch_shift{0};
@@ -277,6 +278,7 @@ index ec29cb4..add4470 100644
 +    void world_flush();
 +    void world_clear();
 +    bool world{false};
++    bool world_soft_unvoiced{false};   // FULLCONTEXT_FORMAT ends in WORLD1: turn down lows in unvoiced frames
 +    void* ws{nullptr};
 +    int world_fft{1024};
 +    std::vector<double> world_cos, world_bapw;

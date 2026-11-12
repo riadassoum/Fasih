@@ -42,7 +42,9 @@ class Output:
         blk = self._held
         if not blk:
             return
-        g0 = self._g
+        # never enter a block with more gain than it can take (the first block of an
+        # utterance used to start at full gain, so a full-scale onset clipped)
+        g0 = min(self._g, CEIL / max(self._held_peak, 1e-9))
         lim = min(1.0, CEIL / max(self._held_peak, next_peak, 1e-9))
         g1 = min(lim, g0 * RELEASE, 1.0)
         n = len(blk)

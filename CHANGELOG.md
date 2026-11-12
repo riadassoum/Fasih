@@ -8,11 +8,8 @@
 - **Clearer sound in all voices.** The spectrum models are about 2.5 times larger, and variance scaling restores the natural liveliness of the spectrum that statistical voices tend to flatten. Unlike the old global variance option, it cannot click.
 - **ه and the hamza no longer sound like a dry cough.** They were forced to be voiceless, so they were synthesized as a burst of noise. They are now voiced where the speaker voiced them.
 - **No more dragged sounds.** The last word of a long sentence could be stretched to 0.6 s per sound in Faris and Huda, and some sounds in rare contexts (such as the ه of يَهْوَاهُ in Jamal) were held far too long. No speech sound now lasts longer than twice its usual length, or than it ever does in nearly all of the recordings.
-- **Less coughing on voiceless sounds.** Where a voiceless frame (the edges of ق ط ش next to a vowel) kept a vowel-like sound, its low frequencies are now turned down in the vocoder, and Huda's ق has a crisper release.
-- **Faris and Huda: voiceless consonants rebuilt.** Some parts of ش، ق، ط had learned vowel sounds from misaligned recordings and were played as a breathy cough (and Faris's ط had a voiced murmur before it). Those parts are now made from the consonant's own noise.
-- **Faris and Huda: pauses** at commas and full stops are as long as in the other voices (they were up to 2.5 times longer).
-- **The hamza at the end of a word** (طاء، سماء) is a short closure instead of a croak.
-- **Steadier pitch.** The pitch models are built from more examples each, so the pitch no longer jumps up and down between neighbouring parts of a syllable (the shake in رياض, العلم نور, وَمِنَ).
+- **New setting, Consonant repair (off by default).** It turns down the vowel-like low frequencies that the edges of ق ط ش sometimes keep, gives Huda's ق a crisper release and rebuilds Faris's and Huda's voiceless consonants from their own noise, which removes the breathy cough on those letters. It also makes the voices sound somewhat muffled, so it is off by default and the voices sound as they did before; turn it on in the voice settings or the settings ring if the cough bothers you more than the muffling.
+- **Long texts start speaking sooner and stop at once.** A long text (say all, a whole page) is now prepared and spoken a few sentences at a time instead of all at once, so speech starts after the first sentences and pressing Control stops the work at the next sentence.
 - **Louder.** Fasih now plays about 6 dB louder, so volume 100 matches other screen-reader voices. A look-ahead limiter turns the gain down on the loudest peaks instead of clipping them.
 
 ### Arabic text
@@ -41,6 +38,11 @@
 - **Settings ring:** Mixed text is in it too.
 - **Quality settings** are written once, 1.5 s after the last change, and never switch you back to Fasih if you chose another synthesizer meanwhile.
 - **Sharpening** is now clearly stronger than the default and no longer clicks.
+- **No clipping at the start of an utterance.** The limiter started each utterance at full gain, so a loud first sound could clip; it now starts at a safe gain.
+- **Very long sentences** (no full stop for more than 800 characters) are cut for the diacritizer without losing the spaces at the cuts, and a single extremely long word is cut too instead of being sent whole.
+- **Secondary voice first** now leaves a number on its own (123) to the secondary voice, as the setting says, instead of reading it in Arabic.
+- **Changing Clarity, Breathiness, Sharpening or Consonant repair** no longer freezes NVDA for a moment: the voice file is prepared in the background and replaced in one step, so a voice is never left half written.
+- **Fasih always uses its own Rawi model,** even when ClaritySynth is installed with its own downloaded models.
 
 ### Add-on
 

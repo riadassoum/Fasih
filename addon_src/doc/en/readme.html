@@ -17,12 +17,13 @@
 <h2>Diacritization</h2>
 <p>Text is diacritized with Rawi before it is spoken, and any harakat you typed yourself are kept. Rawi runs in its own small helper program (rawi_host.exe), so NVDA itself never loads numpy or onnxruntime. Many add-ons ship their own copies of those libraries, and loading two copies into NVDA can freeze it. If the helper gets stuck, NVDA waits for it at most three seconds the first time and one second after that; the helper is then restarted and the sentence is spoken without the added diacritics. Speech starts on the first finished part of an utterance while the rest is still being prepared, and pressing Control stops the preparation as well as the sound.</p>
 <h2>Settings</h2>
-<p>These are in NVDA's voice settings. The secondary voice, Clarity, Breathiness, Sharpening and Mixed text are also in the settings ring.</p>
+<p>These are in NVDA's voice settings. The secondary voice, Clarity, Breathiness, Sharpening, Consonant repair and Mixed text are also in the settings ring.</p>
 <ul>
 <li><strong>Secondary voice</strong>: which voice reads non-Arabic text (Automatic, None, or any installed voice).</li>
 <li><strong>Clarity</strong>: how strongly the voice is sharpened by the postfilter.</li>
 <li><strong>Breathiness</strong>: from natural down to very low breath noise.</li>
 <li><strong>Sharpening</strong>: a crisper, more detailed spectrum.</li>
+<li><strong>Consonant repair</strong>: removes the breathy cough some voices make on ق ط ش, at the cost of a somewhat muffled sound. Off by default.</li>
 <li><strong>Read emojis and symbols by name</strong>.</li>
 <li><strong>Pausal ending (waqf)</strong>: the last word of a sentence is read in its pausal form.</li>
 <li><strong>Mixed Arabic and Latin text</strong>: Automatic (Latin text goes to the secondary voice exactly as written, with a number just before a Latin word, as in 5 PM), Arabic first (numbers, symbols and Roman numerals read in Arabic, as in 1.0), or Secondary voice first (numbers too).</li>

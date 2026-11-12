@@ -638,7 +638,7 @@ FRAME_PERIOD:120
 NUM_STATES:{NS}
 NUM_STREAMS:3
 STREAM_TYPE:MCP,LF0,BAP
-FULLCONTEXT_FORMAT:HTS_TTS_ARA{"_WORLD" if os.environ.get("RHV_VOCODER") == "world" else ""}
+FULLCONTEXT_FORMAT:HTS_TTS_ARA{("_WORLD1" if os.environ.get("RHV_SOFT_UNVOICED") else "_WORLD0") if os.environ.get("RHV_VOCODER") == "world" else ""}
 FULLCONTEXT_VERSION:1.0
 GV_OFF_CONTEXT:"*-pau+*"
 COMMENT:Arabic voice trained on ClArTTS for RHVoice

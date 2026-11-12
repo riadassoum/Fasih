@@ -97,6 +97,26 @@ rep('''    def speak(self, speechSequence):
                     return
                 if isinstance(item, LangChangeCommand):
                     continue                     # the script decides the voice
+                if isinstance(item, str) and not char_mode and len(item) > 300:
+                    # a long text (say all, a whole page) is prepared and spoken sentence
+                    # group by sentence group: speech starts after the first one, and a
+                    # cancel stops the work at the next sentence instead of after the page
+                    for piece in _sentence_groups(item):
+                        if cancel.is_set():
+                            return
+                        try:
+                            new = arabic_pipeline.process(piece, diacritize=True)
+                        except Exception:
+                            log.error("Fasih: text pipeline failed", exc_info=True)
+                            new = piece
+                        for is_ar, chunk in _split_by_script(new):
+                            emit(primary if (is_ar or not secondary) else secondary, chunk)
+                        if cancel.is_set():
+                            return
+                        if has_text(cur[1]):
+                            say(cur[0], cur[1], False)
+                            cur[1] = list(state.values())
+                    continue
                 if isinstance(item, str):
                     try:
                         new = arabic_pipeline.process(item, diacritize=not char_mode)
@@ -153,6 +173,21 @@ rep('''class SynthDriver(SynthDriver):''', '''_AR_RANGES = ((0x0600, 0x06FF), (0
 def _is_ar(ch):
     o = ord(ch)
     return any(a <= o <= b for a, b in _AR_RANGES)
+
+
+_SENT_END = re.compile("[.!?\\u061f\\u06d4\\n]+[\\"'\\u00bb\\u201d)\\\\]]*\\\\s+")
+
+
+def _sentence_groups(text, size=200):
+    """Cut a long text after sentence ends into pieces of about `size` characters or more.
+    Nothing is lost: joined back, the pieces are the text."""
+    out, start, last = [], 0, 0
+    for m in _SENT_END.finditer(text):
+        if m.end() - start >= size:
+            out.append(text[start:m.end()])
+            start = m.end()
+    out.append(text[start:])
+    return [p for p in out if p]
 
 
 def _split_by_script(text):
@@ -271,7 +306,7 @@ def _quality_state():
 
 def _quality_file_state():
     """Quality settings as stored in the voice files."""
-    st = {"clarity": 50, "breathiness": "b0", "sharpening": False}
+    st = {"clarity": 50, "breathiness": "b0", "sharpening": False, "repair": False}
     try:
         with open(os.path.join(data_dir, "quality.txt"), encoding="utf-8") as f:
             for line in f:
@@ -280,7 +315,7 @@ def _quality_file_state():
                     st[k] = int(v)
                 elif k == "breathiness":
                     st[k] = v
-                elif k == "sharpening":
+                elif k in ("sharpening", "repair"):
                     st[k] = v == "1"
     except Exception:
         pass
@@ -306,6 +341,8 @@ def _apply_quality(st):
             patches.append(st["breathiness"] + ".patch")
         if st["sharpening"]:
             patches.append("sharp.patch")
+        if st.get("repair"):
+            patches.append("repair.patch")      # last: it also covers spectra Sharpening changed
         for pn in patches:
             pf = os.path.join(vdir2, pn)
             if not os.path.isfile(pf):
@@ -321,8 +358,20 @@ def _apply_quality(st):
                 pos += 12
                 b[off:off + ln] = pd[pos:pos + ln]
                 pos += ln
-        with open(os.path.join(vd, "24000", "voice.data"), "wb") as f:
+        # write next to the file, then replace it in one step: never a half-written voice
+        dst = os.path.join(vd, "24000", "voice.data")
+        tmp = dst + ".new"
+        with open(tmp, "wb") as f:
             f.write(b)
+        try:
+            os.replace(tmp, dst)
+        except OSError:
+            with open(dst, "wb") as f:      # the file is in use: fall back to writing in place
+                f.write(b)
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
         with open(os.path.join(vd, "voice.params"), "w", encoding="utf-8") as f:
             gain = 0.7
             try:
@@ -332,7 +381,7 @@ def _apply_quality(st):
                 pass
             f.write("beta=%.3f\\ngain=%.3f\\n" % (beta, gain))
     with open(os.path.join(data_dir, "quality.txt"), "w", encoding="utf-8") as f:
-        f.write("clarity=%d\\nbreathiness=%s\\nsharpening=%d\\n" % (st["clarity"], st["breathiness"], 1 if st["sharpening"] else 0))
+        f.write("clarity=%d\\nbreathiness=%s\\nsharpening=%d\\nrepair=%d\\n" % (st["clarity"], st["breathiness"], 1 if st["sharpening"] else 0, 1 if st.get("repair") else 0))
     return True
 
 
@@ -356,17 +405,27 @@ rep('''    def terminate(self):''', '''    # quality settings: rewrite voice fil
         try:
             import wx
 
-            def commit():
-                global _pending_quality
+            def reload():
                 try:
                     import synthDriverHandler
+                    cur = synthDriverHandler.getSynth()
+                    if cur is not None and cur.name == name:
+                        synthDriverHandler.setSynth(name)
+                except Exception:
+                    log.error("Fasih: cannot reload after a quality setting", exc_info=True)
+
+            def work():
+                # the voice files are prepared off NVDA's main thread; only the reload runs there
+                global _pending_quality
+                try:
                     want, _pending_quality = _quality_state(), None
                     if _apply_quality(want):
-                        cur = synthDriverHandler.getSynth()
-                        if cur is not None and cur.name == name:
-                            synthDriverHandler.setSynth(name)
+                        wx.CallAfter(reload)
                 except Exception:
                     log.error("Fasih: cannot apply quality setting", exc_info=True)
+
+            def commit():
+                threading.Thread(target=work, name="FasihQuality", daemon=True).start()
             try:
                 if _reload_timer is not None and _reload_timer.IsRunning():
                     _reload_timer.Stop()
@@ -398,6 +457,12 @@ rep('''    def terminate(self):''', '''    # quality settings: rewrite voice fil
     def _set_sharpening(self, v):
         self._quality_set("sharpening", bool(v))
 
+    def _get_consonantRepair(self):
+        return _quality_state()["repair"]
+
+    def _set_consonantRepair(self, v):
+        self._quality_set("repair", bool(v))
+
     def terminate(self):''')
 # 2) PlanetBlindTech audio post-filter (DC/rumble high-pass + soft limiter) in the audio path
 rep('''    def do_play(self, data, index=None):
@@ -425,6 +490,7 @@ except Exception:
     _post_filter = None''')
 # 3) settings: read emojis, pausal ending; dictionaries
 rep('''        BooleanDriverSetting("sharpening", "Sharpening (crisper sound)", defaultVal=False, availableInSettingsRing=True),''', '''        BooleanDriverSetting("sharpening", "Sharpening (crisper sound)", defaultVal=False, availableInSettingsRing=True),
+        BooleanDriverSetting("consonantRepair", "Consonant repair (crisper ق ط ش, may sound muffled)", defaultVal=False, availableInSettingsRing=True),
         BooleanDriverSetting("readEmojis", "Read emojis and symbols by name", defaultVal=True),
         BooleanDriverSetting("pausalEnding", "Pausal ending (waqf) at end of sentences", defaultVal=True),
         DriverSetting("mixedPriority", "Mixed Arabic and Latin text", defaultVal="auto", availableInSettingsRing=True),''')
@@ -617,7 +683,7 @@ rep('''        arabic_pipeline.preload()''', '''        arabic_pipeline.preload(
 # --- 1.1: translations (locale/<lang>/LC_MESSAGES/nvda.mo) ---------------------------------
 s = s.replace("import addonHandler\n", "import addonHandler\ntry:\n    addonHandler.initTranslation()\nexcept Exception:\n    pass\ntry:\n    _\nexcept NameError:\n    def _(text):\n        return text\n", 1)
 for _lit in ["&Secondary voice (for non-Arabic text)", "Clarity (postfilter)", "Breathiness",
-             "Sharpening (crisper sound)", "Read emojis and symbols by name",
+             "Sharpening (crisper sound)", "Consonant repair (crisper ق ط ش, may sound muffled)", "Read emojis and symbols by name",
              "Pausal ending (waqf) at end of sentences", "Mixed Arabic and Latin text",
              "Natural (recommended)", "Less", "Low", "Very low",
              "Automatic: Latin text as written, by the secondary voice",

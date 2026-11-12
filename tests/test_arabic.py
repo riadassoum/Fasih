@@ -52,9 +52,16 @@ finally:
     shutil.rmtree(tmp)
 
 # script splitting (Arabic -> primary voice, other text -> secondary voice)
-src = open(os.path.join(REPO, "addon_src", "patch_driver.py"), encoding="utf-8").read()
+_drv = tempfile.mkdtemp()
+subprocess.run([sys.executable, os.path.join(REPO, "addon_src", "patch_driver.py"),
+                os.path.join(REPO, "third_party", "rhvoice-nvda-driver", "__init__.py"),
+                os.path.join(_drv, "d.py")], check=True, stdout=subprocess.DEVNULL)
+src = open(os.path.join(_drv, "d.py"), encoding="utf-8").read(); shutil.rmtree(_drv)
 a = src.index("_AR_RANGES = "); b = src.index("class SynthDriver(SynthDriver):", a)
-ns = {"unicodedata": unicodedata}; exec(src[a:b], ns)
+ns = {"unicodedata": unicodedata, "re": re, "_": lambda t: t}; exec(src[a:b], ns)
+_t = "جملة أولى طويلة. " * 30 + "سؤال؟ «اقتباس.» نهاية"
+check("sentence groups lossless", "".join(ns["_sentence_groups"](_t)), _t)
+check("sentence groups count", len(ns["_sentence_groups"](_t)), 3)
 check("split mixed", ns["_split_by_script"]("افتح ملف README الآن"), [(True, "افتح ملف "), (False, "README "), (True, "الآن")])
 check("split number before Latin", ns["_split_by_script"]("السَّاعَةُ 5 PM"), [(True, "السَّاعَةُ "), (False, "5 PM")])
 check("split number inside Arabic", ns["_split_by_script"]("عندي 45 كتابا"), [(True, "عندي 45 كتابا")])
@@ -82,8 +89,48 @@ if lib and addon:
         check("mixed " + src, want in ap.process(src), True)
     ap.options["mixed_priority"] = "arabic"
     check("mixed, Arabic first", "وَّل" in ap.process("أنا أحب اللعب: I like playing"), True)
+    ap.options["mixed_priority"] = "secondary"
+    check("secondary first: digits alone stay digits", ap.process("123"), "123")
     ap.options["mixed_priority"] = "auto"
 else:
     print("(full-pipeline tests skipped: set RAWI_ORT_LIB and FASIH_ADDON_DIR)")
+# output limiter: a full-scale onset never goes above the ceiling
+import array
+sys.path.insert(0, os.path.join(REPO, "addon_src")); import loudness
+_o = loudness.Output(); _a = array.array("h", [32767] + [0] * 2000 + [32767] * 100 + [0] * 500)
+_b = array.array("h"); _b.frombytes(_o.process(_a.tobytes()) + _o.flush())
+check("limiter onset under ceiling", max(_b) <= int(loudness.CEIL), True)
+
+# long-sentence splitter: lossless, and no piece longer than the limit
+_at = tempfile.mkdtemp(); _p = os.path.join(_at, "t.py")
+shutil.copy(os.path.join(REPO, "third_party", "claritysynth", "ar_tashkeel.py"), _p)
+subprocess.run([sys.executable, os.path.join(REPO, "addon_src", "patch_tashkeel.py"), _p,
+                os.path.join(REPO, "addon_src", "rawi_client.py")], check=True)
+_s = open(_p, encoding="utf-8").read(); shutil.rmtree(_at)
+_ns = {}; exec(_s[_s.index("def _split_sentences"):_s.index("def _diac_run_chunked")], _ns)
+for _t in ["كلمة " * 300, "ب" * 900 + " نص", "أ، " * 500]:
+    _o = _ns["_split_sentences"](_t, 800)
+    check("splitter lossless", "".join(_o) == _t and max(map(len, _o)) <= 800, True)
+check("bundled models searched first", _s.index("cands = [os.path.join(_VOWELIZERS") < _s.index("data_paths.search_dirs(\"vowelizers\")"), True)
+
+# voice settings: every patch applies in the driver's order, and the repair patch changes the voice
+def _apply(b, path):
+    d = open(path, "rb").read(); assert d[:4] == b"FPAT"
+    import struct
+    i, n = 8, struct.unpack("<I", d[4:8])[0]
+    b = bytearray(b)
+    for _ in range(n):
+        off, ln = struct.unpack("<QI", d[i:i + 12]); i += 12
+        b[off:off + ln] = d[i:i + ln]; i += ln
+    return bytes(b)
+for _v in sorted(os.listdir(os.path.join(REPO, "voices"))):
+    _w = os.path.join(REPO, "voices", _v, "variants")
+    _base = open(os.path.join(_w, "base.data"), "rb").read()
+    try:
+        _r = _apply(_apply(_apply(_base, os.path.join(_w, "b12.patch")), os.path.join(_w, "sharp.patch")), os.path.join(_w, "repair.patch"))
+        check(_v + " repair patch applies", _r != _base and b"WORLD1" in _r and b"WORLD1" not in _base, True)
+    except Exception as e:
+        check(_v + " repair patch applies", repr(e), "ok")
+
 print("\n%d failure(s)" % fails)
 sys.exit(1 if fails else 0)

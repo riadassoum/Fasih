@@ -22,18 +22,19 @@ for spec in $VOICES; do
   printf 'name=%s\nlanguage=Arabic\ngender=%s\nformat=4\nrevision=1\n' "$VN" "$( [ "$VN" = Nour -o "$VN" = Huda -o "$VN" = Layla ] && echo female || echo male )" > "$D/data/voices/$VN/voice.info"
   # One base file per voice, plus small patches for the Breathiness levels and for Sharpening
   # (the settings only change some numbers inside the file, never its size or layout).
+  # "Consonant repair" (a setting, off by default): the edges of voiceless consonants rebuilt from
+  # their noisy frames (Faris, Huda), a crisper ق (Huda), the final hamza as a short closure, and
+  # lows turned down in unvoiced frames by the vocoder. Off is the sound before those changes.
+  PAU=1; RP=""
+  [ "$VN" = Huda ] && { PAU=0.35; RP="RHV_STOP_RELEASE=q RHV_FIX_VOICELESS=1"; }
+  [ "$VN" = Faris ] && { PAU=0.62; RP="RHV_FIX_VOICELESS=1"; }
   VS=""; [ -s "$VROOT/work/$VTR/vratio.npy" ] && VS="$VROOT/work/$VTR/vratio.npy"
   W="$D/data/variants/$VN"; TMPV=$(mktemp -d)
-  # Voice-specific repairs for the two voices trained on synthetic ArVoice audio:
-  # REL: crisper release of ق; FIXV: voiceless consonants rebuilt from their noisy frames;
-  # PAU: pauses as long as in the other voices.
-  REL=""; FIXV=""; PAU=1
-  [ "$VN" = Huda ] && { REL=q; FIXV=1; PAU=0.35; }
-  [ "$VN" = Faris ] && { FIXV=1; PAU=0.62; }
-  wr() { (cd "$VROOT" && RHV_STOP_RELEASE=$REL RHV_FIX_VOICELESS=$FIXV RHV_PAU_SCALE=$PAU RHV_PHONE_C0=Q:1-3:-3 RHV_TRAIN_DIR=$VTR RHV_MGC_DIR=$VMG RHV_MGC_DIM=$VDIM RHV_VOCODER=world RHV_DUR_PCT=97 RHV_LEVEL_DB=$VLVL RHV_BAP_OFFSET_DB=$1 RHV_VSCALE=$VS RHV_VSCALE_W=$2 python3 scripts/train.py write "$3" >/dev/null); }
-  wr 0 ${VSCALE_W:-0.7} "$W/base.data"
-  for n in 6 12 20; do wr -$n ${VSCALE_W:-0.7} "$TMPV/b$n.data"; python3 "$HERE/mkpatch.py" "$W/base.data" "$TMPV/b$n.data" "$W/b$n.patch"; done
-  if [ -n "$VS" ]; then wr 0 ${SHARP_W:-1.4} "$TMPV/sharp.data"; python3 "$HERE/mkpatch.py" "$W/base.data" "$TMPV/sharp.data" "$W/sharp.patch"; fi
+  wr() { (cd "$VROOT" && env $3 RHV_PAU_SCALE=$PAU RHV_TRAIN_DIR=$VTR RHV_MGC_DIR=$VMG RHV_MGC_DIM=$VDIM RHV_VOCODER=world RHV_DUR_PCT=97 RHV_LEVEL_DB=$VLVL RHV_BAP_OFFSET_DB=$1 RHV_VSCALE=$VS RHV_VSCALE_W=$2 python3 scripts/train.py write "$4" >/dev/null); }
+  wr 0 ${VSCALE_W:-0.7} "" "$W/base.data"
+  for n in 6 12 20; do wr -$n ${VSCALE_W:-0.7} "" "$TMPV/b$n.data"; python3 "$HERE/mkpatch.py" "$W/base.data" "$TMPV/b$n.data" "$W/b$n.patch"; done
+  if [ -n "$VS" ]; then wr 0 ${SHARP_W:-1.4} "" "$TMPV/sharp.data"; python3 "$HERE/mkpatch.py" "$W/base.data" "$TMPV/sharp.data" "$W/sharp.patch"; fi
+  wr 0 ${VSCALE_W:-0.7} "$RP RHV_PHONE_C0=Q:1-3:-3 RHV_SOFT_UNVOICED=1" "$TMPV/repair.data"; python3 "$HERE/mkpatch.py" "$W/base.data" "$TMPV/repair.data" "$W/repair.patch"
   rm -rf "$TMPV"
   echo "$VGAIN" > "$W/gain.txt"
   cp "$W/base.data" "$D/data/voices/$VN/24000/voice.data"

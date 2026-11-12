@@ -56,3 +56,6 @@ msgstr "تلقائي (أول صوت غير عربي)"
 
 msgid "None (primary voice reads everything)"
 msgstr "لا شيء (الصوت الأساسي يقرأ كل شيء)"
+
+msgid "Consonant repair (crisper ق ط ش, may sound muffled)"
+msgstr "إصلاح الحروف (ق ط ش أوضح، وقد يكتم الصوت)"

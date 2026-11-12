@@ -24,12 +24,13 @@ Text is diacritized with Rawi before it is spoken, and any harakat you typed you
 
 ## Settings
 
-These are in NVDA's voice settings. The secondary voice, Clarity, Breathiness, Sharpening and Mixed text are also in the settings ring.
+These are in NVDA's voice settings. The secondary voice, Clarity, Breathiness, Sharpening, Consonant repair and Mixed text are also in the settings ring.
 
 - **Secondary voice**: which voice reads non-Arabic text (Automatic, None, or any installed voice).
 - **Clarity**: how strongly the voice is sharpened by the postfilter.
 - **Breathiness**: from natural down to very low breath noise.
 - **Sharpening**: a crisper, more detailed spectrum.
+- **Consonant repair**: removes the breathy cough some voices make on ق ط ش, at the cost of a somewhat muffled sound. Off by default.
 - **Read emojis and symbols by name**.
 - **Pausal ending (waqf)**: the last word of a sentence is read in its pausal form.
 - **Mixed Arabic and Latin text**: Automatic (Latin text goes to the secondary voice exactly as written, with a number just before a Latin word, as in 5 PM), Arabic first (numbers, symbols and Roman numerals read in Arabic, as in 1.0), or Secondary voice first (numbers too).
@@ -53,7 +54,7 @@ Put a file called `user-dic.json` in `%APPDATA%\nvda\Fasih-config\`. It is a lis
 
 ## What is in this repository
 
-- `voices/`: the five trained voices, ready for RHVoice. Each has its `voice.data` and, in `variants/`, the base file with small patches used by the Breathiness and Sharpening settings.
+- `voices/`: the five trained voices, ready for RHVoice. Each has its `voice.data` and, in `variants/`, the base file with small patches used by the Breathiness, Sharpening and Consonant repair settings.
 - `lang/`: the Arabic language for RHVoice. `build_lang.sh` regenerates it from the generators (it needs foma and RHVoice's att2bin and dtree2bin).
 - `scripts/`: corpus download, WORLD feature extraction, alignment, labels and training (`run_voice.sh`). The corpora themselves are not included; the scripts download them from their original sources.
 - `engine/`: `rhvoice-world-vocoder.patch` for RHVoice (at the commit in `RHVOICE_BASE_COMMIT`) and the WORLD sources to copy into `src/core/world/`. I cross-built the Windows DLLs with zig.
