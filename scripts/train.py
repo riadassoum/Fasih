@@ -430,6 +430,21 @@ def cmd_write(out_path):
                 p[:NS] *= lim[k] / tot
                 n["pdf"] = p.astype(np.float32); nfix += 1
         print("duration cap: %d models shortened" % nfix, flush=True)
+        rel = [x for x in os.environ.get("RHV_STOP_RELEASE", "").split(",") if x]
+        if rel:
+            # Stops whose release the model smeared into a slow noisy rise (heard as a cough):
+            # the release states (2-4) are shortened so the burst is crisp again.
+            nrel = 0
+            for li, n in enumerate(leaves):
+                mem = names_[leafof == li]
+                if len(mem) == 0:
+                    continue
+                vals, cnt = np.unique(mem, return_counts=True)
+                if vals[cnt.argmax()] in rel:
+                    p = n["pdf"].astype(np.float64).copy()
+                    p[2:NS] = np.maximum(p[2:NS] * 0.4, 1.0)
+                    n["pdf"] = p.astype(np.float32); nrel += 1
+            print("stop release: %d models shortened" % nrel, flush=True)
     used = set()
     for t in [dur] + [x for v in trees.values() for x in v]:
         used |= {n["q"] for n in t if not n.get("leaf")}
