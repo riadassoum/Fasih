@@ -9,6 +9,7 @@ rm -rf "$RHV/build/addon"; mkdir -p "$D/lib/x64" "$D/data/languages" "$D/data/vo
 python3 "$HERE/patch_driver.py" /tmp/rh/src/nvda-addon/synthDriver/__init__.py "$D/__init__.py"
 cp "$HERE/arabic_pipeline.py" "$HERE/loudness.py" "$D/"
 cp -r "$HERE/locale" "$B/"
+cp -r "$HERE/doc" "$B/"
 cp /tmp/rhwin/src/lib/libRHVoice.dll "$D/lib/x64/RHVoice.dll"
 cp /tmp/rhwin/src/core/libRHVoice_core.dll "$D/lib/x64/"
 cp -r "$RHV/lang/Arabic" "$D/data/languages/"
@@ -23,10 +24,10 @@ for spec in $VOICES; do
   # (the settings only change some numbers inside the file, never its size or layout).
   VS=""; [ -s "$VROOT/work/$VTR/vratio.npy" ] && VS="$VROOT/work/$VTR/vratio.npy"
   W="$D/data/variants/$VN"; TMPV=$(mktemp -d)
-  wr() { (cd "$VROOT" && RHV_TRAIN_DIR=$VTR RHV_MGC_DIR=$VMG RHV_MGC_DIM=$VDIM RHV_VOCODER=world RHV_LEVEL_DB=$VLVL RHV_BAP_OFFSET_DB=$1 RHV_VSCALE=$VS RHV_VSCALE_W=$2 python3 scripts/train.py write "$3" >/dev/null); }
+  wr() { (cd "$VROOT" && RHV_TRAIN_DIR=$VTR RHV_MGC_DIR=$VMG RHV_MGC_DIM=$VDIM RHV_VOCODER=world RHV_DUR_PCT=97 RHV_LEVEL_DB=$VLVL RHV_BAP_OFFSET_DB=$1 RHV_VSCALE=$VS RHV_VSCALE_W=$2 python3 scripts/train.py write "$3" >/dev/null); }
   wr 0 ${VSCALE_W:-0.7} "$W/base.data"
   for n in 6 12 20; do wr -$n ${VSCALE_W:-0.7} "$TMPV/b$n.data"; python3 "$HERE/mkpatch.py" "$W/base.data" "$TMPV/b$n.data" "$W/b$n.patch"; done
-  if [ -n "$VS" ]; then wr 0 1.0 "$TMPV/sharp.data"; python3 "$HERE/mkpatch.py" "$W/base.data" "$TMPV/sharp.data" "$W/sharp.patch"; fi
+  if [ -n "$VS" ]; then wr 0 ${SHARP_W:-1.4} "$TMPV/sharp.data"; python3 "$HERE/mkpatch.py" "$W/base.data" "$TMPV/sharp.data" "$W/sharp.patch"; fi
   rm -rf "$TMPV"
   echo "$VGAIN" > "$W/gain.txt"
   cp "$W/base.data" "$D/data/voices/$VN/24000/voice.data"
@@ -65,6 +66,7 @@ url = https://github.com/riadassoum/Fasih
 version = $VER
 minimumNVDAVersion = 2026.1
 lastTestedNVDAVersion = 2026.3
+docFileName = readme.html
 EOF
 rm -f "$OUT"; (cd "$B" && zip -qr "$OUT" .)
 python3 -c "import zipfile,sys; z=zipfile.ZipFile(sys.argv[1]); print(len(z.namelist()),'files', z.testzip() or 'zip OK')" "$OUT"

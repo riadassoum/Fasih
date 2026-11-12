@@ -78,6 +78,16 @@ def cmd_stats():
         T = min(len(mgc), len(bap), len(lf0))
         # voiced only if harvest AND D4C agree (harvest over-extends voicing into fricatives)
         lf0 = np.where(bap[:len(lf0), 0] < -10.0, lf0[:len(bap)], -1e10)
+        if os.environ.get("RHV_LF0_CLEAN"):
+            # Pitch-tracking slips (octave jumps, creak at nasals and at the edges of consonants)
+            # pulled some models far off the contour, heard as a shake. A voiced frame more than
+            # 5 semitones from the local median of the contour (125 ms) is set to that median.
+            from scipy.ndimage import median_filter
+            vi = np.flatnonzero(lf0 > -1e9)
+            if len(vi) >= 10:
+                med = median_filter(lf0[vi], size=25, mode="nearest")
+                off = np.abs(lf0[vi] - med) > 5 * np.log(2) / 12
+                lf0[vi[off]] = med[off]
         M = with_deltas(mgc[:T]); B = with_deltas(bap[:T]); Fv, Fok = lf0_windows(lf0[:T])
         dur = np.zeros((nunits, NS))
         st = {}
@@ -335,7 +345,8 @@ def cmd_trees(mdl=1.0):
             S = np.load(os.path.join(TR, f"st_{kind}_{j}.npy"))
             S[held] = 0
             st = Stream(kind, S)
-            mo = float(os.environ.get("RHV_MIN_OCC_MGC", "10")) if kind == "mgc" else 10.0
+            mo = float(os.environ.get("RHV_MIN_OCC_MGC", "10")) if kind == "mgc" else \
+                float(os.environ.get("RHV_MIN_OCC_LF0", "10")) if kind == "lf0" else 10.0
             nodes = grow_tree(st, codes, mats, qs, mdl, min_occ=mo)
         leaves = [n for n in nodes if n.get("leaf")]
         leaf_of = np.zeros(len(S), np.int32)
@@ -388,6 +399,37 @@ def cmd_write(out_path):
     for kind in ("mgc", "lf0", "bap"):
         trees[kind] = [pickle.load(open(os.path.join(TR, f"tree_{kind}_{j}.pkl"), "rb")) for j in range(NS)]
     dur = pickle.load(open(os.path.join(TR, "tree_dur_None.pkl"), "rb"))
+    pct = float(os.environ.get("RHV_DUR_PCT", "0"))
+    if pct > 0:
+        # A duration model whose speech sound lasts longer than that sound ever does in `pct`%
+        # of the recordings (a rare context, e.g. ه before و in يَهْوَاهُ) is shortened to that length.
+        d = np.load(os.path.join(TR, "durs.npy")).astype(np.float64).sum(1)
+        codes = np.load(os.path.join(TR, "codes.npy"))
+        vocab = json.load(open(os.path.join(TR, "vocab.json"), encoding="utf-8"))
+        flds = [f[0] for f in LabelSet(LANG).fields]
+        ni, nn = flds.index("name"), flds.index("next_name")
+        names_ = np.array(vocab["name"], dtype=object)[codes[:, ni]]
+        nexts_ = np.array(vocab["next_name"], dtype=object)[codes[:, nn]]
+        keys = np.array([a + ("|end" if b in ("pau", "sil", "x") else "") for a, b in zip(names_, nexts_)], dtype=object)
+        leafof = np.load(os.path.join(TR, "leafof_dur_None.npy"))
+        lim = {k: min(np.percentile(d[keys == k], pct), 2.0 * np.median(d[keys == k]))
+               for k in set(keys) if (keys == k).sum() >= 20}
+        leaves = [n for n in dur if n.get("leaf")]
+        nfix = 0
+        for li, n in enumerate(leaves):
+            mem = keys[leafof == li]
+            if len(mem) == 0:
+                continue
+            vals, cnt = np.unique(mem, return_counts=True)
+            k = vals[cnt.argmax()]
+            if k.split("|")[0] in ("pau", "sil", "x") or k not in lim:
+                continue
+            p = n["pdf"].astype(np.float64).copy()
+            tot = p[:NS].sum()
+            if tot > lim[k]:
+                p[:NS] *= lim[k] / tot
+                n["pdf"] = p.astype(np.float32); nfix += 1
+        print("duration cap: %d models shortened" % nfix, flush=True)
     used = set()
     for t in [dur] + [x for v in trees.values() for x in v]:
         used |= {n["q"] for n in t if not n.get("leaf")}
@@ -456,6 +498,14 @@ def cmd_write(out_path):
             for n in trees["bap"][j]:
                 if n.get("leaf"):
                     p = n["pdf"].copy(); p[1:D_BAP] = np.minimum(p[1:D_BAP] + bofs, 0.0); n["pdf"] = p
+    lvs = float(os.environ.get("RHV_LF0_VAR_SCALE", "1"))
+    if lvs != 1.0:
+        # Wider pitch variances on the static term let the smoothness constraints (deltas) win:
+        # the contour no longer jumps between neighbouring states (heard as a shake).
+        for j in range(NS):
+            for n in trees["lf0"][j]:
+                if n.get("leaf"):
+                    p = n["pdf"].astype(np.float64).copy(); p[3] *= lvs; n["pdf"] = p.astype(np.float32)
     for k, kind in (("MCP", "mgc"), ("LF0", "lf0"), ("BAP", "bap")):
         allp, ttx = [], qtxt
         counts = []

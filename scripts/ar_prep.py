@@ -65,6 +65,17 @@ def _helping_vowel(word: str) -> str:
     return word[:-1] + v
 
 
+def _short_before_wasl(word: str) -> str:
+    """A long vowel at the end of a word is shortened before hamzat al-wasl, because two silent
+    sounds cannot meet: بِهَذَا ٱلصَّوْتِ -> بِهَذَ ٱلصَّوْتِ (bihadha-ssawt), فِي ٱلْبَيْتِ -> فِ ٱلْبَيْتِ,
+    عَلَى ٱلْ -> عَلَ ٱلْ, كَتَبُوا ٱلْ -> كَتَبُ ٱلْ. Only spoken form changes; tanween is left alone."""
+    for pat in ("\u064e[\u0627\u0649]\u0652?$", "\u0650\u064a\u0652?$", "\u064f\u0648\u0627?\u0652?$"):
+        m = re.search(pat, word)
+        if m:
+            return word[:m.start() + 1]
+    return word
+
+
 def mark_wasl(text: str) -> str:
     text = normalize(text)
     out = []
@@ -83,7 +94,7 @@ def mark_wasl(text: str) -> str:
         if prev_word and w.startswith(ALEF):
             w = WASLA + re.sub("^[" + MARKS + "]+", "", w[1:])
             if last is not None:
-                out[last] = _helping_vowel(out[last])
+                out[last] = _short_before_wasl(_helping_vowel(out[last]))
         out.append(gap)
         out.append(w)
         last = len(out) - 1

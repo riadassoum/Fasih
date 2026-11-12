@@ -7,12 +7,15 @@
 - **Two new voices: Faris (male) and Huda (female)**, trained on the synthetic part of ArVoice (MBZUAI, CC BY 4.0).
 - **Clearer sound in all voices.** The spectrum models are about 2.5 times larger, and variance scaling restores the natural liveliness of the spectrum that statistical voices tend to flatten. Unlike the old global variance option, it cannot click.
 - **ه and the hamza no longer sound like a dry cough.** They were forced to be voiceless, so they were synthesized as a burst of noise. They are now voiced where the speaker voiced them.
-- **No more dragged sentence endings in Faris and Huda.** The last word of a long sentence could be stretched to 0.6 s per sound.
+- **No more dragged sounds.** The last word of a long sentence could be stretched to 0.6 s per sound in Faris and Huda, and some sounds in rare contexts (such as the ه of يَهْوَاهُ in Jamal) were held far too long. No speech sound now lasts longer than twice its usual length, or than it ever does in nearly all of the recordings.
+- **Steadier pitch.** The pitch models are built from more examples each, so the pitch no longer jumps up and down between neighbouring parts of a syllable (the shake in رياض, العلم نور, وَمِنَ).
 - **Louder.** Fasih now plays about 6 dB louder, so volume 100 matches other screen-reader voices. A look-ahead limiter turns the gain down on the loudest peaks instead of clipping them.
 
 ### Arabic text
 
 - **Shadda:** a shadda you type without its vowel no longer removes the vowel (شدّ is read شَدَّ, محمّد is read مُحَمَّد).
+- **Long vowels before hamzat al-wasl** are shortened as in real speech: بِهَذَا ٱلصَّوْتِ is read bihādha-ṣṣawt, فِي ٱلْبَيْتِ fi-lbayt, عَلَى ٱلْأَرْضِ ʿala-lʾarḍ.
+- **Letter names:** ل is read لَام, not لَآم (a fatha written on the alif was read as a hamza).
 - **Waqf:** فَتًى becomes فَتَى at a pause, and the names of single characters are said in pausal form (شَدَّة).
 - **Mixed Arabic and English:** Latin text is passed to the secondary voice exactly as written (I like playing is no longer read with I as a Roman numeral, and Ctrl+C stays Ctrl+C). A number just before a Latin word goes with it (5 PM). A new setting chooses the priority.
 
@@ -28,7 +31,7 @@
 - **New: Mixed Arabic and Latin text** chooses which voice reads numbers, symbols and Roman numerals next to Latin text.
 - **Settings ring:** Mixed text is in it too.
 - **Quality settings** are written once, 1.5 s after the last change, and never switch you back to Fasih if you chose another synthesizer meanwhile.
-- **Sharpening** now uses the stronger variance scaling and no longer clicks.
+- **Sharpening** is now clearly stronger than the default and no longer clicks.
 
 ### Add-on
 

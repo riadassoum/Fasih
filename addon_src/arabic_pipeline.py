@@ -78,7 +78,14 @@ def _tanween_pre(text):
     return _TAN_AFTER_ALIF.sub("\u064b\u0627", text)
 
 
+def _alif_fatha(text):
+    # a fatha written on the alif instead of the letter before it (لاَم): the voice would read
+    # the alif as a hamza (لَآم). Put the fatha back on the letter: لَام.
+    return re.sub("([\u0628-\u064a])\u0627\u064e", "\\1\u064e\u0627", text)
+
+
 def _tanween_post(text):
+    text = _alif_fatha(text)
     text = re.sub("\u0625[\u064e\u064f]", "\u0625\u0650", text)   # إ always takes kasra
     text = re.sub("(?<=\u064a\u0652)\u0643\u064e(?=\u0645)", "\u0643\u064f", text)  # عَلَيْكُم
     text = re.sub("(?<=\u064a\u0652)\u0647[\u064e\u064f](?=\u0645)", "\u0647\u0650", text)  # عَلَيْهِم
@@ -181,7 +188,7 @@ def process(text, diacritize=True):
         name = _step(pt.get_single_char_name, out) if out.strip() else out
         if name != out:
             # a name is said on its own, so in its pausal form (شَدَّة, not شَدَّةٌ)
-            return _step(ar_prep.mark_wasl, _step(ar_prep.pausal_ending, name))
+            return _step(ar_prep.mark_wasl, _step(ar_prep.pausal_ending, _alif_fatha(name)))
     if options.get("read_emojis", True):
         out = _step(dm.replace_emojis, out)
     if not _AR.search(out):
