@@ -21,6 +21,12 @@ for src, want in [("مَرْحَبًا.", "مَرْحَبَا."), ("مَدْرَ
                   ("مَسَاءً.", "مَسَاء."), ("كِتَابٌ جَدِيدٌ.", "كِتَابٌ جَدِيد."), ("جَمِيلًا؟", "جَمِيلَا؟")]:
     check("waqf " + src, ar_prep.pausal_ending(src), want)
 
+# waqf with shadda in either mark order, and sukun on a sun-letter lam
+for src, want in [("ثُمَّ.", "ثُمّ."), ("حَقٌّ.", "حَقّ.")]:
+    check("waqf shadda " + src, ar_prep.pausal_ending(src), want)
+for src, want in [("الْسَّلَام", "السَّلَام"), ("لِلْتَّفَاعُل", "لِلتَّفَاعُل"), ("الْقَمَر", "الْقَمَر")]:
+    check("sun lam " + src, ar_prep.normalize(src), want)
+
 # hamzat al-wasl and helping vowels in connected speech
 for src, want in [("مِنْ الْبَيْتِ", "مِنَ ٱلْبَيْتِ"), ("مِنْ الصَّبْرِ", "مِنَ ٱلصَّبْرِ"),
                   ("حُبِسَتْ السَّمَاءُ", "حُبِسَتِ ٱلسَّمَاءُ"), ("عَلَيْكُمْ السَّلَامُ", "عَلَيْكُمُ ٱلسَّلَامُ"),
@@ -67,11 +73,15 @@ if lib and addon:
                       ("مصدراً ومنبعاً،", "مَصْدَرًا وَمُنْبَعًا،"), ("السلام عليكم", "السَّلَامُ عَلَيْكُم"),
                       ("ّ", "شَدَّة"), ("ش", "شِين"), ("ل", "لَام"), ("45", "خَمْسَةٌ وَ أَرْبَعُون"), ("فتًى.", "فَتَى.")]:
         check("pipeline " + src, ap.process(src), want)
+    for src, want in [("لتاريخ الأمة الإسلامية، كما", "ٱلْإِسْلَامِيَّةِ،"), ("رأيت كتابا جميلا: كما", "جَمِيلًا:"),
+                      ("هذا حق. ثم", "حَقّ."), ("قبل أن يصبحوا", "قَبْلَ"), ("السلام عليكم", "السَّلَامُ"),
+                      ("الشاشة الرئيسية، ثم", "ثُمّ")]:
+        check("context " + src, want in ap.process(src), True)
     for src, want in [("أنا أحب اللعب: I like playing", "I like playing"), ("اضغط Ctrl+C للنسخ", "Ctrl+C"),
                       ("راسلني على test@example.com", "test@example.com"), ("الفصل IV", "رَابِع")]:
         check("mixed " + src, want in ap.process(src), True)
     ap.options["mixed_priority"] = "arabic"
-    check("mixed, Arabic first", "أَوَّل" in ap.process("أنا أحب اللعب: I like playing"), True)
+    check("mixed, Arabic first", "وَّل" in ap.process("أنا أحب اللعب: I like playing"), True)
     ap.options["mixed_priority"] = "auto"
 else:
     print("(full-pipeline tests skipped: set RAWI_ORT_LIB and FASIH_ADDON_DIR)")

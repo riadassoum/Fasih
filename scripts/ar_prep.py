@@ -27,6 +27,15 @@ def normalize(text: str) -> str:
     # other combining marks (Quranic signs, stray hamza/madda) are not readable by the voice
     text = re.sub("[\u0610-\u061A\u0653-\u065F\u06D6-\u06ED]", "", text)
     text = text.replace("\u0640", "")  # tatweel
+    # sukun written on the lam of the article before a sun letter (الْسَّلَام, لِلْتَّفَاعُل): the
+    # lam is not pronounced, so drop the sukun and make sure the sun letter has its shadda.
+    def _sun(m):
+        marks = m.group(3)
+        if "\u0651" not in marks:
+            marks = "\u0651" + marks
+        return m.group(1) + m.group(2) + marks
+    text = re.sub("(?<![\u0621-\u064A])((?:[\u0648\u0641\u0628\u0643][\u064E\u0650]?)?(?:[\u0627\u0671][\u064E]?\u0644|\u0644\u0650?\u0644))\u0652"
+                  "([\u062A\u062B\u062F\u0630\u0631\u0632\u0633\u0634\u0635\u0636\u0637\u0638\u0644\u0646])([\u064B-\u0652]*)", _sun, text)
     text = re.sub("(^|(?<=[^\u0621-\u064A\u0671\u064B-\u0652\u0670]))[\u064B-\u0652\u0670]+", "", text)  # marks with no letter
     return text
 
@@ -41,9 +50,10 @@ def _waqf_word(w: str) -> str:
         return re.sub("(\u064B\u0627|\u0627\u064B)$", "\u064E\u0627", w)
     if re.search("\u064B\u0649$|\u0649\u064B$", w):          # فَتًى -> فَتَى
         return re.sub("(\u064B\u0649|\u0649\u064B)$", "\u064E\u0649", w)
-    if re.search("\u0629[\u064B-\u0650\u0652]*$", w):
-        return re.sub("\u0629[\u064B-\u0650\u0652]*$", "\u0629", w)
-    return re.sub("[\u064B-\u0650]+$", "", w)
+    if re.search("\u0629[\u064B-\u0652]*$", w):
+        return re.sub("\u0629[\u064B-\u0652]*$", "\u0629", w)
+    # drop the final short vowel or tanween, whatever order it has with a shadda (حَقٌّ، ثُمَّ)
+    return re.sub("[\u064B-\u0652]+$", lambda m: re.sub("[\u064B-\u0650]", "", m.group(0)), w)
 
 
 def pausal_ending(text: str) -> str:

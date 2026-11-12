@@ -195,6 +195,32 @@ def _fix_split(cp, tts):
     return out
 
 
+_FASIH_WORDS = {"ثم": "ثُمّ"}   # last letter: shadda kept, vowel left to the sentence
+_MARKS_RE = re.compile(r"[\u064B-\u0652\u0670]")
+
+
+def _fasih_entry(cp, tts):
+    """Adapt a PlanetBlindTech entry to Fasih, whose diacritizer reads the sentence as a whole.
+    - Half-vowelled entries (hints for PBT's diacritizer) are dropped: Rawi does better, and the
+      few marks they carried blocked it (الإسلامِية was read without its ة before a comma).
+    - Single Arabic words lose the marks on their last letter, so the case ending comes from the
+      sentence (قبل was always قَبْلْ, even in قَبْلَ أَنْ)."""
+    letters = [c for c in tts if "\u0621" <= c <= "\u064A"]
+    if letters and not re.search(r"[A-Za-z]", tts):
+        if len(_MARKS_RE.findall(tts)) < 0.5 * len(letters):
+            return None
+        if (" " not in cp.strip() and " " not in tts.strip()
+                and re.fullmatch(r"[\u0621-\u064A\u064B-\u0652\u0670\u0640]+", cp.strip())):
+            # A single ordinary Arabic word is better read from the sentence: measured on 1,200
+            # human-vowelled sentences, these entries made 67 words wrong and 12 right
+            # (سجل، فعل، علم، حدث، قبل، تعالى...). Names and phrases are kept.
+            return None
+        if " " not in cp.strip() and " " not in tts.strip():
+            tts = re.sub(r"[\u064B-\u0650\u0652]+(?=\u0651?[^\u0621-\u064A\u064B-\u0652]*$)", "", tts)
+            tts = re.sub(r"(\u0651)[\u064B-\u0650\u0652]+(?=[^\u0621-\u064A\u064B-\u0652]*$)", r"\1", tts)
+    return tts
+
+
 def load_default():
     global _is_default_loaded, _char_names, _diacritic_names, _symbols
     global _currencies, _abbreviations, _phrase_rules, _default_compiled_rules
@@ -222,6 +248,9 @@ def load_default():
                         if cp in _SKIP_CP:
                             continue
                         tts = _fix_split(cp, tts)
+                        tts = _fasih_entry(cp, tts)
+                        if tts is None:
+                            continue
                         _phrase_rules[cp] = tts
                         clean_cp = re.sub(r"[\u064B-\u065F\u0670\u0640]", "", cp).strip()
                         if len(clean_cp) > 1 and cp != tts:
@@ -248,6 +277,10 @@ def load_default():
                     if len(clean_k) > 1 and k != v:
                         rules_to_compile.append((k, v))
 
+            # Fasih additions: words the diacritizer gets wrong at the edge of a phrase
+            for cp, tts in _FASIH_WORDS.items():
+                _phrase_rules[cp] = tts
+                rules_to_compile.append((cp, tts))
             rules_to_compile.sort(key=lambda x: len(x[0].strip()), reverse=True)
             _default_compiled_rules = []
             for cp, tts in rules_to_compile:

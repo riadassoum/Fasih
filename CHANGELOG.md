@@ -18,6 +18,11 @@
 ### Arabic text
 
 - **Shadda:** a shadda you type without its vowel no longer removes the vowel (شدّ is read شَدَّ, محمّد is read مُحَمَّد).
+- **Punctuation no longer breaks the reading of a sentence.** A colon, full stop, bracket or quotation mark used to cut the sentence into pieces that were diacritized separately, so the word before it was vowelled as if the text ended there (جَمِيلَا: instead of جَمِيلًا:، حَقْ. instead of حَقّ.). Measured on 400 human-vowelled sentences, accuracy is now the same with or without punctuation.
+- **A word you vowelled partly keeps the rest of its harakat before punctuation** (الإسلامية before a comma lost its ة).
+- **PlanetBlindTech's dictionary adapted to Fasih:** single ordinary words are now read from the sentence (they forced one reading: سجل، فعل، علم، قبل، تعالى...), half-vowelled hints are dropped, and a sukun written on the lam of the article before a sun letter is no longer pronounced (الْسَّلَام was read with an L). Names and phrases are kept.
+- **Waqf on a word ending in shadda** (حَقّ، ثُمّ) now works whatever order the marks are in.
+- **Joined names** such as عبدالله and عبدالرحمن are read as two words.
 - **Long vowels before hamzat al-wasl** are shortened as in real speech: بِهَذَا ٱلصَّوْتِ is read bihādha-ṣṣawt, فِي ٱلْبَيْتِ fi-lbayt, عَلَى ٱلْأَرْضِ ʿala-lʾarḍ.
 - **Letter names:** ل is read لَام, not لَآم (a fatha written on the alif was read as a hamza).
 - **Waqf:** فَتًى becomes فَتَى at a pause, and the names of single characters are said in pausal form (شَدَّة).

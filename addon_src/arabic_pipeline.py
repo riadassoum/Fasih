@@ -212,8 +212,12 @@ def process(text, diacritize=True):
         return _unprotect(out, keep)
 
 
+_ABD = re.compile("(?<![\u0621-\u064a])(\u0639\u0628\u062f)(?=\u0627\u0644[\u0621-\u064a]{2})")
+
+
 def _arabic_core(out, diacritize, pt, ar_prep):
     out = _step(pt.normalize_presentation_forms, out)
+    out = _ABD.sub("\\1 ", out)        # names written joined: عبدالله -> عبد الله
     try:
         from .arabic import ar_textnorm
         out = _step(ar_textnorm.normalize, out)

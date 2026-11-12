@@ -22,6 +22,11 @@ new = '''        pick = um[i] if um[i] else mm[i]
             pick = sh + u_v
 '''
 s = s.replace(old, new, 1)
+# The model's word keeps its punctuation (الْإِسْلَامِيَّةِ،), so its letters never matched the
+# writer's word and the writer's half-marked word was kept bare. Peel the model's punctuation too.
+old2 = "    mcore = model_word.strip()\n"
+assert old2 in s, "mcore line not found"
+s = s.replace(old2, "    mcore = model_word.strip()\n    while mcore and not _is_core(mcore[0]):\n        mcore = mcore[1:]\n    while mcore and not _is_core(mcore[-1]):\n        mcore = mcore[:-1]\n", 1)
 compile(s, p, "exec")
 open(p, "w", encoding="utf-8").write(s)
 print("ar_g2p patched")
