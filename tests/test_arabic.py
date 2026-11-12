@@ -58,10 +58,37 @@ subprocess.run([sys.executable, os.path.join(REPO, "addon_src", "patch_driver.py
                 os.path.join(_drv, "d.py")], check=True, stdout=subprocess.DEVNULL)
 src = open(os.path.join(_drv, "d.py"), encoding="utf-8").read(); shutil.rmtree(_drv)
 a = src.index("_AR_RANGES = "); b = src.index("class SynthDriver(SynthDriver):", a)
-ns = {"unicodedata": unicodedata, "re": re, "_": lambda t: t}; exec(src[a:b], ns)
+ns = {"unicodedata": unicodedata, "re": re, "_": lambda t: t, "threading": __import__("threading"), "os": os, "log": types.SimpleNamespace(error=print)}; exec(src[a:b], ns)
+# quality settings: a change made while another is being written is never lost
+import threading, time as _time
+check("quality code in slice", "_quality_worker" in ns and "_atomic_write" in ns, True)
+_qd = tempfile.mkdtemp()
+ns["_quality_file_state"] = lambda: dict(_disk)
+_disk = {"clarity": 50, "breathiness": "b0", "sharpening": False, "repair": False}
+_writes = []
+def _slow_apply(st):
+    _time.sleep(0.3); _writes.append(dict(st)); _disk.clear(); _disk.update(st); return True
+ns["_apply_quality"] = _slow_apply
+_done = threading.Event()
+threading.Thread(target=ns["_quality_worker"], args=(_done.set,), daemon=True).start()
+def _set(k, v):
+    with ns["_quality_lock"]:
+        st = dict(ns["_pending_quality"]) if ns["_pending_quality"] is not None else dict(_disk)
+        st[k] = v; ns["_pending_quality"] = st; ns["_quality_version"] += 1
+    ns["_quality_wake"].set()
+_set("clarity", 60); _time.sleep(0.1); _set("sharpening", True)
+check("pending keeps clarity 60 during a write", ns["_quality_state"]()["clarity"], 60)
+_time.sleep(1.0)
+check("final state on disk", (_disk["clarity"], _disk["sharpening"]), (60, True))
+check("nothing pending after the last write", ns["_pending_quality"], None)
+ns["_atomic_write"](os.path.join(_qd, "f"), b"abc")
+check("atomic write", open(os.path.join(_qd, "f"), "rb").read(), b"abc"); shutil.rmtree(_qd)
 _t = "جملة أولى طويلة. " * 30 + "سؤال؟ «اقتباس.» نهاية"
 check("sentence groups lossless", "".join(ns["_sentence_groups"](_t)), _t)
-check("sentence groups count", len(ns["_sentence_groups"](_t)), 3)
+for _t in [_t, "كلمة " * 2000, "سطر قصير هنا\n" * 800, "ب" * 10000, "أ، " * 3000]:
+    _g = ns["_sentence_groups"](_t)
+    check("speech groups lossless, at most 400 chars (%d chars)" % len(_t), "".join(_g) == _t and max(map(len, _g)) <= 400, True)
+check("speech groups cut at line breaks", ns["_sentence_groups"]("سطر قصير هنا\n" * 800)[0].endswith("\n"), True)
 check("split mixed", ns["_split_by_script"]("افتح ملف README الآن"), [(True, "افتح ملف "), (False, "README "), (True, "الآن")])
 check("split number before Latin", ns["_split_by_script"]("السَّاعَةُ 5 PM"), [(True, "السَّاعَةُ "), (False, "5 PM")])
 check("split number inside Arabic", ns["_split_by_script"]("عندي 45 كتابا"), [(True, "عندي 45 كتابا")])
@@ -89,6 +116,9 @@ if lib and addon:
         check("mixed " + src, want in ap.process(src), True)
     ap.options["mixed_priority"] = "arabic"
     check("mixed, Arabic first", "وَّل" in ap.process("أنا أحب اللعب: I like playing"), True)
+    _polls = []
+    ap.process("هذه جملة أولى. وهذه جملة ثانية. وهذه ثالثة.", is_cancelled=lambda: _polls.append(1) or False)
+    check("diacritizer polls the cancel callback", len(_polls) > 0, True)
     ap.options["mixed_priority"] = "secondary"
     check("secondary first: digits alone stay digits", ap.process("123"), "123")
     ap.options["mixed_priority"] = "auto"

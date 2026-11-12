@@ -9,7 +9,7 @@
 - **ه and the hamza no longer sound like a dry cough.** They were forced to be voiceless, so they were synthesized as a burst of noise. They are now voiced where the speaker voiced them.
 - **No more dragged sounds.** The last word of a long sentence could be stretched to 0.6 s per sound in Faris and Huda, and some sounds in rare contexts (such as the ه of يَهْوَاهُ in Jamal) were held far too long. No speech sound now lasts longer than twice its usual length, or than it ever does in nearly all of the recordings.
 - **New setting, Consonant repair (off by default).** It turns down the vowel-like low frequencies that the edges of ق ط ش sometimes keep, gives Huda's ق a crisper release and rebuilds Faris's and Huda's voiceless consonants from their own noise, which removes the breathy cough on those letters. It also makes the voices sound somewhat muffled, so it is off by default and the voices sound as they did before; turn it on in the voice settings or the settings ring if the cough bothers you more than the muffling.
-- **Long texts start speaking sooner and stop at once.** A long text (say all, a whole page) is now prepared and spoken a few sentences at a time instead of all at once, so speech starts after the first sentences and pressing Control stops the work at the next sentence.
+- **Long texts start speaking sooner and stop at once.** A long text (say all, a whole page) is now prepared and spoken a few hundred characters at a time, cut after a sentence or a line break, or at a comma or space when there is none, instead of all at once. Speech starts after the first piece, and pressing Control also stops the diacritizer between sentences instead of waiting for it to finish.
 - **Louder.** Fasih now plays about 6 dB louder, so volume 100 matches other screen-reader voices. A look-ahead limiter turns the gain down on the loudest peaks instead of clipping them.
 
 ### Arabic text
@@ -41,7 +41,7 @@
 - **No clipping at the start of an utterance.** The limiter started each utterance at full gain, so a loud first sound could clip; it now starts at a safe gain.
 - **Very long sentences** (no full stop for more than 800 characters) are cut for the diacritizer without losing the spaces at the cuts, and a single extremely long word is cut too instead of being sent whole.
 - **Secondary voice first** now leaves a number on its own (123) to the secondary voice, as the setting says, instead of reading it in Arabic.
-- **Changing Clarity, Breathiness, Sharpening or Consonant repair** no longer freezes NVDA for a moment: the voice file is prepared in the background and replaced in one step, so a voice is never left half written.
+- **Changing Clarity, Breathiness, Sharpening or Consonant repair** no longer freezes NVDA for a moment. The voice files are prepared by one background worker and each is replaced in one step, so a voice is never left half written, and changing several settings quickly never loses one of them.
 - **Fasih always uses its own Rawi model,** even when ClaritySynth is installed with its own downloaded models.
 
 ### Add-on

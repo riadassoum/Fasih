@@ -105,7 +105,7 @@ rep('''    def speak(self, speechSequence):
                         if cancel.is_set():
                             return
                         try:
-                            new = arabic_pipeline.process(piece, diacritize=True)
+                            new = arabic_pipeline.process(piece, diacritize=True, is_cancelled=cancel.is_set)
                         except Exception:
                             log.error("Fasih: text pipeline failed", exc_info=True)
                             new = piece
@@ -175,17 +175,26 @@ def _is_ar(ch):
     return any(a <= o <= b for a, b in _AR_RANGES)
 
 
-_SENT_END = re.compile("[.!?\\u061f\\u06d4\\n]+[\\"'\\u00bb\\u201d)\\\\]]*\\\\s+")
+_SENT_END = re.compile("[.!?\\u061f\\u06d4]+[\\"'\\u00bb\\u201d)\\\\]]*(?:\\\\s+|$)|\\n\\\\s*")
+_SOFT_CUT = re.compile("[,;:\\u060c\\u061b]\\\\s+|\\\\s+")
 
 
-def _sentence_groups(text, size=200):
-    """Cut a long text after sentence ends into pieces of about `size` characters or more.
-    Nothing is lost: joined back, the pieces are the text."""
-    out, start, last = [], 0, 0
-    for m in _SENT_END.finditer(text):
-        if m.end() - start >= size:
-            out.append(text[start:m.end()])
-            start = m.end()
+def _sentence_groups(text, size=200, most=400):
+    """Cut a long text into pieces of about `size` characters: after a sentence end or a
+    line break when there is one, else at a comma or a space before `most` characters,
+    else (one huge word) at `most`. Nothing is lost: joined back, the pieces are the text."""
+    out, start, n = [], 0, len(text)
+    while n - start > most:
+        cut = None
+        for m in _SENT_END.finditer(text, start + 1, start + most):
+            if m.end() - start >= size:
+                cut = m.end()
+                break
+        if cut is None:
+            soft = [m.end() for m in _SOFT_CUT.finditer(text, start + 1, start + most) if m.end() - start >= size // 2]
+            cut = soft[-1] if soft else start + most
+        out.append(text[start:cut])
+        start = cut
     out.append(text[start:])
     return [p for p in out if p]
 
@@ -287,21 +296,74 @@ rep('''    supportedSettings = [
         DriverSetting("breathiness", "Breathiness", defaultVal="b0", availableInSettingsRing=True),
         BooleanDriverSetting("sharpening", "Sharpening (crisper sound)", defaultVal=False, availableInSettingsRing=True),
     ]''')
-rep('''class SynthDriver(SynthDriver):''', '''_reload_timer = None
+rep('''class SynthDriver(SynthDriver):''', '''import time
+_reload_timer = None
 _MIXED = [("auto", "Automatic: Latin text as written, by the secondary voice"),
           ("arabic", "Arabic first: numbers, symbols and Roman numerals in Arabic"),
           ("secondary", "Secondary voice first: numbers too")]
 _BREATH = [("b0", "Natural (recommended)"), ("b6", "Less"), ("b12", "Low"), ("b20", "Very low")]
 
 
+# Quality settings are written by one worker thread. _pending_quality is the complete
+# wanted state; it is kept until the files really hold that exact state (a newer change
+# made meanwhile keeps it pending), so a change never reads stale values from disk.
 _pending_quality = None
+_quality_version = 0
+_quality_lock = threading.Lock()
+_quality_wake = threading.Event()
+_quality_thread = None
 
 
 def _quality_state():
     """Current quality settings: a change waiting to be written, else what the files hold."""
-    if _pending_quality is not None:
-        return dict(_pending_quality)
+    with _quality_lock:
+        if _pending_quality is not None:
+            return dict(_pending_quality)
     return _quality_file_state()
+
+
+def _quality_worker(on_done):
+    global _pending_quality
+    while True:
+        _quality_wake.wait()
+        _quality_wake.clear()
+        with _quality_lock:
+            want = dict(_pending_quality) if _pending_quality is not None else None
+            ver = _quality_version
+        if want is None:
+            continue
+        try:
+            ok = _apply_quality(want)
+        except Exception:
+            log.error("Fasih: cannot apply quality setting", exc_info=True)
+            ok = False
+        with _quality_lock:
+            if ok and _quality_version == ver:
+                _pending_quality = None          # the files now hold exactly this state
+        if ok:
+            on_done()
+
+
+def _atomic_write(dst, data):
+    """Write a file so it is either the old or the new content, never half of each.
+    Windows refuses to replace a file another program has open: try again for a while,
+    then give up (the old file stays whole and the change stays pending)."""
+    tmp = dst + ".new"
+    with open(tmp, "wb") as f:
+        f.write(data)
+        f.flush()
+        os.fsync(f.fileno())
+    for _i in range(20):
+        try:
+            os.replace(tmp, dst)
+            return
+        except OSError:
+            time.sleep(0.1)
+    try:
+        os.remove(tmp)
+    except OSError:
+        pass
+    raise OSError("cannot replace " + dst)
 
 
 def _quality_file_state():
@@ -358,30 +420,16 @@ def _apply_quality(st):
                 pos += 12
                 b[off:off + ln] = pd[pos:pos + ln]
                 pos += ln
-        # write next to the file, then replace it in one step: never a half-written voice
-        dst = os.path.join(vd, "24000", "voice.data")
-        tmp = dst + ".new"
-        with open(tmp, "wb") as f:
-            f.write(b)
+        # every file is replaced in one step: never a half-written voice
+        _atomic_write(os.path.join(vd, "24000", "voice.data"), bytes(b))
+        gain = 0.7
         try:
-            os.replace(tmp, dst)
-        except OSError:
-            with open(dst, "wb") as f:      # the file is in use: fall back to writing in place
-                f.write(b)
-            try:
-                os.remove(tmp)
-            except OSError:
-                pass
-        with open(os.path.join(vd, "voice.params"), "w", encoding="utf-8") as f:
-            gain = 0.7
-            try:
-                with open(os.path.join(data_dir, "variants", name, "gain.txt")) as gf:
-                    gain = float(gf.read().strip())
-            except Exception:
-                pass
-            f.write("beta=%.3f\\ngain=%.3f\\n" % (beta, gain))
-    with open(os.path.join(data_dir, "quality.txt"), "w", encoding="utf-8") as f:
-        f.write("clarity=%d\\nbreathiness=%s\\nsharpening=%d\\nrepair=%d\\n" % (st["clarity"], st["breathiness"], 1 if st["sharpening"] else 0, 1 if st.get("repair") else 0))
+            with open(os.path.join(data_dir, "variants", name, "gain.txt")) as gf:
+                gain = float(gf.read().strip())
+        except Exception:
+            pass
+        _atomic_write(os.path.join(vd, "voice.params"), ("beta=%.3f\\ngain=%.3f\\n" % (beta, gain)).encode())
+    _atomic_write(os.path.join(data_dir, "quality.txt"), ("clarity=%d\\nbreathiness=%s\\nsharpening=%d\\nrepair=%d\\n" % (st["clarity"], st["breathiness"], 1 if st["sharpening"] else 0, 1 if st.get("repair") else 0)).encode())
     return True
 
 
@@ -397,10 +445,12 @@ rep('''    def terminate(self):''', '''    # quality settings: rewrite voice fil
         # The setting is only recorded here. The voice files are rewritten once, 1.5 s after
         # the last change (several quick changes in the settings ring -> one write, one reload),
         # and the synth is reloaded only if Fasih is still the active synthesizer.
-        global _pending_quality, _reload_timer
+        global _pending_quality, _quality_version, _quality_thread, _reload_timer
         st = _quality_state()
         st[key] = value
-        _pending_quality = st
+        with _quality_lock:
+            _pending_quality = st
+            _quality_version += 1
         name = self.name
         try:
             import wx
@@ -414,18 +464,14 @@ rep('''    def terminate(self):''', '''    # quality settings: rewrite voice fil
                 except Exception:
                     log.error("Fasih: cannot reload after a quality setting", exc_info=True)
 
-            def work():
+            if _quality_thread is None:
                 # the voice files are prepared off NVDA's main thread; only the reload runs there
-                global _pending_quality
-                try:
-                    want, _pending_quality = _quality_state(), None
-                    if _apply_quality(want):
-                        wx.CallAfter(reload)
-                except Exception:
-                    log.error("Fasih: cannot apply quality setting", exc_info=True)
+                _quality_thread = threading.Thread(target=_quality_worker, args=(lambda: wx.CallAfter(reload),),
+                                                   name="FasihQuality", daemon=True)
+                _quality_thread.start()
 
             def commit():
-                threading.Thread(target=work, name="FasihQuality", daemon=True).start()
+                _quality_wake.set()
             try:
                 if _reload_timer is not None and _reload_timer.IsRunning():
                     _reload_timer.Stop()

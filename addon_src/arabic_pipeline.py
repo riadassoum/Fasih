@@ -173,7 +173,8 @@ def _step(fn, text):
         return text
 
 
-def process(text, diacritize=True):
+def process(text, diacritize=True, is_cancelled=None):
+    """is_cancelled, if given, is polled by the diacritizer between sentences."""
     if not text or not text.strip():
         return text
     from .pbt import dictionary_manager as dm
@@ -210,7 +211,7 @@ def process(text, diacritize=True):
             return out  # pure Latin/other text: the English voice reads it
     out, keep = _protect(out, options.get("mixed_priority", "auto"))
     try:
-        return _unprotect(_arabic_core(out, diacritize, pt, ar_prep), keep)
+        return _unprotect(_arabic_core(out, diacritize, pt, ar_prep, is_cancelled), keep)
     except Exception:
         return _unprotect(out, keep)
 
@@ -218,7 +219,7 @@ def process(text, diacritize=True):
 _ABD = re.compile("(?<![\u0621-\u064a])(\u0639\u0628\u062f)(?=\u0627\u0644[\u0621-\u064a]{2})")
 
 
-def _arabic_core(out, diacritize, pt, ar_prep):
+def _arabic_core(out, diacritize, pt, ar_prep, is_cancelled=None):
     out = _step(pt.normalize_presentation_forms, out)
     out = _ABD.sub("\\1 ", out)        # names written joined: عبدالله -> عبد الله
     try:
@@ -234,7 +235,7 @@ def _arabic_core(out, diacritize, pt, ar_prep):
             from .arabic import ar_tashkeel
             bare, had = _strip_lone_tanween(out)
             with _lock:
-                d = ar_tashkeel.diacritize_strict(bare, backend="rawi")
+                d = ar_tashkeel.diacritize_strict(bare, backend="rawi", is_cancelled=is_cancelled)
             if d and d.strip():
                 out = _restore_tanween(d, had)
         except Exception:
