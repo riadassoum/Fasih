@@ -9,6 +9,8 @@ Developer: Riad Assoum ([github.com/riadassoum](https://github.com/riadassoum)).
 - **Jamal**: a male voice in Classical Arabic, trained on the ClArTTS corpus (MBZUAI), about 11 hours of speech.
 - **Nour**: a female voice, trained on the female part of NeoBoy/arabic-tts-wav-24k (MIT), about 5.5 hours. That audio was itself produced by a neural TTS (Nourhann's Arabic-Diacritized-TTS / nipponjo tts_arabic).
 - **Sami**: a male voice in Modern Standard Arabic with a Damascene colour, trained on Nawar Halabi's Arabic Speech Corpus (CC BY 4.0), about 4 hours.
+- **Faris**: a male voice in Modern Standard Arabic, trained on about 4.8 hours of the synthetic part of ArVoice (MBZUAI, CC BY 4.0). That audio was produced by Google's ar-XA-Wavenet-B voice.
+- **Layla**: a female voice in Modern Standard Arabic, trained the same way on about 4.7 hours of ArVoice's ar-XA-Wavenet-A audio.
 
 ## Arabic and English together
 
@@ -44,11 +46,11 @@ Put a file called `user-dic.json` in `%APPDATA%\nvda\Fasih-config\`. It is a lis
 - **ClaritySynth 3.0** (my own add-on): Arabic text normalization for numbers, dates and currency, Rawi diacritization, and keeping the user's own harakat.
 - **PlanetBlindTech** (rhvoice-arabic, GPL-3.0), with their blessing: the default pronunciation dictionary, the user dictionary, emoji and symbol names, single-character names, presentation-form cleanup, post-diacritization fixes and the real-time audio post-filter (DC/rumble high-pass and soft limiter). Their project also showed me the data-only language approach and the stock-RHVoice packaging that Fasih follows. Thank you.
 - **RHVoice**: Olga Yakovleva and contributors (LGPL). **WORLD**: Masanori Morise (BSD). **foma**: Mans Hulden. **ONNX Runtime**: Microsoft (MIT).
-- **Corpora**: ClArTTS (MBZUAI); the Arabic Speech Corpus (Nawar Halabi, CC BY 4.0); NeoBoy/arabic-tts-wav-24k (MIT).
+- **Corpora**: ClArTTS (MBZUAI); the Arabic Speech Corpus (Nawar Halabi, CC BY 4.0); NeoBoy/arabic-tts-wav-24k (MIT); ArVoice (Toyin, Marew, Alblooshi, Magdy and Aldarmaki, MBZUAI, Interspeech 2025, CC BY 4.0).
 
 ## What is in this repository
 
-- `voices/`: the three trained voices, ready for RHVoice. Each has its `voice.data` and, in `variants/`, the base file with small patches used by the Breathiness and Sharpening settings.
+- `voices/`: the five trained voices, ready for RHVoice. Each has its `voice.data` and, in `variants/`, the base file with small patches used by the Breathiness and Sharpening settings.
 - `lang/`: the Arabic language for RHVoice. `build_lang.sh` regenerates it from the generators (it needs foma and RHVoice's att2bin and dtree2bin).
 - `scripts/`: corpus download, WORLD feature extraction, alignment, labels and training (`run_voice.sh`). The corpora themselves are not included; the scripts download them from their original sources.
 - `engine/`: `rhvoice-world-vocoder.patch` for RHVoice (at the commit in `RHVOICE_BASE_COMMIT`) and the WORLD sources to copy into `src/core/world/`. I cross-built the Windows DLLs with zig.
