@@ -58,19 +58,43 @@ rep('''    def speak(self, speechSequence):
         langs = self.__voice_languages
 
         def job():
-            segs = []          # [voice, items]
+            # Streaming: each finished segment (one voice) is spoken at once, while the next
+            # is still being prepared, and a cancel is noticed between every step.
+            cancel = self.__cancel_flag
             state = {}         # last pitch/rate/volume/char-mode command, re-sent when the voice changes
+            cur = [None, []]   # voice, items of the segment being built
+            spoke = [False]
             char_mode = False
 
+            def say(voice, items, final):
+                if cancel.is_set():
+                    return
+                conv = SsmlConverter(self, langs.get(voice, "ar"))
+                task = SpeakText(self.__lib, self.__tts_engine, conv.convertToXml(items), cancel, self.__player)
+                task.final = final
+                task.set_voice_profile(voice)
+                task.set_rate(rate)
+                task.set_pitch(pitch)
+                task.set_volume(volume)
+                task.configure_rate_boost(boost)
+                task()
+                spoke[0] = True
+
+            def has_text(items):
+                return any(isinstance(x, str) and x.strip() for x in items)
+
             def emit(voice, item):
-                if not segs or segs[-1][0] != voice:
-                    if segs and not any(isinstance(x, str) and x.strip() for x in segs[-1][1]):
-                        segs[-1][0] = voice      # nothing spoken yet: just relabel
+                if cur[0] != voice:
+                    if cur[0] is None or not has_text(cur[1]):
+                        cur[0] = voice           # nothing to say yet: just relabel
                     else:
-                        segs.append([voice, list(state.values())])
-                segs[-1][1].append(item)
+                        say(cur[0], cur[1], False)
+                        cur[0], cur[1] = voice, list(state.values())
+                cur[1].append(item)
 
             for item in seq:
+                if cancel.is_set():
+                    return
                 if isinstance(item, LangChangeCommand):
                     continue                     # the script decides the voice
                 if isinstance(item, str):
@@ -79,6 +103,8 @@ rep('''    def speak(self, speechSequence):
                     except Exception:
                         log.error("Fasih: text pipeline failed", exc_info=True)
                         new = item
+                    if cancel.is_set():
+                        return
                     if char_mode and new != item:
                         # a letter/symbol name: read it as a word, then return to character mode
                         emit(primary, CharacterModeCommand(False))
@@ -97,22 +123,17 @@ rep('''    def speak(self, speechSequence):
                     state["rate"] = item
                 elif isinstance(item, VolumeCommand):
                     state["volume"] = item
-                if segs:
-                    segs[-1][1].append(item)
-                else:
-                    segs.append([primary, [item]])
-            for i, (voice, items) in enumerate(segs):
-                if self.__cancel_flag.is_set():
-                    return
-                conv = SsmlConverter(self, langs.get(voice, "ar"))
-                task = SpeakText(self.__lib, self.__tts_engine, conv.convertToXml(items), self.__cancel_flag, self.__player)
-                task.final = (i == len(segs) - 1)
-                task.set_voice_profile(voice)
-                task.set_rate(rate)
-                task.set_pitch(pitch)
-                task.set_volume(volume)
-                task.configure_rate_boost(boost)
-                task()
+                if cur[0] is None:
+                    cur[0] = primary
+                cur[1].append(item)
+            if cancel.is_set():
+                return
+            if cur[0] is not None and (has_text(cur[1]) or any(not isinstance(x, str) for x in cur[1])):
+                say(cur[0], cur[1], True)
+            else:
+                if spoke[0]:
+                    self.__player.idle()
+                synthDoneSpeaking.notify(synth=self)
 
         self.__tts_queue.put(job)''')
 rep('''        log.info("Using RHVoice version {}".format(self.__lib.RHVoice_get_version().decode()))''',
@@ -225,8 +246,18 @@ rep('''class SynthDriver(SynthDriver):''', '''_reload_timer = None
 _BREATH = [("b0", "Natural (recommended)"), ("b6", "Less"), ("b12", "Low"), ("b20", "Very low")]
 
 
+_pending_quality = None
+
+
 def _quality_state():
-    """Current quality settings as stored in the voice files."""
+    """Current quality settings: a change waiting to be written, else what the files hold."""
+    if _pending_quality is not None:
+        return dict(_pending_quality)
+    return _quality_file_state()
+
+
+def _quality_file_state():
+    """Quality settings as stored in the voice files."""
     st = {"clarity": 50, "breathiness": "b0", "sharpening": False}
     try:
         with open(os.path.join(data_dir, "quality.txt"), encoding="utf-8") as f:
@@ -245,7 +276,7 @@ def _quality_state():
 
 def _apply_quality(st):
     """Write the voice files for these settings. Returns True if anything changed."""
-    if st == _quality_state():
+    if st == _quality_file_state():
         return False
     vdir = os.path.join(data_dir, "voices")
     beta = st["clarity"] * 0.6 / 100.0
@@ -301,21 +332,36 @@ rep('''        self.__tts_queue.put(None)
             return''')
 rep('''    def terminate(self):''', '''    # quality settings: rewrite voice files, then reload this synth so the engine reads them
     def _quality_set(self, key, value):
+        # The setting is only recorded here. The voice files are rewritten once, 1.5 s after
+        # the last change (several quick changes in the settings ring -> one write, one reload),
+        # and the synth is reloaded only if Fasih is still the active synthesizer.
+        global _pending_quality, _reload_timer
         st = _quality_state()
         st[key] = value
+        _pending_quality = st
+        name = self.name
         try:
-            if _apply_quality(st):
-                import wx, synthDriverHandler
-                # one reload after the last change (several quick changes -> one reload)
-                global _reload_timer
+            import wx
+
+            def commit():
+                global _pending_quality
                 try:
-                    if _reload_timer is not None and _reload_timer.IsRunning():
-                        _reload_timer.Stop()
+                    import synthDriverHandler
+                    want, _pending_quality = _quality_state(), None
+                    if _apply_quality(want):
+                        cur = synthDriverHandler.getSynth()
+                        if cur is not None and cur.name == name:
+                            synthDriverHandler.setSynth(name)
                 except Exception:
-                    pass
-                _reload_timer = wx.CallLater(1500, synthDriverHandler.setSynth, self.name)
+                    log.error("Fasih: cannot apply quality setting", exc_info=True)
+            try:
+                if _reload_timer is not None and _reload_timer.IsRunning():
+                    _reload_timer.Stop()
+            except Exception:
+                pass
+            _reload_timer = wx.CallLater(1500, commit)
         except Exception:
-            log.error("Fasih: cannot apply quality setting", exc_info=True)
+            log.error("Fasih: cannot schedule quality setting", exc_info=True)
 
     def _get_clarity(self):
         return _quality_state()["clarity"]
@@ -478,15 +524,55 @@ rep('''import languageHandler
 import array
 import struct
 ''')
-# an utterance with nothing to say must still report that it is done
-rep('''            for i, (voice, items) in enumerate(segs):
+# --- 1.1: load voices before they are first needed ----------------------------------------
+# RHVoice reads a voice's model on its first use (about 0.2 s), which delayed the first thing
+# said after choosing a voice, and the first English word. A silent warm-up does it ahead.
+rep('''    def play(self, data):
+        try:
+            data = self._gate(data)''', '''    mute = False
+
+    def play(self, data):
+        if self.mute:
+            return
+        try:
+            data = self._gate(data)''')
+rep('''        voice = voice.split("+")[0]          # profiles saved by earlier builds, e.g. "Jamal+SLT"
+        if voice in self.__profiles:
+            self.__profile = voice''', '''        voice = voice.split("+")[0]          # profiles saved by earlier builds, e.g. "Jamal+SLT"
+        if voice in self.__profiles:
+            changed = voice != self.__profile
+            self.__profile = voice
+            if changed:
+                self._warm(voice)''')
+rep('''    def _set_secondaryVoice(self, v):
+        self._secondary = v if v in self._get_availableSecondaryvoices() else "auto"''', '''    def _set_secondaryVoice(self, v):
+        self._secondary = v if v in self._get_availableSecondaryvoices() else "auto"
+        sv = self._secondary_profile()
+        if sv:
+            self._warm(sv)
+
+    def _warm(self, *voices):
+        player = self.__player
+
+        def job():
+            for v in voices:
                 if self.__cancel_flag.is_set():
-                    return''', '''            if not segs:
-                synthDoneSpeaking.notify(synth=self)
-                return
-            for i, (voice, items) in enumerate(segs):
-                if self.__cancel_flag.is_set():
-                    return''')
+                    break
+                player.mute = True
+                try:
+                    lang = self.__voice_languages.get(v, "ar")
+                    text = "<speak>%s</speak>" % ("\\u0644\\u0627" if lang.startswith("ar") else "a")
+                    task = SpeakText(self.__lib, self.__tts_engine, text, self.__cancel_flag, player)
+                    task.final = False
+                    task.set_voice_profile(v)
+                    task()
+                except Exception:
+                    log.debugWarning("Fasih: warm-up of %s failed" % v, exc_info=True)
+                finally:
+                    player.mute = False
+        self.__tts_queue.put(job)''')
+rep('''        arabic_pipeline.preload()''', '''        arabic_pipeline.preload()
+        self._warm(*[v for v in (self.__profile, self._secondary_profile()) if v])''')
 compile(s, dst, "exec")  # fail the build if the driver does not parse
 open(dst, "w", encoding="utf-8").write(s)
 print("patched driver written")

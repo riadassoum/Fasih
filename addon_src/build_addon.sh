@@ -17,7 +17,7 @@ for spec in $VOICES; do
   IFS== read -r VN VROOT VTR VMG VDIM VLVL <<< "$spec"; VLVL=${VLVL:-0}; VGAIN=0.7
   mkdir -p "$D/data/voices/$VN/24000" "$D/data/variants/$VN"
   cp "$RHV/voice/bpf.txt" "$D/data/voices/$VN/24000/"
-  printf 'name=%s\nlanguage=Arabic\ngender=%s\nformat=4\nrevision=1\n' "$VN" "$( [ "$VN" = Nour -o "$VN" = Layla -o "$VN" = Salma ] && echo female || echo male )" > "$D/data/voices/$VN/voice.info"
+  printf 'name=%s\nlanguage=Arabic\ngender=%s\nformat=4\nrevision=1\n' "$VN" "$( [ "$VN" = Nour -o "$VN" = Huda -o "$VN" = Layla ] && echo female || echo male )" > "$D/data/voices/$VN/voice.info"
   # One base file per voice, plus small patches for the Breathiness levels and for Sharpening
   # (the settings only change some numbers inside the file, never its size or layout).
   VS=""; [ -s "$VROOT/work/$VTR/vratio.npy" ] && VS="$VROOT/work/$VTR/vratio.npy"
@@ -44,6 +44,7 @@ for f in ar_tashkeel.py ar_g2p.py ar_textnorm.py _libboot.py data_paths.py ort_c
 cp -r "$CS/lib_pure" "$D/arabic/"
 cp "$RHV/scripts/ar_prep.py" "$D/arabic/"
 python3 "$HERE/patch_tashkeel.py" "$D/arabic/ar_tashkeel.py" "$HERE/rawi_client.py"
+python3 "$HERE/patch_g2p.py" "$D/arabic/ar_g2p.py"
 # PlanetBlindTech components (GPL-3.0): dictionaries, text fixes, audio post-filter
 cp -r "$HERE/pbt" "$D/pbt"; touch "$D/pbt/__init__.py"
 cp "$RHV/README.md" "$B/" 2>/dev/null || true
@@ -57,11 +58,11 @@ find "$B" -name "__pycache__" -prune -exec rm -rf {} +
 cat > "$B/manifest.ini" <<EOF
 name = fasih
 summary = "Fasih (فصيح): Arabic RHVoice voices"
-description = """Fasih (فصيح): non-neural Arabic voices for the RHVoice engine (Jamal, Nour, Sami, Faris, Layla), with Rawi diacritization from ClaritySynth and the WORLD vocoder."""
+description = """Fasih (فصيح): non-neural Arabic voices for the RHVoice engine (Jamal, Nour, Sami, Faris, Huda), with Rawi diacritization from ClaritySynth and the WORLD vocoder."""
 author = "Riad Assoum <riad.assoum@gmail.com>"
 url = https://github.com/riadassoum/Fasih
 version = $VER
-minimumNVDAVersion = 2024.1
+minimumNVDAVersion = 2026.1
 lastTestedNVDAVersion = 2026.3
 EOF
 rm -f "$OUT"; (cd "$B" && zip -qr "$OUT" .)

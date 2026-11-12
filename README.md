@@ -1,6 +1,6 @@
 # Fasih (فصيح)
 
-Fasih is a set of non-neural Arabic voices for NVDA, built on the RHVoice engine. I made it because I wanted Arabic speech that is clear, responsive and light on the computer, without a neural model behind every word and without relying on Festival. Everything is open source: the voices, the Arabic language rules for RHVoice, the training scripts, the engine changes and the add-on itself are all in this repository.
+Fasih is a set of Arabic voices for NVDA, built on the RHVoice engine: non-neural speech synthesis (statistical HTS models and the WORLD vocoder) with neural diacritization (Rawi). I made it because I wanted Arabic speech that is clear, responsive and light on the computer, without a neural model generating every sound and without relying on Festival. Everything is open source: the voices, the Arabic language rules for RHVoice, the training scripts, the engine changes and the add-on itself are all in this repository.
 
 Developer: Riad Assoum ([github.com/riadassoum](https://github.com/riadassoum)).
 
@@ -10,7 +10,9 @@ Developer: Riad Assoum ([github.com/riadassoum](https://github.com/riadassoum)).
 - **Nour**: a female voice, trained on the female part of NeoBoy/arabic-tts-wav-24k (MIT), about 5.5 hours. That audio was itself produced by a neural TTS (Nourhann's Arabic-Diacritized-TTS / nipponjo tts_arabic).
 - **Sami**: a male voice in Modern Standard Arabic with a Damascene colour, trained on Nawar Halabi's Arabic Speech Corpus (CC BY 4.0), about 4 hours.
 - **Faris**: a male voice in Modern Standard Arabic, trained on about 4.8 hours of the synthetic part of ArVoice (MBZUAI, CC BY 4.0). That audio was produced by Google's ar-XA-Wavenet-B voice.
-- **Layla**: a female voice in Modern Standard Arabic, trained the same way on about 4.7 hours of ArVoice's ar-XA-Wavenet-A audio.
+- **Huda**: a female voice in Modern Standard Arabic, trained the same way on about 4.7 hours of ArVoice's ar-XA-Wavenet-A audio.
+
+Known limits: Jamal reads in a Classical style; Nour, Faris and Huda learned from synthetic speech, so they inherit its character; Rawi sometimes picks the wrong vowel on a word read alone (for example the passive حُبِسَتِ). Add your own harakat, or a user-dictionary entry, to correct a word.
 
 ## Arabic and English together
 
@@ -18,7 +20,7 @@ Each piece of text is split by script, the way I do it in ClaritySynth. Arabic g
 
 ## Diacritization
 
-Text is diacritized with Rawi before it is spoken, and any harakat you typed yourself are kept. Rawi runs in its own small helper program (rawi_host.exe), so NVDA itself never loads numpy or onnxruntime. Many add-ons ship their own copies of those libraries, and loading two copies into NVDA can freeze it. If the helper ever gets stuck, it is restarted after three seconds and the sentence is still spoken, so speech never stops.
+Text is diacritized with Rawi before it is spoken, and any harakat you typed yourself are kept. Rawi runs in its own small helper program (rawi_host.exe), so NVDA itself never loads numpy or onnxruntime. Many add-ons ship their own copies of those libraries, and loading two copies into NVDA can freeze it. If the helper gets stuck, NVDA waits for it at most three seconds the first time and one second after that; the helper is then restarted and the sentence is spoken without the added diacritics. Speech starts on the first finished part of an utterance while the rest is still being prepared, and pressing Control stops the preparation as well as the sound.
 
 ## Settings
 
@@ -54,7 +56,13 @@ Put a file called `user-dic.json` in `%APPDATA%\nvda\Fasih-config\`. It is a lis
 - `lang/`: the Arabic language for RHVoice. `build_lang.sh` regenerates it from the generators (it needs foma and RHVoice's att2bin and dtree2bin).
 - `scripts/`: corpus download, WORLD feature extraction, alignment, labels and training (`run_voice.sh`). The corpora themselves are not included; the scripts download them from their original sources.
 - `engine/`: `rhvoice-world-vocoder.patch` for RHVoice (at the commit in `RHVOICE_BASE_COMMIT`) and the WORLD sources to copy into `src/core/world/`. I cross-built the Windows DLLs with zig.
-- `addon_src/`: the NVDA driver, the Arabic text pipeline, the Rawi helper (`rawi_host/`, C source and Windows build) and `build_addon.sh`, which assembles the add-on.
+- `addon_src/`: the NVDA driver patches, the Arabic text pipeline and the Rawi helper (`rawi_host/`, C source and Windows build). `build_release.sh VERSION` builds the add-on from a clean checkout of this repository with nothing else installed but bash, python3 and zip. `build_addon.sh` is the development build, which writes the voices from training output.
+- `third_party/`: what the release build packages from other projects: RHVoice's NVDA driver and Windows libraries (built from source with the WORLD patch), RHVoice's English language and the SLT voice, ClaritySynth's Arabic modules, ONNX Runtime and the Rawi model.
+- `tests/test_arabic.py`: Arabic regression tests (waqf, hamzat al-wasl, helping vowels, merging your own harakat, script splitting, and the full pipeline when Rawi is available).
+
+## Requirements
+
+NVDA 2026.1 or later (64-bit). Fasih ships only 64-bit libraries.
 
 ## Install
 

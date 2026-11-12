@@ -39,6 +39,8 @@ def _waqf_word(w: str) -> str:
     -atun/-atin/-atan -> -ah (bare teh marbuta is read h); -an (tanween fath + alif) -> -aa."""
     if re.search("\u064B\u0627$|\u0627\u064B$", w):
         return re.sub("(\u064B\u0627|\u0627\u064B)$", "\u064E\u0627", w)
+    if re.search("\u064B\u0649$|\u0649\u064B$", w):          # فَتًى -> فَتَى
+        return re.sub("(\u064B\u0649|\u0649\u064B)$", "\u064E\u0649", w)
     if re.search("\u0629[\u064B-\u0650\u0652]*$", w):
         return re.sub("\u0629[\u064B-\u0650\u0652]*$", "\u0629", w)
     return re.sub("[\u064B-\u0650]+$", "", w)

@@ -140,7 +140,8 @@ def process(text, diacritize=True):
         # Arabic letters, harakat and symbols get spoken names; Latin letters stay for the English voice
         name = _step(pt.get_single_char_name, out) if out.strip() else out
         if name != out:
-            return _step(ar_prep.mark_wasl, name)
+            # a name is said on its own, so in its pausal form (شَدَّة, not شَدَّةٌ)
+            return _step(ar_prep.mark_wasl, _step(ar_prep.pausal_ending, name))
     if options.get("read_emojis", True):
         out = _step(dm.replace_emojis, out)
     if not _AR.search(out):
