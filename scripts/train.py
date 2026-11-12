@@ -279,10 +279,52 @@ def cmd_trees(mdl=1.0):
         t0 = time.time()
         if kind == "dur":
             d = np.load(os.path.join(TR, "durs.npy")).astype(np.float64)
+            cap = float(os.environ.get("RHV_DUR_FINAL_CAP", "0"))
+            if cap > 0:
+                # Some corpora (synthetic ones especially) stretch the last syllables of each
+                # utterance far beyond normal, and the model then drags out sentence ends.
+                # The last two spoken phones of each utterance are limited to `cap` times that
+                # phone's usual (median) length elsewhere.
+                vocab = json.load(open(os.path.join(TR, "vocab.json"), encoding="utf-8"))
+                ni = [f[0] for f in LabelSet(LANG).fields].index("name")
+                names_ = np.array(vocab["name"], dtype=object)[codes[:, ni]]
+                offsets = json.load(open(os.path.join(TR, "offsets.json")))
+                final = np.zeros(len(d), bool)
+                for o, n in offsets.values():
+                    sp = [k for k in range(o, o + n) if names_[k] not in ("pau", "sil", "x")]
+                    final[sp[-int(os.environ.get("RHV_DUR_FINAL_N", "2")):]] = True
+                tot = d.sum(1)
+                med = {}
+                for ph in set(names_):
+                    m = (names_ == ph) & ~final
+                    med[ph] = np.median(tot[m]) if m.sum() >= 5 else np.median(tot[~final])
+                lim = np.array([cap * med[ph] for ph in names_])
+                over = final & (tot > lim)
+                d[over] *= (lim[over] / tot[over])[:, None]
+                print("final-lengthening cap: %d phones shortened" % over.sum(), flush=True)
             S = np.hstack([np.ones((len(d), 1)), d, d ** 2])
             S[held] = 0
             st = Stream("dur", S)
-            nodes = grow_tree(st, codes, mats, qs, mdl, min_occ=5.0)
+            pq = [i for i, q in enumerate(qs) if q["field"] == "name" and q["values"] == ["pau"]]
+            if os.environ.get("RHV_DUR_SPLIT_PAU") and pq:
+                # Pauses and speech sounds get separate duration trees, so a rare context at the
+                # end of a sentence can never share a pause's length (a 0.5 s "consonant").
+                col = mats[qs[pq[0]]["field"]][2]
+                is_p = np.isin(codes[:, col], [VOC["name"][v] for v in qs[pq[0]]["values"]])
+                nodes = [{"q": pq[0]}]
+                for side, mask in (("yes", is_p), ("no", ~is_p)):
+                    S2 = S.copy(); S2[~mask] = 0
+                    sub = grow_tree(Stream("dur", S2), codes, mats, qs, mdl, min_occ=5.0)
+                    base = len(nodes)
+                    for n in sub:
+                        if "yes" in n:
+                            n["yes"] += base; n["no"] += base
+                        if n.get("leaf"):
+                            n["members"] = n["members"][mask[n["members"]]]
+                    nodes[0][side] = base
+                    nodes += sub
+            else:
+                nodes = grow_tree(st, codes, mats, qs, mdl, min_occ=5.0)
         else:
             S = np.load(os.path.join(TR, f"st_{kind}_{j}.npy"))
             S[held] = 0
