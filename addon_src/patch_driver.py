@@ -156,23 +156,33 @@ def _is_ar(ch):
 
 
 def _split_by_script(text):
-    # (is_arabic, chunk) runs, after ClaritySynth. Spaces, punctuation and digits ride
-    # with the current run; marks (tashkeel) always belong to Arabic.
-    runs, cur, cur_ar = [], [], None
+    # (is_arabic, chunk) runs, after ClaritySynth. Spaces and punctuation ride with the current
+    # run; marks (tashkeel) always belong to Arabic. A number placed between Arabic and Latin text
+    # goes with the Latin word that follows it (5 PM, 11 Pro), otherwise with the current run.
+    runs, cur, cur_ar, pend = [], [], None, []
     for ch in text:
-        if _is_ar(ch) and not ch.isalpha() and not ch.isdigit() and unicodedata.category(ch) == "Mn":
+        if unicodedata.category(ch) == "Mn" and _is_ar(ch):
             want = True
         elif ch.isalpha():
             want = _is_ar(ch)
         else:
-            cur.append(ch)
+            pend.append(ch)
             continue
         if cur_ar is None:
             cur_ar = want
-        elif want != cur_ar:
+        if want != cur_ar:
+            give = []
+            if not want:
+                k = next((i for i, c in enumerate(pend) if c.isdigit()), None)
+                if k is not None:
+                    pend, give = pend[:k], pend[k:]
+            cur += pend
             runs.append((cur_ar, "".join(cur)))
-            cur, cur_ar = [], want
+            cur, cur_ar, pend = give, want, []
+        cur += pend
+        pend = []
         cur.append(ch)
+    cur += pend
     if cur:
         runs.append((bool(cur_ar) if cur_ar is not None else True, "".join(cur)))
     return runs
@@ -243,6 +253,9 @@ rep('''    supportedSettings = [
         BooleanDriverSetting("sharpening", "Sharpening (crisper sound)", defaultVal=False, availableInSettingsRing=True),
     ]''')
 rep('''class SynthDriver(SynthDriver):''', '''_reload_timer = None
+_MIXED = [("auto", "Automatic: Latin text as written, by the secondary voice"),
+          ("arabic", "Arabic first: numbers, symbols and Roman numerals in Arabic"),
+          ("secondary", "Secondary voice first: numbers too")]
 _BREATH = [("b0", "Natural (recommended)"), ("b6", "Less"), ("b12", "Low"), ("b20", "Very low")]
 
 
@@ -404,14 +417,17 @@ rep('''    def on_new_message(self):
             _post_filter.reset()''')
 rep('''from . import arabic_pipeline''', '''from . import arabic_pipeline
 try:
-    from .pbt import audio_filter as _af
-    _post_filter = _af.AudioPostFilter()
+    # high-pass (after PlanetBlindTech's post-filter) + make-up gain + look-ahead limiter,
+    # pure Python: louder output without clipping, and no numpy inside NVDA
+    from . import loudness as _loud
+    _post_filter = _loud.Output(6.0)
 except Exception:
     _post_filter = None''')
 # 3) settings: read emojis, pausal ending; dictionaries
 rep('''        BooleanDriverSetting("sharpening", "Sharpening (crisper sound)", defaultVal=False, availableInSettingsRing=True),''', '''        BooleanDriverSetting("sharpening", "Sharpening (crisper sound)", defaultVal=False, availableInSettingsRing=True),
         BooleanDriverSetting("readEmojis", "Read emojis and symbols by name", defaultVal=True),
-        BooleanDriverSetting("pausalEnding", "Pausal ending (waqf) at end of sentences", defaultVal=True),''')
+        BooleanDriverSetting("pausalEnding", "Pausal ending (waqf) at end of sentences", defaultVal=True),
+        DriverSetting("mixedPriority", "Mixed Arabic and Latin text", defaultVal="auto", availableInSettingsRing=True),''')
 rep('''    def terminate(self):''', '''    def _get_readEmojis(self):
         return arabic_pipeline.options["read_emojis"]
 
@@ -424,9 +440,34 @@ rep('''    def terminate(self):''', '''    def _get_readEmojis(self):
     def _set_pausalEnding(self, v):
         arabic_pipeline.options["pausal_ending"] = bool(v)
 
+    def _get_availableMixedprioritys(self):
+        return OrderedDict((k, StringParameterInfo(k, n)) for k, n in _MIXED)
+
+    def _get_mixedPriority(self):
+        return arabic_pipeline.options.get("mixed_priority", "auto")
+
+    def _set_mixedPriority(self, v):
+        if v in dict(_MIXED):
+            arabic_pipeline.options["mixed_priority"] = v
+
     def terminate(self):''')
 rep('''        arabic_pipeline.preload()''', '''        arabic_pipeline.init_dictionaries(config_path)
         arabic_pipeline.preload()''')
+# --- 1.1: the output stage holds back 2 ms (look-ahead); release it at the end
+rep('''    def stop(self):''', '''    def _flush_output(self):
+        if _post_filter is None:
+            return
+        player = self.get_player()
+        if player is None or self.__cancel_flag.is_set():
+            return
+        try:
+            rest = _post_filter.flush()
+        except Exception:
+            rest = b""
+        if rest:
+            player.feed(rest)
+
+    def stop(self):''')
 # --- 1.1: one "done" per utterance, and no dead air -------------------------------------
 # An utterance may be several engine messages (Arabic part, English part...). Only the last
 # one may tell NVDA that speech is done or let the audio device go idle.
@@ -498,9 +539,9 @@ rep('''    def on_done(self):
             return
         self.do_play(self.__prev_data)''', '''    def on_done(self):
         tail = self._tail()
-        if self.__prev_data is None:
-            return
-        self.do_play(self.__prev_data + tail)''')
+        if self.__prev_data is not None:
+            self.do_play(self.__prev_data + tail)
+        self._flush_output()''')
 rep('''        self.__players = {}
         self.__lock = threading.Lock()''', '''        self.__players = {}
         self.__lead = True
@@ -573,6 +614,19 @@ rep('''    def _set_secondaryVoice(self, v):
         self.__tts_queue.put(job)''')
 rep('''        arabic_pipeline.preload()''', '''        arabic_pipeline.preload()
         self._warm(*[v for v in (self.__profile, self._secondary_profile()) if v])''')
+# --- 1.1: translations (locale/<lang>/LC_MESSAGES/nvda.mo) ---------------------------------
+s = s.replace("import addonHandler\n", "import addonHandler\ntry:\n    addonHandler.initTranslation()\nexcept Exception:\n    pass\ntry:\n    _\nexcept NameError:\n    def _(text):\n        return text\n", 1)
+for _lit in ["&Secondary voice (for non-Arabic text)", "Clarity (postfilter)", "Breathiness",
+             "Sharpening (crisper sound)", "Read emojis and symbols by name",
+             "Pausal ending (waqf) at end of sentences", "Mixed Arabic and Latin text",
+             "Natural (recommended)", "Less", "Low", "Very low",
+             "Automatic: Latin text as written, by the secondary voice",
+             "Arabic first: numbers, symbols and Roman numerals in Arabic",
+             "Secondary voice first: numbers too",
+             "Automatic (first non-Arabic voice found)", "None (primary voice reads everything)"]:
+    _q = '"%s"' % _lit
+    assert _q in s, "string not found: " + _lit
+    s = s.replace(_q, "_(%s)" % _q)
 compile(s, dst, "exec")  # fail the build if the driver does not parse
 open(dst, "w", encoding="utf-8").write(s)
 print("patched driver written")

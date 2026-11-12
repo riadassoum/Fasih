@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>Fasih</title></head><body>
+<h1>Fasih (فصيح)</h1>
+<p>Fasih is a set of Arabic voices for NVDA, built on the RHVoice engine: non-neural speech synthesis (statistical HTS models and the WORLD vocoder) with neural diacritization (Rawi). I made it because I wanted Arabic speech that is clear, responsive and light on the computer, without a neural model generating every sound and without relying on Festival. Everything is open source: the voices, the Arabic language rules for RHVoice, the training scripts, the engine changes and the add-on itself are all in this repository.</p>
+<p>Developer: Riad Assoum (<a href="https://github.com/riadassoum">github.com/riadassoum</a>).</p>
+<h2>The voices</h2>
+<ul>
+<li><strong>Jamal</strong>: a male voice in Classical Arabic, trained on the ClArTTS corpus (MBZUAI), about 11 hours of speech.</li>
+<li><strong>Nour</strong>: a female voice, trained on the female part of NeoBoy/arabic-tts-wav-24k (MIT), about 5.5 hours. That audio was itself produced by a neural TTS (Nourhann's Arabic-Diacritized-TTS / nipponjo tts_arabic).</li>
+<li><strong>Sami</strong>: a male voice in Modern Standard Arabic with a Damascene colour, trained on Nawar Halabi's Arabic Speech Corpus (CC BY 4.0), about 4 hours.</li>
+<li><strong>Faris</strong>: a male voice in Modern Standard Arabic, trained on about 4.8 hours of the synthetic part of ArVoice (MBZUAI, CC BY 4.0). That audio was produced by Google's ar-XA-Wavenet-B voice.</li>
+<li><strong>Huda</strong>: a female voice in Modern Standard Arabic, trained the same way on about 4.7 hours of ArVoice's ar-XA-Wavenet-A audio.</li>
+</ul>
+<p>Known limits: Jamal reads in a Classical style; Nour, Faris and Huda learned from synthetic speech, so they inherit its character; Rawi sometimes picks the wrong vowel on a word read alone (for example the passive حُبِسَتِ). Add your own harakat, or a user-dictionary entry, to correct a word.</p>
+<h2>Arabic and English together</h2>
+<p>Each piece of text is split by script, the way I do it in ClaritySynth. Arabic goes to the Arabic voice you choose, and everything else goes to the secondary voice. By default the secondary voice is chosen automatically as the first non-Arabic RHVoice voice found, which is the bundled English voice SLT unless you have installed others. Voices installed with Kvark's RHVoice Voice Manager are picked up too. The Arabic and English voices are matched in loudness, so switching between them doesn't jump in volume, and the output is about as loud as other screen-reader voices: a look-ahead limiter lowers the gain on the loudest peaks instead of clipping them.</p>
+<h2>Diacritization</h2>
+<p>Text is diacritized with Rawi before it is spoken, and any harakat you typed yourself are kept. Rawi runs in its own small helper program (rawi_host.exe), so NVDA itself never loads numpy or onnxruntime. Many add-ons ship their own copies of those libraries, and loading two copies into NVDA can freeze it. If the helper gets stuck, NVDA waits for it at most three seconds the first time and one second after that; the helper is then restarted and the sentence is spoken without the added diacritics. Speech starts on the first finished part of an utterance while the rest is still being prepared, and pressing Control stops the preparation as well as the sound.</p>
+<h2>Settings</h2>
+<p>These are in NVDA's voice settings. The secondary voice, Clarity, Breathiness, Sharpening and Mixed text are also in the settings ring.</p>
+<ul>
+<li><strong>Secondary voice</strong>: which voice reads non-Arabic text (Automatic, None, or any installed voice).</li>
+<li><strong>Clarity</strong>: how strongly the voice is sharpened by the postfilter.</li>
+<li><strong>Breathiness</strong>: from natural down to very low breath noise.</li>
+<li><strong>Sharpening</strong>: a crisper, more detailed spectrum.</li>
+<li><strong>Read emojis and symbols by name</strong>.</li>
+<li><strong>Pausal ending (waqf)</strong>: the last word of a sentence is read in its pausal form.</li>
+<li><strong>Mixed Arabic and Latin text</strong>: Automatic (Latin text goes to the secondary voice exactly as written, with a number just before a Latin word, as in 5 PM), Arabic first (numbers, symbols and Roman numerals read in Arabic, as in 1.0), or Secondary voice first (numbers too).</li>
+</ul>
+<h2>User dictionary</h2>
+<p>Put a file called <code>user-dic.json</code> in <code>%APPDATA%\nvda\Fasih-config\</code>. It is a list of <code>{"original": "...", "replacement": "..."}</code> entries, and the replacement may be fully diacritized. Restart NVDA or select the synthesizer again to apply it.</p>
+<h2>Credits</h2>
+<ul>
+<li><strong>ClaritySynth 3.0</strong> (my own add-on): Arabic text normalization for numbers, dates and currency, Rawi diacritization, and keeping the user's own harakat.</li>
+<li><strong>PlanetBlindTech</strong> (rhvoice-arabic, GPL-3.0), with their blessing: the default pronunciation dictionary, the user dictionary, emoji and symbol names, single-character names, presentation-form cleanup, post-diacritization fixes and the design of the audio post-filter (the DC/rumble high-pass Fasih still uses; its limiter is now a look-ahead gain limiter of mine). Their project also showed me the data-only language approach and the stock-RHVoice packaging that Fasih follows. Thank you.</li>
+<li><strong>RHVoice</strong>: Olga Yakovleva and contributors (LGPL). <strong>WORLD</strong>: Masanori Morise (BSD). <strong>foma</strong>: Mans Hulden. <strong>ONNX Runtime</strong>: Microsoft (MIT).</li>
+<li><strong>Corpora</strong>: ClArTTS (MBZUAI); the Arabic Speech Corpus (Nawar Halabi, CC BY 4.0); NeoBoy/arabic-tts-wav-24k (MIT); ArVoice (Toyin, Marew, Alblooshi, Magdy and Aldarmaki, MBZUAI, Interspeech 2025, CC BY 4.0).</li>
+</ul>
+<p>See CHANGELOG.md in the repository for what changed: https://github.com/riadassoum/Fasih</p>
+</body></html>

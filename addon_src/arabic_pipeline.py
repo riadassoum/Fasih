@@ -19,7 +19,7 @@ _boot_lock = threading.Lock()
 _ready = None
 
 # user-adjustable (set by the driver)
-options = {"read_emojis": True, "pausal_ending": True}
+options = {"read_emojis": True, "pausal_ending": True, "mixed_priority": "auto"}
 
 
 def _log_error(msg):
@@ -118,6 +118,46 @@ def _restore_tanween(text, had):
     return " ".join(words)
 
 
+# --- mixed Arabic / Latin text ---------------------------------------------------------
+# A Latin island is a run of Latin words with what is attached to them (Ctrl+C, e-mail
+# addresses, 5 PM, v2.0). In "auto" and "secondary" modes it is hidden from the Arabic
+# normalizer and diacritizer, so the secondary voice gets it exactly as written
+# (before, "I like playing" became "أول like playing": I was taken for a Roman numeral).
+_LAT_WORD = r"[A-Za-z][A-Za-z0-9@._+\-/'\u2019&#%]*"
+_ISLAND = re.compile(r"(?:\d+(?:[.,:]\d+)*[ \t]*)?" + _LAT_WORD + r"(?:[ \t]*[.,:;!?]?[ \t]+(?=[A-Za-z0-9])(?:\d+(?:[.,:]\d+)*|" + _LAT_WORD + r"))*")
+_ROMAN_OK = re.compile(r"(?:X{0,2})(?:IX|IV|V?I{0,3})")
+_PUA = 0xE000
+
+
+def _protect(text, mode):
+    if mode == "arabic":
+        return text, []
+    keep = []
+
+    def repl(m):
+        tok = m.group(0)
+        if mode == "auto" and len(tok) >= 2 and _ROMAN_OK.fullmatch(tok):
+            # a Roman numeral right after an Arabic word (الفصل IV) is read in Arabic
+            before = text[:m.start()].rstrip()
+            if before and _AR.search(before[-1]):
+                return tok
+        keep.append(tok)
+        return chr(_PUA + len(keep) - 1)
+    out = _ISLAND.sub(repl, text)
+    if mode == "secondary":
+        def num(m):
+            keep.append(m.group(0))
+            return chr(_PUA + len(keep) - 1)
+        out = re.sub(r"[0-9\u0660-\u0669]+(?:[.,:/][0-9\u0660-\u0669]+)*", num, out)
+    return out, keep
+
+
+def _unprotect(text, keep):
+    if not keep:
+        return text
+    return re.sub("[\uE000-\uF8FF]", lambda m: keep[ord(m.group(0)) - _PUA] if ord(m.group(0)) - _PUA < len(keep) else "", text)
+
+
 def _step(fn, text):
     try:
         out = fn(text)
@@ -158,6 +198,14 @@ def process(text, diacritize=True):
             diacritize = True
         else:
             return out  # pure Latin/other text: the English voice reads it
+    out, keep = _protect(out, options.get("mixed_priority", "auto"))
+    try:
+        return _unprotect(_arabic_core(out, diacritize, pt, ar_prep), keep)
+    except Exception:
+        return _unprotect(out, keep)
+
+
+def _arabic_core(out, diacritize, pt, ar_prep):
     out = _step(pt.normalize_presentation_forms, out)
     try:
         from .arabic import ar_textnorm

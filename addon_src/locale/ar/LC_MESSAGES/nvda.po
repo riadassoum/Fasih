@@ -1,0 +1,58 @@
+# Arabic translation of Fasih (فصيح).
+# Riad Assoum, 2026.
+msgid ""
+msgstr ""
+"Project-Id-Version: Fasih 1.1\n"
+"Language: ar\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=6; plural=n==0 ? 0 : n==1 ? 1 : n==2 ? 2 : n%100>=3 && n%100<=10 ? 3 : n%100>=11 ? 4 : 5;\n"
+
+msgid "&Secondary voice (for non-Arabic text)"
+msgstr "الصوت ال&ثانوي (للنصوص غير العربية)"
+
+msgid "Clarity (postfilter)"
+msgstr "الوضوح (المرشح اللاحق)"
+
+msgid "Breathiness"
+msgstr "النَّفَس"
+
+msgid "Sharpening (crisper sound)"
+msgstr "الشحذ (صوت أوضح حدّة)"
+
+msgid "Read emojis and symbols by name"
+msgstr "قراءة الرموز التعبيرية والرموز بأسمائها"
+
+msgid "Pausal ending (waqf) at end of sentences"
+msgstr "الوقف (التسكين) في نهاية الجمل"
+
+msgid "Mixed Arabic and Latin text"
+msgstr "النص المختلط بين العربية واللاتينية"
+
+msgid "Natural (recommended)"
+msgstr "طبيعي (موصى به)"
+
+msgid "Less"
+msgstr "أقل"
+
+msgid "Low"
+msgstr "منخفض"
+
+msgid "Very low"
+msgstr "منخفض جدًا"
+
+msgid "Automatic: Latin text as written, by the secondary voice"
+msgstr "تلقائي: النص اللاتيني كما هو، بالصوت الثانوي"
+
+msgid "Arabic first: numbers, symbols and Roman numerals in Arabic"
+msgstr "العربية أولًا: الأرقام والرموز والأرقام الرومانية بالعربية"
+
+msgid "Secondary voice first: numbers too"
+msgstr "الصوت الثانوي أولًا: والأرقام أيضًا"
+
+msgid "Automatic (first non-Arabic voice found)"
+msgstr "تلقائي (أول صوت غير عربي)"
+
+msgid "None (primary voice reads everything)"
+msgstr "لا شيء (الصوت الأساسي يقرأ كل شيء)"

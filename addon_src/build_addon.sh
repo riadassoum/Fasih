@@ -7,7 +7,8 @@ CS=/home/claude/salvage/cs/synthDrivers/claritysynth   # ClaritySynth 3.0 (Riad 
 B=$RHV/build/addon; D=$B/synthDrivers/fasih
 rm -rf "$RHV/build/addon"; mkdir -p "$D/lib/x64" "$D/data/languages" "$D/data/voices" "$D/arabic/lib/vowelizers"
 python3 "$HERE/patch_driver.py" /tmp/rh/src/nvda-addon/synthDriver/__init__.py "$D/__init__.py"
-cp "$HERE/arabic_pipeline.py" "$D/"
+cp "$HERE/arabic_pipeline.py" "$HERE/loudness.py" "$D/"
+cp -r "$HERE/locale" "$B/"
 cp /tmp/rhwin/src/lib/libRHVoice.dll "$D/lib/x64/RHVoice.dll"
 cp /tmp/rhwin/src/core/libRHVoice_core.dll "$D/lib/x64/"
 cp -r "$RHV/lang/Arabic" "$D/data/languages/"

@@ -21,6 +21,9 @@ D_MGC, D_BAP = int(os.environ.get("RHV_MGC_DIM", "31")), 7
 MGC_DIR = os.environ.get("RHV_MGC_DIR", "feat")
 WINDOWS = [np.array([1.0]), np.array([-0.5, 0.0, 0.5]), np.array([1.0, -2.0, 1.0])]
 VOICELESS = {"s", "S", "sh", "f", "th", "x", "H", "h", "t", "T", "k", "q", "Q", "p", "ch"}
+# ه and the hamza are often voiced (breathy or creaky) between vowels; forcing them voiceless
+# made them a burst of noise, heard as a dry cough. RHV_VOICED_OK="h,Q" leaves them to the pitch tracker.
+VOICELESS -= set(x for x in os.environ.get("RHV_VOICED_OK", "").split(",") if x)
 STREAMS = {"mgc": 3 * D_MGC, "lf0": 3, "bap": 3 * D_BAP}
 
 
@@ -66,8 +69,11 @@ def cmd_stats():
         nunits = segs[:, 0].max() + 1
         if nunits != len(labs):
             print("unit mismatch", uid, nunits, len(labs)); continue
-        mgc = np.fromfile(os.path.join(W, MGC_DIR, "mgc", uid + ".mgc"), np.float32).reshape(-1, D_MGC).astype(np.float64)
         bap = np.fromfile(os.path.join(W, "feat", "bap", uid + ".bap"), np.float32).reshape(-1, D_BAP).astype(np.float64)
+        if os.environ.get("RHV_STATS_NO_MGC"):     # pitch-only rebuild: spectrum statistics are not needed
+            mgc = np.zeros((len(bap), D_MGC))
+        else:
+            mgc = np.fromfile(os.path.join(W, MGC_DIR, "mgc", uid + ".mgc"), np.float32).reshape(-1, D_MGC).astype(np.float64)
         lf0 = np.fromfile(os.path.join(W, "feat", "lf0", uid + ".lf0"), np.float32).astype(np.float64)
         T = min(len(mgc), len(bap), len(lf0))
         # voiced only if harvest AND D4C agree (harvest over-extends voicing into fricatives)
@@ -112,7 +118,7 @@ def cmd_stats():
     np.save(os.path.join(TR, "durs.npy"), np.array(durs, np.float32))
     json.dump(vocab, open(os.path.join(TR, "vocab.json"), "w"), ensure_ascii=False)
     for j in range(NS):
-        for k in ("mgc", "bap", "lf0"):
+        for k in (("lf0",) if os.environ.get("RHV_STATS_NO_MGC") else ("mgc", "bap", "lf0")):
             np.save(os.path.join(TR, f"st_{k}_{j}.npy"), np.stack(acc[j][k]))
     print("stats:", len(rows), "phones", flush=True)
 
@@ -530,8 +536,11 @@ def cmd_gv():
             continue
         phones = open(ph).read().split()
         segs = np.load(al)
-        mgc = np.fromfile(os.path.join(W, MGC_DIR, "mgc", uid + ".mgc"), np.float32).reshape(-1, D_MGC).astype(np.float64)
         bap = np.fromfile(os.path.join(W, "feat", "bap", uid + ".bap"), np.float32).reshape(-1, D_BAP).astype(np.float64)
+        if os.environ.get("RHV_STATS_NO_MGC"):     # pitch-only rebuild: spectrum statistics are not needed
+            mgc = np.zeros((len(bap), D_MGC))
+        else:
+            mgc = np.fromfile(os.path.join(W, MGC_DIR, "mgc", uid + ".mgc"), np.float32).reshape(-1, D_MGC).astype(np.float64)
         lf0 = np.fromfile(os.path.join(W, "feat", "lf0", uid + ".lf0"), np.float32).astype(np.float64)
         T = min(len(mgc), len(bap), len(lf0))
         speech = np.zeros(T, bool)

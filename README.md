@@ -16,7 +16,7 @@ Known limits: Jamal reads in a Classical style; Nour, Faris and Huda learned fro
 
 ## Arabic and English together
 
-Each piece of text is split by script, the way I do it in ClaritySynth. Arabic goes to the Arabic voice you choose, and everything else goes to the secondary voice. By default the secondary voice is chosen automatically as the first non-Arabic RHVoice voice found, which is the bundled English voice SLT unless you have installed others. Voices installed with Kvark's RHVoice Voice Manager are picked up too. The Arabic and English voices are matched in loudness, so switching between them doesn't jump in volume.
+Each piece of text is split by script, the way I do it in ClaritySynth. Arabic goes to the Arabic voice you choose, and everything else goes to the secondary voice. By default the secondary voice is chosen automatically as the first non-Arabic RHVoice voice found, which is the bundled English voice SLT unless you have installed others. Voices installed with Kvark's RHVoice Voice Manager are picked up too. The Arabic and English voices are matched in loudness, so switching between them doesn't jump in volume, and the output is about as loud as other screen-reader voices: a look-ahead limiter lowers the gain on the loudest peaks instead of clipping them.
 
 ## Diacritization
 
@@ -24,7 +24,7 @@ Text is diacritized with Rawi before it is spoken, and any harakat you typed you
 
 ## Settings
 
-These are in NVDA's voice settings. The secondary voice, Clarity, Breathiness and Sharpening are also in the settings ring.
+These are in NVDA's voice settings. The secondary voice, Clarity, Breathiness, Sharpening and Mixed text are also in the settings ring.
 
 - **Secondary voice**: which voice reads non-Arabic text (Automatic, None, or any installed voice).
 - **Clarity**: how strongly the voice is sharpened by the postfilter.
@@ -32,6 +32,7 @@ These are in NVDA's voice settings. The secondary voice, Clarity, Breathiness an
 - **Sharpening**: a crisper, more detailed spectrum.
 - **Read emojis and symbols by name**.
 - **Pausal ending (waqf)**: the last word of a sentence is read in its pausal form.
+- **Mixed Arabic and Latin text**: Automatic (Latin text goes to the secondary voice exactly as written, with a number just before a Latin word, as in 5 PM), Arabic first (numbers, symbols and Roman numerals read in Arabic, as in 1.0), or Secondary voice first (numbers too).
 
 ## User dictionary
 
@@ -46,7 +47,7 @@ Put a file called `user-dic.json` in `%APPDATA%\nvda\Fasih-config\`. It is a lis
 ## Credits
 
 - **ClaritySynth 3.0** (my own add-on): Arabic text normalization for numbers, dates and currency, Rawi diacritization, and keeping the user's own harakat.
-- **PlanetBlindTech** (rhvoice-arabic, GPL-3.0), with their blessing: the default pronunciation dictionary, the user dictionary, emoji and symbol names, single-character names, presentation-form cleanup, post-diacritization fixes and the real-time audio post-filter (DC/rumble high-pass and soft limiter). Their project also showed me the data-only language approach and the stock-RHVoice packaging that Fasih follows. Thank you.
+- **PlanetBlindTech** (rhvoice-arabic, GPL-3.0), with their blessing: the default pronunciation dictionary, the user dictionary, emoji and symbol names, single-character names, presentation-form cleanup, post-diacritization fixes and the design of the audio post-filter (the DC/rumble high-pass Fasih still uses; its limiter is now a look-ahead gain limiter of mine). Their project also showed me the data-only language approach and the stock-RHVoice packaging that Fasih follows. Thank you.
 - **RHVoice**: Olga Yakovleva and contributors (LGPL). **WORLD**: Masanori Morise (BSD). **foma**: Mans Hulden. **ONNX Runtime**: Microsoft (MIT).
 - **Corpora**: ClArTTS (MBZUAI); the Arabic Speech Corpus (Nawar Halabi, CC BY 4.0); NeoBoy/arabic-tts-wav-24k (MIT); ArVoice (Toyin, Marew, Alblooshi, Magdy and Aldarmaki, MBZUAI, Interspeech 2025, CC BY 4.0).
 
@@ -59,6 +60,8 @@ Put a file called `user-dic.json` in `%APPDATA%\nvda\Fasih-config\`. It is a lis
 - `addon_src/`: the NVDA driver patches, the Arabic text pipeline and the Rawi helper (`rawi_host/`, C source and Windows build). `build_release.sh VERSION` builds the add-on from a clean checkout of this repository with nothing else installed but bash, python3 and zip. `build_addon.sh` is the development build, which writes the voices from training output.
 - `third_party/`: what the release build packages from other projects: RHVoice's NVDA driver and Windows libraries (built from source with the WORLD patch), RHVoice's English language and the SLT voice, ClaritySynth's Arabic modules, ONNX Runtime and the Rawi model.
 - `tests/test_arabic.py`: Arabic regression tests (waqf, hamzat al-wasl, helping vowels, merging your own harakat, script splitting, and the full pipeline when Rawi is available).
+
+See [CHANGELOG.md](CHANGELOG.md) for what changed in each version. The add-on is available in English and Arabic.
 
 ## Requirements
 

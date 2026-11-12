@@ -13,7 +13,9 @@ mkdir -p "$D/lib/x64" "$D/data/languages" "$D/data/voices" "$D/data/variants" "$
 
 # driver: RHVoice's official NVDA driver, patched for Fasih
 python3 "$HERE/patch_driver.py" "$T/rhvoice-nvda-driver/__init__.py" "$D/__init__.py"
-cp "$HERE/arabic_pipeline.py" "$D/"
+cp "$HERE/arabic_pipeline.py" "$HERE/loudness.py" "$D/"
+cp -r "$HERE/locale" "$B/"
+cp -r "$HERE/doc" "$B/"
 cp "$T/rhvoice-win-x64/RHVoice.dll" "$T/rhvoice-win-x64/libRHVoice_core.dll" "$D/lib/x64/"
 
 # languages and voices
@@ -56,6 +58,7 @@ url = https://github.com/riadassoum/Fasih
 version = $VER
 minimumNVDAVersion = 2026.1
 lastTestedNVDAVersion = 2026.3
+docFileName = readme.html
 EOF
 rm -f "$OUT"; (cd "$B" && zip -qr "$OUT" .)
 python3 -c "import zipfile,sys; z=zipfile.ZipFile(sys.argv[1]); print(len(z.namelist()),'files', z.testzip() or 'zip OK')" "$OUT"
