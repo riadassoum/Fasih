@@ -445,6 +445,20 @@ def cmd_write(out_path):
                     p[2:NS] = np.maximum(p[2:NS] * 0.4, 1.0)
                     n["pdf"] = p.astype(np.float32); nrel += 1
             print("stop release: %d models shortened" % nrel, flush=True)
+    pscale = float(os.environ.get("RHV_PAU_SCALE", "1"))
+    if pscale != 1.0:
+        # pauses (commas, full stops) made as long as in the other voices
+        codes_ = np.load(os.path.join(TR, "codes.npy"))
+        vocab_ = json.load(open(os.path.join(TR, "vocab.json"), encoding="utf-8"))
+        ni_ = [f[0] for f in LabelSet(LANG).fields].index("name")
+        nm_ = np.array(vocab_["name"], dtype=object)[codes_[:, ni_]]
+        lo_ = np.load(os.path.join(TR, "leafof_dur_None.npy"))
+        for li, n in enumerate([n for n in dur if n.get("leaf")]):
+            mem = nm_[lo_ == li]
+            if len(mem) and (mem == "pau").mean() >= 0.6:
+                p = n["pdf"].astype(np.float64).copy()
+                p[:NS] = np.maximum(p[:NS] * pscale, 1.0)
+                n["pdf"] = p.astype(np.float32)
     used = set()
     for t in [dur] + [x for v in trees.values() for x in v]:
         used |= {n["q"] for n in t if not n.get("leaf")}
@@ -513,6 +527,51 @@ def cmd_write(out_path):
             for n in trees["bap"][j]:
                 if n.get("leaf"):
                     p = n["pdf"].copy(); p[1:D_BAP] = np.minimum(p[1:D_BAP] + bofs, 0.0); n["pdf"] = p
+    if os.environ.get("RHV_FIX_VOICELESS"):
+        # Alignment slips put vowel frames into some states of voiceless consonants (Huda's ش and
+        # ق, Faris's ط). Those states are played unvoiced, so a vowel-shaped noise is heard: a
+        # cough. A spectrum model of a voiceless consonant built mostly from periodic (vowel-like)
+        # frames is replaced by that consonant's average spectrum over its truly noisy frames.
+        VL = {"s", "S", "sh", "f", "th", "x", "H", "t", "T", "k", "q"}
+        codes_ = np.load(os.path.join(TR, "codes.npy"))
+        vocab_ = json.load(open(os.path.join(TR, "vocab.json"), encoding="utf-8"))
+        ni_ = [f[0] for f in LabelSet(LANG).fields].index("name")
+        nm_ = np.array(vocab_["name"], dtype=object)[codes_[:, ni_]]
+        SB = [np.load(os.path.join(TR, f"st_bap_{j}.npy"), mmap_mode="r") for j in range(NS)]
+        SM = [np.load(os.path.join(TR, f"st_mgc_{j}.npy"), mmap_mode="r") for j in range(NS)]
+        per = [np.asarray(SB[j][:, 1]) / np.maximum(np.asarray(SB[j][:, 0]), 1e-8) for j in range(NS)]
+        occ = [np.asarray(SB[j][:, 0]) for j in range(NS)]
+        clean = {}
+        for ph in VL:
+            tot = np.zeros(D_MGC); n = 0.0
+            for j in range(NS):
+                m = (nm_ == ph) & (per[j] > -10) & (occ[j] > 0)
+                if m.any():
+                    tot += np.asarray(SM[j][m, 1:1 + D_MGC]).sum(0); n += occ[j][m].sum()
+            if n > 50:
+                clean[ph] = tot / n
+        nfix = 0
+        for j in range(NS):
+            lo = np.load(os.path.join(TR, f"leafof_mgc_{j}.npy"))
+            lv = [n for n in trees["mgc"][j] if n.get("leaf")]
+            for li, n in enumerate(lv):
+                idx = np.flatnonzero(lo == li)
+                if not len(idx):
+                    continue
+                mem = nm_[idx]
+                vals, cnt = np.unique(mem, return_counts=True)
+                ph = vals[cnt.argmax()]
+                if ph not in clean or cnt.max() < 0.6 * len(mem):
+                    continue
+                w = occ[j][idx]
+                if w.sum() <= 0 or (w * (per[j][idx] < -20)).sum() < 0.5 * w.sum():
+                    continue
+                p = n["pdf"].astype(np.float64).copy()
+                p[:D_MGC] = clean[ph]
+                p[0] += float(os.environ.get("RHV_LEVEL_DB", "0")) / 8.686   # same level as the rest
+                p[D_MGC:3 * D_MGC] = 0.0
+                n["pdf"] = p.astype(np.float32); nfix += 1
+        print("voiceless fix: %d spectrum models replaced" % nfix, flush=True)
     pc0 = os.environ.get("RHV_PHONE_C0", "")
     if pc0:
         # RHV_PHONE_C0="Q:1-3:-3" lowers the loudness (c0) of states 1-3 of the hamza by 3
