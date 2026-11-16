@@ -37,6 +37,9 @@ def normalize(text: str) -> str:
     text = re.sub("(?<![\u0621-\u064A])((?:[\u0648\u0641\u0628\u0643][\u064E\u0650]?)?(?:[\u0627\u0671][\u064E]?\u0644|\u0644\u0650?\u0644))\u0652"
                   "([\u062A\u062B\u062F\u0630\u0631\u0632\u0633\u0634\u0635\u0636\u0637\u0638\u0644\u0646])([\u064B-\u0652]*)", _sun, text)
     text = re.sub("(^|(?<=[^\u0621-\u064A\u0671\u064B-\u0652\u0670]))[\u064B-\u0652\u0670]+", "", text)  # marks with no letter
+    # a word-final ي after a consonant with no mark is the long vowel ī (في، الذي، التي, left bare in
+    # partly vowelled text): without the kasra it was read as the consonant y (في ٱلدّانمارك -> f-y-dd...).
+    text = re.sub("([\u0628-\u063A\u0641-\u0648])(?=\u064A(?![\u0621-\u064A\u064B-\u0652\u0670]))", "\\1\u0650", text)
     return text
 
 

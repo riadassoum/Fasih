@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<phonemes>
+<phoneme name="i" vc="+" vlng="s" vheight="h" vfront="f" vrnd="-" vnas="-" cons="-"/>
+<phoneme name="e" vc="+" vlng="s" vheight="m" vfront="f" vrnd="-" vnas="-" cons="-"/>
+<phoneme name="E" vc="+" vlng="s" vheight="m" vfront="f" vrnd="-" vnas="-" cons="-"/>
+<phoneme name="a" vc="+" vlng="s" vheight="l" vfront="c" vrnd="-" vnas="-" cons="-"/>
+<phoneme name="O" vc="+" vlng="s" vheight="m" vfront="b" vrnd="+" vnas="-" cons="-"/>
+<phoneme name="o" vc="+" vlng="s" vheight="m" vfront="b" vrnd="+" vnas="-" cons="-"/>
+<phoneme name="u" vc="+" vlng="s" vheight="h" vfront="b" vrnd="+" vnas="-" cons="-"/>
+<phoneme name="y" vc="+" vlng="s" vheight="h" vfront="f" vrnd="+" vnas="-" cons="-"/>
+<phoneme name="eu" vc="+" vlng="s" vheight="m" vfront="f" vrnd="+" vnas="-" cons="-"/>
+<phoneme name="oe" vc="+" vlng="s" vheight="m" vfront="f" vrnd="+" vnas="-" cons="-"/>
+<phoneme name="ax" vc="+" vlng="s" vheight="m" vfront="c" vrnd="+" vnas="-" cons="-"/>
+<phoneme name="en" vc="+" vlng="s" vheight="m" vfront="f" vrnd="-" vnas="+" cons="-"/>
+<phoneme name="an" vc="+" vlng="s" vheight="l" vfront="b" vrnd="-" vnas="+" cons="-"/>
+<phoneme name="on" vc="+" vlng="s" vheight="m" vfront="b" vrnd="+" vnas="+" cons="-"/>
+<phoneme name="p" vc="-" cons="+" cplace="lab" ctype="s" cvox="-" emph="-"/>
+<phoneme name="b" vc="-" cons="+" cplace="lab" ctype="s" cvox="+" emph="-"/>
+<phoneme name="t" vc="-" cons="+" cplace="alv" ctype="s" cvox="-" emph="-"/>
+<phoneme name="d" vc="-" cons="+" cplace="alv" ctype="s" cvox="+" emph="-"/>
+<phoneme name="k" vc="-" cons="+" cplace="vel" ctype="s" cvox="-" emph="-"/>
+<phoneme name="g" vc="-" cons="+" cplace="vel" ctype="s" cvox="+" emph="-"/>
+<phoneme name="f" vc="-" cons="+" cplace="lab" ctype="f" cvox="-" emph="-"/>
+<phoneme name="v" vc="-" cons="+" cplace="lab" ctype="f" cvox="+" emph="-"/>
+<phoneme name="s" vc="-" cons="+" cplace="alv" ctype="f" cvox="-" emph="-"/>
+<phoneme name="z" vc="-" cons="+" cplace="alv" ctype="f" cvox="+" emph="-"/>
+<phoneme name="sh" vc="-" cons="+" cplace="pal" ctype="f" cvox="-" emph="-"/>
+<phoneme name="zh" vc="-" cons="+" cplace="pal" ctype="f" cvox="+" emph="-"/>
+<phoneme name="m" vc="-" cons="+" cplace="lab" ctype="n" cvox="+" emph="-"/>
+<phoneme name="n" vc="-" cons="+" cplace="alv" ctype="n" cvox="+" emph="-"/>
+<phoneme name="gn" vc="-" cons="+" cplace="pal" ctype="n" cvox="+" emph="-"/>
+<phoneme name="ng" vc="-" cons="+" cplace="vel" ctype="n" cvox="+" emph="-"/>
+<phoneme name="l" vc="-" cons="+" cplace="alv" ctype="l" cvox="+" emph="-"/>
+<phoneme name="r" vc="-" cons="+" cplace="uvu" ctype="r" cvox="+" emph="-"/>
+<phoneme name="j" vc="-" cons="+" cplace="pal" ctype="g" cvox="+" emph="-"/>
+<phoneme name="w" vc="-" cons="+" cplace="lab" ctype="g" cvox="+" emph="-"/>
+<phoneme name="hw" vc="-" cons="+" cplace="pal" ctype="g" cvox="+" emph="-"/>
+<phoneme name="pau" vc="-" cons="-"/>
+</phonemes>

@@ -30,7 +30,8 @@ for src, want in [("الْسَّلَام", "السَّلَام"), ("لِلْتَ
 # hamzat al-wasl and helping vowels in connected speech
 for src, want in [("مِنْ الْبَيْتِ", "مِنَ ٱلْبَيْتِ"), ("مِنْ الصَّبْرِ", "مِنَ ٱلصَّبْرِ"),
                   ("حُبِسَتْ السَّمَاءُ", "حُبِسَتِ ٱلسَّمَاءُ"), ("عَلَيْكُمْ السَّلَامُ", "عَلَيْكُمُ ٱلسَّلَامُ"),
-                  ("فِي الْبَيْتِ", "فِ ٱلْبَيْتِ"), ("بِهَذَا الصَّوْتِ", "بِهَذَ ٱلصَّوْتِ"), ("عَلَى الْأَرْضِ", "عَلَ ٱلْأَرْضِ"), ("كِتَابًا الْيَوْمَ", "كِتَابًا ٱلْيَوْمَ"), ("فَصِيحٌ، الْأَصْوَاتُ", "فَصِيحٌ، الْأَصْوَاتُ"), ("الْبَيْتُ", "الْبَيْتُ")]:
+                  ("فِي الْبَيْتِ", "فِ ٱلْبَيْتِ"), ("بِهَذَا الصَّوْتِ", "بِهَذَ ٱلصَّوْتِ"), ("عَلَى الْأَرْضِ", "عَلَ ٱلْأَرْضِ"), ("كِتَابًا الْيَوْمَ", "كِتَابًا ٱلْيَوْمَ"), ("فَصِيحٌ، الْأَصْوَاتُ", "فَصِيحٌ، الْأَصْوَاتُ"), ("الْبَيْتُ", "الْبَيْتُ"),
+                  ("الْمُسْلِمِينَ في الدَّانِمَارْك", "الْمُسْلِمِينَ فِ ٱلدَّانِمَارْك"), ("الَّذي جَاءَ", "الَّذِي جَاءَ"), ("أي شَيْءٍ", "أي شَيْءٍ")]:
     check("wasl " + src, ar_prep.mark_wasl(src), want)
 
 # ClaritySynth's merge of the writer's own marks with the model's (with Fasih's shadda fix)
@@ -94,6 +95,18 @@ check("split number before Latin", ns["_split_by_script"]("السَّاعَةُ 
 check("split number inside Arabic", ns["_split_by_script"]("عندي 45 كتابا"), [(True, "عندي 45 كتابا")])
 check("split tashkeel stays Arabic", ns["_split_by_script"]("مَرْحَبًا"), [(True, "مَرْحَبًا")])
 
+# invisible characters and stray marks on alif
+_aps = open(os.path.join(REPO, "addon_src", "arabic_pipeline.py"), encoding="utf-8").read()
+_apn = {"re": re}; exec(_aps[_aps.index("_INVISIBLE ="):_aps.index("def _tanween_post")], _apn)
+check("ZWNJ and direction marks removed", _apn["_INVISIBLE"].sub("", "مر\u200cحبا\u200f \u200dكتاب"), "مرحبا كتاب")
+check("haraka on bare alif dropped", _apn["_alif_marks"]("اُكْتُبْ مَاْ"), "اكْتُبْ مَا")
+check("haraka on madda dropped", _apn["_alif_marks"]("آَمَنَ"), "آمَنَ")
+check("fathatan on alif kept", _apn["_alif_marks"]("كِتَاباً"), "كِتَاباً")
+check("tatweel inside a word dropped", _apn["_clean_invisible"]("مـحـمـد رسول"), "محمد رسول")
+check("tatweel alone named", _apn["_clean_invisible"]("ـ"), "تَطْوِيل")
+check("tatweels alone named", _apn["_clean_invisible"](" ـــ "), "تَطْوِيل")
+check("ZWNJ alone named", _apn["_clean_invisible"]("\u200c"), "مَانِعُ ٱلْوَصْل")
+check("only invisibles: nothing sent", _apn["_clean_invisible"]("\u200c\u200f").strip(), "")
 # full pipeline, with Rawi (optional)
 lib = os.environ.get("RAWI_ORT_LIB"); addon = os.environ.get("FASIH_ADDON_DIR")
 if lib and addon:
@@ -121,6 +134,10 @@ if lib and addon:
     check("diacritizer polls the cancel callback", len(_polls) > 0, True)
     ap.options["mixed_priority"] = "secondary"
     check("secondary first: digits alone stay digits", ap.process("123"), "123")
+    check("ZWNJ inside a word", "\u200c" not in ap.process("مر\u200cحبا بكم"), True)
+    check("ZWNJ alone named", ap.process("\u200c", diacritize=False), "مَانِعُ ٱلْوَصْل")
+    check("tatweel alone named", ap.process("ـ", diacritize=False), "تَطْوِيل")
+    check("tatweel inside a word dropped", "\u0640" not in ap.process("مـحـمـد رسول الله"), True)
     ap.options["mixed_priority"] = "auto"
 else:
     print("(full-pipeline tests skipped: set RAWI_ORT_LIB and FASIH_ADDON_DIR)")
@@ -157,10 +174,29 @@ for _v in sorted(os.listdir(os.path.join(REPO, "voices"))):
     _w = os.path.join(REPO, "voices", _v, "variants")
     _base = open(os.path.join(_w, "base.data"), "rb").read()
     try:
-        _r = _apply(_apply(_apply(_base, os.path.join(_w, "b12.patch")), os.path.join(_w, "sharp.patch")), os.path.join(_w, "repair.patch"))
+        _r = _apply(_base, os.path.join(_w, "b12.patch"))
+        if os.path.exists(os.path.join(_w, "sharp.patch")):
+            _r = _apply(_r, os.path.join(_w, "sharp.patch"))
+        _r = _apply(_r, os.path.join(_w, "repair.patch"))
         check(_v + " repair patch applies", _r != _base and b"WORLD1" in _r and b"WORLD1" not in _base, True)
     except Exception as e:
         check(_v + " repair patch applies", repr(e), "ok")
+
+# Latin text read by the Arabic voice when no other voice is installed
+_lat = {"re": re}; exec(_aps[_aps.index("# ---------------------------------------------------------------- Latin text without"):], _lat)
+check("Latin fallback: a word is spoken", _lat["latin_to_arabic"]("Hello"), "هِلُو")
+check("Latin fallback: acronym spelled", _lat["latin_to_arabic"]("NVDA"), "إِن ڤِي دِي إِيه")
+check("Latin fallback: digits kept", _lat["latin_to_arabic"]("file 2"), "فِيلْ 2")
+_drv = open(os.path.join(REPO, "addon_src", "patch_driver.py"), encoding="utf-8").read()
+check("secondary voice cannot be turned off", '"none"' in _drv, False)
+
+# French front end (liaison, numbers)
+import fr_prep as _fp
+for _src, _want in [("C'est un honneur.", "C'est \u203ftun \u203fnhonneur."), ("Il est 21 heures.", "Il est vingt \u203ftet une heures."),
+                    ("vingt-et-une heures", "vingt-\u203ftet-une heures"), ("Les amis", "Les \u203fzamis"), ("Que dit-il ?", "Que dit-\u203ftil ?"),
+                    ("Les héros et les haricots.", "Les héros et les haricots."), ("Neuf heures", "Neuve heures"),
+                    ("Le 21e siècle", "Le vingt \u203ftet unième siècle"), ("de petits enfants", "de petits \u203fzenfants"), ("1 000 euros", "mille euros")]:
+    check("French: " + _src, _fp.prepare(_src), _want)
 
 print("\n%d failure(s)" % fails)
 sys.exit(1 if fails else 0)

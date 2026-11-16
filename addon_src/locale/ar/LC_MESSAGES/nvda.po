@@ -51,11 +51,220 @@ msgstr "العربية أولًا: الأرقام والرموز والأرقا�
 msgid "Secondary voice first: numbers too"
 msgstr "الصوت الثانوي أولًا: والأرقام أيضًا"
 
-msgid "Automatic (first non-Arabic voice found)"
-msgstr "تلقائي (أول صوت غير عربي)"
-
-msgid "None (primary voice reads everything)"
-msgstr "لا شيء (الصوت الأساسي يقرأ كل شيء)"
+msgid "Automatic (a voice in NVDA's language, else English)"
+msgstr "تلقائي (صوت بلغة NVDA، وإلا فالإنجليزي)"
 
 msgid "Consonant repair (crisper ق ط ش, may sound muffled)"
 msgstr "إصلاح الحروف (ق ط ش أوضح، وقد يكتم الصوت)"
+
+msgid "Azerbaijani"
+msgstr "الأذربيجانية"
+
+msgid "Belarusian"
+msgstr "البيلاروسية"
+
+msgid "Czech"
+msgstr "التشيكية"
+
+msgid "English"
+msgstr "الإنجليزية"
+
+msgid "Esperanto"
+msgstr "الإسبرانتو"
+
+msgid "Spanish"
+msgstr "الإسبانية"
+
+msgid "Croatian"
+msgstr "الكرواتية"
+
+msgid "Hungarian"
+msgstr "المجرية"
+
+msgid "Georgian"
+msgstr "الجورجية"
+
+msgid "Kyrgyz"
+msgstr "القيرغيزية"
+
+msgid "Luxembourgish"
+msgstr "اللوكسمبورغية"
+
+msgid "Macedonian"
+msgstr "المقدونية"
+
+msgid "Nepali"
+msgstr "النيبالية"
+
+msgid "Polish"
+msgstr "البولندية"
+
+msgid "Brazilian Portuguese"
+msgstr "البرتغالية البرازيلية"
+
+msgid "Romanian"
+msgstr "الرومانية"
+
+msgid "Russian"
+msgstr "الروسية"
+
+msgid "Slovak"
+msgstr "السلوفاكية"
+
+msgid "Albanian"
+msgstr "الألبانية"
+
+msgid "Serbian"
+msgstr "الصربية"
+
+msgid "Turkmen"
+msgstr "التركمانية"
+
+msgid "Setswana"
+msgstr "التسوانية"
+
+msgid "Turkish"
+msgstr "التركية"
+
+msgid "Tatar"
+msgstr "التتارية"
+
+msgid "Ukrainian"
+msgstr "الأوكرانية"
+
+msgid "Uzbek"
+msgstr "الأوزبكية"
+
+msgid "Vietnamese"
+msgstr "الفيتنامية"
+
+msgid "unknown"
+msgstr "غير معروف"
+
+msgid "bytes"
+msgstr "بايت"
+
+msgid "KB"
+msgstr "ك.ب"
+
+msgid "MB"
+msgstr "م.ب"
+
+msgid "GB"
+msgstr "غ.ب"
+
+msgid "The downloaded file is damaged (checksum mismatch)."
+msgstr "الملف المنزَّل تالف (لا يطابق المجموع الاختباري)."
+
+msgid "&Progress:"
+msgstr "ال&تقدّم:"
+
+msgid "&Cancel"
+msgstr "إل&غاء"
+
+msgid "Downloaded: {done} of {total}"
+msgstr "المنزَّل: {done} من {total}"
+
+msgid "Speed: {speed}/s"
+msgstr "السرعة: {speed} في الثانية"
+
+msgid "Time elapsed: {t}"
+msgstr "الوقت المنقضي: {t}"
+
+msgid "Time remaining: {t}"
+msgstr "الوقت المتبقي: {t}"
+
+msgid "{pct}% complete"
+msgstr "اكتمل {pct}%"
+
+msgid "Cancelling..."
+msgstr "جارٍ الإلغاء..."
+
+msgid "Fasih: download RHVoice voices"
+msgstr "فصيح: تنزيل أصوات RHVoice"
+
+msgid "&Language:"
+msgstr "ال&لغة:"
+
+msgid "&Voices:"
+msgstr "الأ&صوات:"
+
+msgid "Name"
+msgstr "الاسم"
+
+msgid "Status"
+msgstr "الحالة"
+
+msgid "Version"
+msgstr "الإصدار"
+
+msgid "&Install"
+msgstr "&تثبيت"
+
+msgid "&Remove"
+msgstr "إ&زالة"
+
+msgid "Cl&ose"
+msgstr "إ&غلاق"
+
+msgid "Will be removed after restart"
+msgstr "سيُزال بعد إعادة التشغيل"
+
+msgid "Installed"
+msgstr "مثبَّت"
+
+msgid "Will be installed after restart"
+msgstr "سيُثبَّت بعد إعادة التشغيل"
+
+msgid "Not installed"
+msgstr "غير مثبَّت"
+
+msgid "Downloading {voice}"
+msgstr "تنزيل {voice}"
+
+msgid ""
+"The voice could not be downloaded: {error}\n"
+"Check your internet connection and try again."
+msgstr ""
+"تعذّر تنزيل الصوت: {error}\n"
+"تحقق من اتصالك بالإنترنت وحاول مجددًا."
+
+msgid "Error"
+msgstr "خطأ"
+
+msgid "The voice could not be installed."
+msgstr "تعذّر تثبيت الصوت."
+
+msgid ""
+"{voice} is installed. It will be available after NVDA restarts, as a "
+"secondary voice in Fasih."
+msgstr ""
+"ثُبِّت {voice}، وسيكون متاحًا صوتًا ثانويًا في فصيح بعد إعادة تشغيل NVDA."
+
+msgid "Voice installed"
+msgstr "ثُبِّت الصوت"
+
+msgid "Remove {voice}? It will be removed when NVDA restarts."
+msgstr "أتريد إزالة {voice}؟ سيُزال عند إعادة تشغيل NVDA."
+
+msgid "Remove voice"
+msgstr "إزالة صوت"
+
+msgid "&Download voices..."
+msgstr "&تنزيل أصوات..."
+
+msgid "Download more RHVoice voices for Fasih's secondary voice"
+msgstr "تنزيل مزيد من أصوات RHVoice للصوت الثانوي في فصيح"
+
+msgid "&Fasih"
+msgstr "&فصيح"
+
+msgid "Fasih"
+msgstr "فصيح"
+
+msgid "Getting the list of voices..."
+msgstr "جارٍ جلب قائمة الأصوات..."
+
+msgid ""
+"The list of voices could not be retrieved. Check your internet connection."
+msgstr "تعذّر جلب قائمة الأصوات. تحقق من اتصالك بالإنترنت."

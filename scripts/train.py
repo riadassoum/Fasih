@@ -15,12 +15,13 @@ from labels import LabelSet, read_lab, build_questions, PHONE_FIELDS
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 W = os.path.join(ROOT, "work")
 TR = os.path.join(W, os.environ.get("RHV_TRAIN_DIR", "train"))
-LANG = os.path.join(ROOT, "lang", "Arabic")
+LANG = os.path.join(ROOT, "lang", os.environ.get("RHV_LANG", "Arabic"))
 NS = 5
 D_MGC, D_BAP = int(os.environ.get("RHV_MGC_DIM", "31")), 7
 MGC_DIR = os.environ.get("RHV_MGC_DIR", "feat")
 WINDOWS = [np.array([1.0]), np.array([-0.5, 0.0, 0.5]), np.array([1.0, -2.0, 1.0])]
-VOICELESS = {"s", "S", "sh", "f", "th", "x", "H", "h", "t", "T", "k", "q", "Q", "p", "ch"}
+VOICELESS = ({"p", "t", "k", "f", "s", "sh"} if os.environ.get("RHV_LANG") == "French" else
+             {"s", "S", "sh", "f", "th", "x", "H", "h", "t", "T", "k", "q", "Q", "p", "ch"})
 # ه and the hamza are often voiced (breathy or creaky) between vowels; forcing them voiceless
 # made them a burst of noise, heard as a dry cough. RHV_VOICED_OK="h,Q" leaves them to the pitch tracker.
 VOICELESS -= set(x for x in os.environ.get("RHV_VOICED_OK", "").split(",") if x)
@@ -57,7 +58,21 @@ def cmd_stats():
     ids = [l.strip() for l in open(os.path.join(W, "ids.txt")) if l.strip()]
     rows, durs = [], []
     offsets = {}
-    acc = {s: {k: [] for k in ("mgc", "bap", "lf0")} for s in range(NS)}
+    # statistics streamed to disk (a large corpus does not fit in memory as lists)
+    from numpy.lib import format as npf
+    kinds = ("lf0",) if os.environ.get("RHV_STATS_NO_MGC") else ("mgc", "bap", "lf0")
+    outs, ncols = {}, {}
+    def put(j, k, v):
+        f = outs.get((j, k))
+        if f is None:
+            f = open(os.path.join(TR, f"st_{k}_{j}.npy"), "wb"); ncols[(j, k)] = len(v)
+            hdr(f, (10 ** 11, len(v)))
+            outs[(j, k)] = f
+        f.write(np.asarray(v, "<f4").tobytes())
+    def hdr(f, shape):
+        d = "{'descr': '<f4', 'fortran_order': False, 'shape': (%d, %d), }" % shape
+        d = d.ljust(117) + "\n"; f.write(b"\x93NUMPY\x01\x00" + len(d).to_bytes(2, "little") + d.encode("latin1"))
+    fvals = [dict() for _ in names]
     t0 = time.time()
     for i, uid in enumerate(ids, 1):
         fl = os.path.join(W, "full", uid + ".lab")
@@ -104,32 +119,32 @@ def cmd_stats():
                     s0, e0 = st.get((u, j), (0, 0))
                     Fok[s0:e0] = False
         for u in range(nunits):
-            rows.append(L.parse(labs[u][2]))
+            rows.append([fv.setdefault(v, len(fv)) for fv, v in zip(fvals, L.parse(labs[u][2]))])
             durs.append(dur[u])
             for j in range(NS):
                 s, e = st.get((u, j), (0, 0))
                 m, b = M[s:e], B[s:e]
-                acc[j]["mgc"].append(np.concatenate([[e - s], m.sum(0), (m ** 2).sum(0)]).astype(np.float32))
-                acc[j]["bap"].append(np.concatenate([[e - s], b.sum(0), (b ** 2).sum(0)]).astype(np.float32))
+                ("mgc" in kinds) and put(j, "mgc", np.concatenate([[e - s], m.sum(0), (m ** 2).sum(0)]))
+                ("bap" in kinds) and put(j, "bap", np.concatenate([[e - s], b.sum(0), (b ** 2).sum(0)]))
                 fv, fo = Fv[s:e], Fok[s:e]
-                acc[j]["lf0"].append(np.concatenate([[e - s], fo.sum(0), (fv * fo).sum(0), (fv ** 2 * fo).sum(0)]).astype(np.float32))
+                ("lf0" in kinds) and put(j, "lf0", np.concatenate([[e - s], fo.sum(0), (fv * fo).sum(0), (fv ** 2 * fo).sum(0)]))
         if i % 500 == 0:
             print(i, len(rows), f"{time.time() - t0:.0f}s", flush=True)
-    rows = np.array(rows, dtype=object)
-    # integer-code every field
-    codes, vocab = np.zeros(rows.shape, np.int32), {}
+    raw = np.array(rows, np.int32).reshape(-1, len(names))
+    codes, vocab = np.zeros(raw.shape, np.int32), {}
     for k, n in enumerate(names):
-        vals = sorted(set(rows[:, k]))
+        vals = sorted(fvals[k], key=lambda v: v)
         vocab[n] = vals
-        idx = {v: c for c, v in enumerate(vals)}
-        codes[:, k] = [idx[v] for v in rows[:, k]]
+        perm = np.zeros(len(vals), np.int32)
+        for c, v in enumerate(vals): perm[fvals[k][v]] = c
+        codes[:, k] = perm[raw[:, k]]
+    del raw
     np.save(os.path.join(TR, "codes.npy"), codes)
     json.dump(offsets, open(os.path.join(TR, "offsets.json"), "w"))
     np.save(os.path.join(TR, "durs.npy"), np.array(durs, np.float32))
     json.dump(vocab, open(os.path.join(TR, "vocab.json"), "w"), ensure_ascii=False)
-    for j in range(NS):
-        for k in (("lf0",) if os.environ.get("RHV_STATS_NO_MGC") else ("mgc", "bap", "lf0")):
-            np.save(os.path.join(TR, f"st_{k}_{j}.npy"), np.stack(acc[j][k]))
+    for (j, k), f in outs.items():
+        f.seek(0); hdr(f, (len(rows), ncols[(j, k)])); f.close()
     print("stats:", len(rows), "phones", flush=True)
 
 
@@ -393,12 +408,98 @@ def qs_text(qs, used):
     return "\n".join(out) + "\n"
 
 
+# ---------------------------------------------------------------- compact statistics
+# A finished voice keeps only what writing it needs (freeze_stats.py): for the spectrum, the
+# totals and, for the few sounds the writer looks at (voiceless consonants, l, a), the count and
+# static sums; for the aperiodicity, the count and first band. Same results, a fraction of the disk.
+class _CompactRows:
+    def __init__(self, path):
+        z = np.load(path)
+        self.data, self.keep, self.tot, self.n = z["data"], z["keep"], z["tot"], int(z["n"])
+        self.pos = np.full(self.n, -1, np.int64); self.pos[self.keep] = np.arange(len(self.keep))
+    def sum(self, axis=0, dtype=None):
+        return self.tot.astype(dtype or np.float64)
+    def __getitem__(self, key):
+        rows, cols = (key if isinstance(key, tuple) else (key, slice(None)))
+        r = np.asarray(rows)
+        r = np.flatnonzero(r) if r.dtype == bool else r.astype(np.int64)
+        p = self.pos[r]
+        if (p < 0).any():
+            raise KeyError("statistics of these sounds were not kept (freeze_stats.py)")
+        return self.data[p][:, cols]
+
+
+def _load_st(kind, j):
+    f = os.path.join(TR, f"st_{kind}_{j}.npy")
+    if os.path.exists(f):
+        return np.load(f, mmap_mode="r")
+    c = os.path.join(TR, f"st_{kind}_{j}.cmp.npz")
+    if kind == "bap" and os.path.exists(c):
+        return np.load(c)["data"]
+    return _CompactRows(c)
+
+
+def _allah_lam(trees, qs):
+    """The heavy (velarized) lam of the name of God after a, u (وَاللَّه، قَالَ اللَّه), light after i
+    (بِسْمِ اللَّه). Voices whose recordings hold the name rarely had it pooled with the ordinary
+    lam. Two questions are put at the top of every spectrum tree, with their own models: from the
+    voice's own recordings where they hold enough examples, otherwise the voice's ordinary model
+    for that context darkened by the voice's own velarization (the shift heard in vowels next to
+    ص ض ط ظ against س د ت ذ)."""
+    codes = np.load(os.path.join(TR, "codes.npy"))
+    vocab = json.load(open(os.path.join(TR, "vocab.json"), encoding="utf-8"))
+    flds = [f[0] for f in LabelSet(LANG).fields]
+    col = lambda f: np.array(vocab[f], dtype=object)[codes[:, flds.index(f)]]
+    pp, pv, c, nx, nn = (col(f) for f in ("prev_prev_name", "prev_name", "name", "next_name", "next_next_name"))
+    V = ["a", "aa", "u", "uu"]
+    masks = [((c == "l") & (nx == "l") & (nn == "aa") & np.isin(pv, V), ["*^%s-l+l=aa@*" % v for v in V]),
+             ((c == "l") & (pv == "l") & (nx == "aa") & (nn == "h") & np.isin(pp, V + ["pau"]), ["%s^l-l+aa=h@*" % v for v in V + ["pau"]])]
+    emph = (c == "a") & np.isin(pv, ["S", "D", "T", "Z"]); plain = (c == "a") & np.isin(pv, ["s", "d", "t", "dh"])
+    vel = np.zeros(D_MGC)
+    if emph.sum() >= 20 and plain.sum() >= 20:
+        for j in (1, 2, 3):
+            S_ = _load_st("mgc", j)
+            me = np.asarray(S_[emph]).sum(0, dtype=np.float64); mp = np.asarray(S_[plain]).sum(0, dtype=np.float64)
+            vel += (me[1:1 + D_MGC] / max(me[0], 1) - mp[1:1 + D_MGC] / max(mp[0], 1)) / 3
+    vel[0] = 0.0
+    qids = []
+    for k, (m, pats) in enumerate(masks):
+        qs.append({"name": "allah_lam_%d" % k, "field": "", "values": [], "patterns": pats}); qids.append(len(qs) - 1)
+    for j in range(NS):
+        nodes = trees["mgc"][j]
+        leaves = [i for i, n in enumerate(nodes) if n.get("leaf")]
+        lo = np.load(os.path.join(TR, f"leafof_mgc_{j}.npy"))
+        S_ = _load_st("mgc", j)
+        new = []
+        for m, _ in masks:
+            idx = np.flatnonzero(m)
+            if len(idx):
+                base = nodes[leaves[np.bincount(lo[idx]).argmax()]]
+            else:
+                base = nodes[leaves[np.bincount(lo[c == "l"]).argmax()]]
+            pdf = base["pdf"].astype(np.float64).copy()
+            if len(idx) >= 60:
+                t = np.asarray(S_[idx]).sum(0, dtype=np.float64)
+                if t[0] > 0:
+                    pdf[:D_MGC] = t[1:1 + D_MGC] / t[0]
+            else:
+                pdf[1:D_MGC] += vel[1:] * (1.0 if j in (1, 2, 3) else 0.5)
+            new.append({"leaf": True, "pdf": pdf.astype(np.float32)})
+        sh = lambda n: dict(n, **({"yes": n["yes"] + 2, "no": n["no"] + 2} if not n.get("leaf") else {}))
+        body = [sh(n) for n in nodes]
+        L0 = 2 + len(body)
+        trees["mgc"][j] = [{"q": qids[0], "yes": L0, "no": 1}, {"q": qids[1], "yes": L0 + 1, "no": 2}] + body + new
+    print("allah lam: velarization %.3f, own examples %s" % (np.abs(vel).sum(), [int(m.sum()) for m, _ in masks]), flush=True)
+
+
 def cmd_write(out_path):
     qs = json.load(open(os.path.join(TR, "questions.json")))
     trees = {}
     for kind in ("mgc", "lf0", "bap"):
         trees[kind] = [pickle.load(open(os.path.join(TR, f"tree_{kind}_{j}.pkl"), "rb")) for j in range(NS)]
     dur = pickle.load(open(os.path.join(TR, "tree_dur_None.pkl"), "rb"))
+    if os.environ.get("RHV_ALLAH"):
+        _allah_lam(trees, qs)
     pct = float(os.environ.get("RHV_DUR_PCT", "0"))
     if pct > 0:
         # A duration model whose speech sound lasts longer than that sound ever does in `pct`%
@@ -459,6 +560,21 @@ def cmd_write(out_path):
                 p = n["pdf"].astype(np.float64).copy()
                 p[:NS] = np.maximum(p[:NS] * pscale, 1.0)
                 n["pdf"] = p.astype(np.float32)
+    dscale = float(os.environ.get("RHV_DUR_SCALE", "1"))
+    if dscale != 1.0:
+        # speaking rate matched across the voices: every sound (pauses excepted) scaled
+        codes_ = np.load(os.path.join(TR, "codes.npy"))
+        vocab_ = json.load(open(os.path.join(TR, "vocab.json"), encoding="utf-8"))
+        ni_ = [f[0] for f in LabelSet(LANG).fields].index("name")
+        nm_ = np.array(vocab_["name"], dtype=object)[codes_[:, ni_]]
+        lo_ = np.load(os.path.join(TR, "leafof_dur_None.npy"))
+        for li, n in enumerate([n for n in dur if n.get("leaf")]):
+            mem = nm_[lo_ == li]
+            if len(mem) and (mem == "pau").mean() >= 0.6:
+                continue
+            p = n["pdf"].astype(np.float64).copy()
+            p[:NS] = np.maximum(p[:NS] * dscale, 1.0)
+            n["pdf"] = p.astype(np.float32)
     used = set()
     for t in [dur] + [x for v in trees.values() for x in v]:
         used |= {n["q"] for n in t if not n.get("leaf")}
@@ -502,7 +618,7 @@ def cmd_write(out_path):
         alpha[0] = 1.0                                   # loudness contour is left alone
         tot = np.zeros(1 + 2 * 3 * D_MGC)
         for j in range(NS):
-            tot += np.load(os.path.join(TR, f"st_mgc_{j}.npy"), mmap_mode="r").sum(0, dtype=np.float64)
+            tot += _load_st("mgc", j).sum(0, dtype=np.float64)
         gmean = tot[1:1 + D_MGC] / tot[0]
         a3 = np.tile(alpha, 3)
         for j in range(NS):
@@ -520,6 +636,15 @@ def cmd_write(out_path):
             for n in trees["mgc"][j]:
                 if n.get("leaf"):
                     p = n["pdf"].copy(); p[0] += lvl / 8.686; n["pdf"] = p
+    # tone matched across the voices (bass and brightness): a fixed filter as a mel-cepstrum
+    # added to every spectrum model (c0, the level, left alone): RHV_EQ_MC=file.npy
+    eqp = os.environ.get("RHV_EQ_MC")
+    if eqp:
+        eqc = np.load(eqp).astype(np.float64)[:D_MGC]; eqc[0] = 0.0
+        for j in range(NS):
+            for n in trees["mgc"][j]:
+                if n.get("leaf"):
+                    p = n["pdf"].astype(np.float64).copy(); p[:len(eqc)] += eqc; n["pdf"] = p.astype(np.float32)
     # less noise in voiced sounds (vocoder noise is not pitch-synchronous): RHV_BAP_OFFSET_DB
     bofs = float(os.environ.get("RHV_BAP_OFFSET_DB", "0"))
     if bofs:
@@ -537,8 +662,8 @@ def cmd_write(out_path):
         vocab_ = json.load(open(os.path.join(TR, "vocab.json"), encoding="utf-8"))
         ni_ = [f[0] for f in LabelSet(LANG).fields].index("name")
         nm_ = np.array(vocab_["name"], dtype=object)[codes_[:, ni_]]
-        SB = [np.load(os.path.join(TR, f"st_bap_{j}.npy"), mmap_mode="r") for j in range(NS)]
-        SM = [np.load(os.path.join(TR, f"st_mgc_{j}.npy"), mmap_mode="r") for j in range(NS)]
+        SB = [_load_st("bap", j) for j in range(NS)]
+        SM = [_load_st("mgc", j) for j in range(NS)]
         per = [np.asarray(SB[j][:, 1]) / np.maximum(np.asarray(SB[j][:, 0]), 1e-8) for j in range(NS)]
         occ = [np.asarray(SB[j][:, 0]) for j in range(NS)]
         clean = {}
@@ -590,6 +715,29 @@ def cmd_write(out_path):
                     mem = nm_[lo == li]
                     if len(mem) and (mem == ph).mean() >= 0.6:
                         p = n["pdf"].astype(np.float64).copy(); p[0] += float(off); n["pdf"] = p.astype(np.float32)
+    if os.environ.get("RHV_PAU_SILENT"):
+        # Some pause models learned the tail of the sound before them (a نْ of tanween aligned into the
+        # pause): voiced, loud and long, heard as a hum or a «w» before the next word (Karim's ذ after a
+        # sentence). A pause is made silent: quiet spectrum and unvoiced.
+        codes_ = np.load(os.path.join(TR, "codes.npy"))
+        vocab_ = json.load(open(os.path.join(TR, "vocab.json"), encoding="utf-8"))
+        fn_ = [f[0] for f in LabelSet(LANG).fields]
+        nm_ = np.array(vocab_["name"], dtype=object)[codes_[:, fn_.index("name")]]
+        nq = nv = 0
+        for j in range(NS):
+            for kind in ("mgc", "lf0"):
+                lo = np.load(os.path.join(TR, f"leafof_{kind}_{j}.npy"))
+                for li, n in enumerate([n for n in trees[kind][j] if n.get("leaf")]):
+                    mem = nm_[lo == li]
+                    if not len(mem) or (mem == "pau").mean() < 0.6:
+                        continue
+                    p = n["pdf"].astype(np.float64).copy()
+                    if kind == "mgc" and p[0] > -2.0:
+                        p[0] = -2.0; p[1:D_MGC] *= 0.5; nq += 1
+                    if kind == "lf0" and p[6] > 0.0:
+                        p[6] = 0.0; nv += 1
+                    n["pdf"] = p.astype(np.float32)
+        print("silent pauses: %d spectrum and %d voicing models" % (nq, nv), flush=True)
     lvs = float(os.environ.get("RHV_LF0_VAR_SCALE", "1"))
     if lvs != 1.0:
         # Wider pitch variances on the static term let the smoothness constraints (deltas) win:
@@ -598,6 +746,20 @@ def cmd_write(out_path):
             for n in trees["lf0"][j]:
                 if n.get("leaf"):
                     p = n["pdf"].astype(np.float64).copy(); p[3] *= lvs; n["pdf"] = p.astype(np.float32)
+    lcmp = float(os.environ.get("RHV_LF0_COMPRESS", "1"))
+    if lcmp != 1.0:
+        # Narrow the pitch range around the voice's own centre: leaf means (and their slopes) are
+        # pulled toward the centre by lcmp and the spreads shrink with them. Tames a sentence-start
+        # rise learned from the source (Google voices) and the leaps of a jumpy source (Nabra).
+        means = np.array([n["pdf"][0] for j in range(NS) for n in trees["lf0"][j] if n.get("leaf") and n["pdf"][6] > 0.5])
+        c = float(np.median(means))
+        for j in range(NS):
+            for n in trees["lf0"][j]:
+                if n.get("leaf"):
+                    p = n["pdf"].astype(np.float64).copy()
+                    p[0] = c + lcmp * (p[0] - c); p[1:3] *= lcmp; p[3:6] *= lcmp * lcmp
+                    n["pdf"] = p.astype(np.float32)
+        print("pitch range x%.2f around %.0f Hz" % (lcmp, np.exp(c)), flush=True)
     for k, kind in (("MCP", "mgc"), ("LF0", "lf0"), ("BAP", "bap")):
         allp, ttx = [], qtxt
         counts = []

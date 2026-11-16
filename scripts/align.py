@@ -116,7 +116,7 @@ def loglik(x, states, models):
 
 
 def init_worker():
-    load_phones.L = LabelSet(os.path.join(ROOT, "lang", "Arabic"))
+    load_phones.L = LabelSet(os.path.join(ROOT, "lang", os.environ.get("RHV_LANG", "Arabic")))
     load_phones.L.names = [f[0] for f in load_phones.L.fields]
 
 
@@ -143,7 +143,7 @@ def job_iter(args):
     phones, wend = load_phones(i)
     x = load_obs(uid)
     units, states, prev2 = build_graph(phones, wend, pauses)
-    if len(x) < len(units) * 1:
+    if not states or len(x) < len(units) * 1:
         return {}, 0.0, None
     ll = loglik(x, states, models)
     path, score = viterbi(ll, prev2)

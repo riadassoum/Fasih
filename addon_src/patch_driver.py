@@ -54,6 +54,8 @@ rep('''    def speak(self, speechSequence):
         seq = list(speechSequence)
         primary = self.__profile.split("+")[0]
         secondary = self._secondary_profile()
+        # a French secondary voice: liaison and abbreviations written for it (fr_prep)
+        fr_sec = bool(secondary) and self.__voice_languages.get(secondary, "").lower().startswith("fr")
         rate, pitch, volume, boost = self.__rate, self.__pitch, self.__volume, self.__rate_boost
         langs = self.__voice_languages
 
@@ -110,7 +112,7 @@ rep('''    def speak(self, speechSequence):
                             log.error("Fasih: text pipeline failed", exc_info=True)
                             new = piece
                         for is_ar, chunk in _split_by_script(new):
-                            emit(primary if (is_ar or not secondary) else secondary, chunk)
+                            emit(primary, chunk) if is_ar else (emit(secondary, _fr(chunk) if fr_sec else chunk) if secondary else emit(primary, arabic_pipeline.latin_to_arabic(chunk)))
                         if cancel.is_set():
                             return
                         if has_text(cur[1]):
@@ -132,7 +134,7 @@ rep('''    def speak(self, speechSequence):
                         emit(primary, CharacterModeCommand(True))
                         continue
                     for is_ar, chunk in _split_by_script(new):
-                        emit(primary if (is_ar or not secondary) else secondary, chunk)
+                        emit(primary, chunk) if is_ar else (emit(secondary, _fr(chunk) if fr_sec else chunk) if secondary else emit(primary, arabic_pipeline.latin_to_arabic(chunk)))
                     continue
                 if isinstance(item, CharacterModeCommand):
                     char_mode = item.state
@@ -199,6 +201,15 @@ def _sentence_groups(text, size=200, most=400):
     return [p for p in out if p]
 
 
+def _fr(text):
+    try:
+        from . import fr_prep
+        return fr_prep.prepare(text)
+    except Exception:
+        log.error("Fasih: French front end failed", exc_info=True)
+        return text
+
+
 def _split_by_script(text):
     # (is_arabic, chunk) runs, after ClaritySynth. Spaces and punctuation ride with the current
     # run; marks (tashkeel) always belong to Arabic. A number placed between Arabic and Latin text
@@ -243,20 +254,26 @@ rep('''    def _get_availableVoices(self):
 
     def _secondary_profile(self):
         sv = getattr(self, "_secondary", "auto")
-        if sv == "none":
-            return ""
         if sv in self.__profiles and sv not in self._arabic_voices():
             return sv
-        # automatic (or a saved voice that is no longer installed): the first non-Arabic voice found
-        for p in self.__profiles:
-            if p not in self._arabic_voices():
-                return p
+        # automatic (or a saved voice that is no longer installed): a voice in NVDA's own language
+        # (French NVDA -> a French voice), then an English voice, then the first non-Arabic voice found
+        others = [p for p in self.__profiles if p not in self._arabic_voices()]
+        try:
+            ui = (languageHandler.getLanguage() or "").lower()[:2]
+        except Exception:
+            ui = ""
+        for want in (ui, "en"):
+            for p in others:
+                if want and want != "ar" and self.__voice_languages.get(p, "").lower()[:2] == want:
+                    return p
+        for p in others:
+            return p
         return ""
 
     def _get_availableSecondaryvoices(self):
         out = OrderedDict()
-        out["auto"] = StringParameterInfo("auto", "Automatic (first non-Arabic voice found)")
-        out["none"] = StringParameterInfo("none", "None (primary voice reads everything)")
+        out["auto"] = StringParameterInfo("auto", "Automatic (a voice in NVDA's language, else English)")
         for p in self.__profiles:
             if p not in self._arabic_voices():
                 out[p] = StringParameterInfo(p, "%s (%s)" % (p, self.__voice_languages[p]))
@@ -298,6 +315,16 @@ rep('''    supportedSettings = [
     ]''')
 rep('''class SynthDriver(SynthDriver):''', '''import time
 _reload_timer = None
+
+
+def _fasih_has_sharp():
+    """Sharpening variants are left out of the released add-on (they double its size); the
+    setting is shown only when a build from source included them."""
+    d = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "variants")
+    try:
+        return any(os.path.isfile(os.path.join(d, v, "sharp.patch")) for v in os.listdir(d))
+    except OSError:
+        return False
 _MIXED = [("auto", "Automatic: Latin text as written, by the secondary voice"),
           ("arabic", "Arabic first: numbers, symbols and Roman numerals in Arabic"),
           ("secondary", "Secondary voice first: numbers too")]
@@ -735,10 +762,21 @@ for _lit in ["&Secondary voice (for non-Arabic text)", "Clarity (postfilter)", "
              "Automatic: Latin text as written, by the secondary voice",
              "Arabic first: numbers, symbols and Roman numerals in Arabic",
              "Secondary voice first: numbers too",
-             "Automatic (first non-Arabic voice found)", "None (primary voice reads everything)"]:
+             "Automatic (a voice in NVDA's language, else English)"]:
     _q = '"%s"' % _lit
     assert _q in s, "string not found: " + _lit
     s = s.replace(_q, "_(%s)" % _q)
+_end = """
+    ]
+
+    supportedCommands = {"""
+assert s.count(_end) == 1, "end of settings list not found"
+s = s.replace(_end, """
+    ]
+    # Sharpening only when its variants were built in (they are left out of the released add-on)
+    supportedSettings = [st for st in supportedSettings if st.id != "sharpening" or _fasih_has_sharp()]
+
+    supportedCommands = {""")
 compile(s, dst, "exec")  # fail the build if the driver does not parse
 open(dst, "w", encoding="utf-8").write(s)
 print("patched driver written")

@@ -8,7 +8,7 @@ import numpy as np
 
 SR, FP_MS, ORDER, ALPHA = 24000, 5.0, 30, 0.466
 BANDS = [0, 1000, 2000, 4000, 6000, 8000, 10000, 12000]
-F0_MIN, F0_MAX = 60.0, 400.0
+F0_MIN, F0_MAX = float(os.environ.get("RHV_F0_MIN", 60)), float(os.environ.get("RHV_F0_MAX", 400))
 
 
 def write_bpf(path, taps=89):

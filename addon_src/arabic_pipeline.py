@@ -84,8 +84,39 @@ def _alif_fatha(text):
     return re.sub("([\u0628-\u064a])\u0627\u064e", "\\1\u064e\u0627", text)
 
 
+# invisible format characters (ZWNJ, ZWJ, zero-width space, direction marks, BOM, soft hyphen,
+# tatweel): the voice read them as breaks inside a word
+_INVISIBLE = re.compile("[\u00ad\u061c\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff]")
+_TATWEEL = "\u0640"
+# names said when the cursor lands on one of them alone (sent raw, they hung the engine)
+_INV_NAMES = {"\u200c": "مَانِعُ ٱلْوَصْل", "\u200d": "وَاصِل", "\u200b": "مَسَافَةٌ صِفْرِيَّة",
+              "\u200e": "عَلَامَةُ ٱلْيَسَار", "\u200f": "عَلَامَةُ ٱلْيَمِين", "\u061c": "عَلَامَةٌ عَرَبِيَّة",
+              "\u00ad": "شَرْطَةٌ مَخْفِيَّة", "\ufeff": "رَمْزٌ خَفِيّ", _TATWEEL: "تَطْوِيل"}
+
+
+def _clean_invisible(text):
+    """None if the text is only invisible characters / tatweel (then it is named or skipped)."""
+    s = text.strip()
+    if len(s) == 1 and (s in _INV_NAMES or _INVISIBLE.match(s)):
+        return _INV_NAMES.get(s, "رَمْزٌ خَفِيّ")
+    text = _INVISIBLE.sub("", text)
+    if _TATWEEL in text:
+        rest = text.replace(_TATWEEL, "")
+        # inside or next to words the tatweel is only stretching: dropped (Rawi never sees it);
+        # tatweels on their own are named
+        text = rest if rest.strip() else _INV_NAMES[_TATWEEL]
+    return text if text.strip() else " "
+
+
+def _alif_marks(text):
+    # a haraka on a bare alif (اُ، اِ، اْ، اّ) or on آ (which already holds its vowel) was read as an
+    # extra vowel or a stutter: the mark is dropped (the alif's fathatan, اً, stays)
+    text = re.sub("\u0627[\u064c-\u0652]+", "\u0627", text)
+    return re.sub("\u0622[\u064b-\u0652]+", "\u0622", text)
+
+
 def _tanween_post(text):
-    text = _alif_fatha(text)
+    text = _alif_marks(_alif_fatha(text))
     text = re.sub("\u0625[\u064e\u064f]", "\u0625\u0650", text)   # إ always takes kasra
     text = re.sub("(?<=\u064a\u0652)\u0643\u064e(?=\u0645)", "\u0643\u064f", text)  # عَلَيْكُم
     text = re.sub("(?<=\u064a\u0652)\u0647[\u064e\u064f](?=\u0645)", "\u0647\u0650", text)  # عَلَيْهِم
@@ -181,6 +212,13 @@ def process(text, diacritize=True, is_cancelled=None):
     from .pbt import pbt_textnorm as pt
     from .arabic import ar_prep
     char_request = not diacritize
+    if _INVISIBLE.search(text) or _TATWEEL in text:
+        new = _clean_invisible(text)
+        if new != text and not new.strip():
+            return new
+        if new in _INV_NAMES.values():
+            return _step(ar_prep.mark_wasl, new)
+        text = new
     out = _step(dm.apply_user_dictionary, text)
     out = _step(dm.apply_default_rules, out)
     # single characters (cursor movement, spelling): name them
@@ -228,7 +266,7 @@ def _arabic_core(out, diacritize, pt, ar_prep, is_cancelled=None):
     except Exception:
         pass
     if pt.is_pre_diacritized_spelling(out):
-        return _step(ar_prep.mark_wasl, out)
+        return _step(ar_prep.mark_wasl, _alif_marks(_alif_fatha(out)))
     out = _step(_tanween_pre, out)
     if diacritize and _boot():
         try:
@@ -248,3 +286,61 @@ def _arabic_core(out, diacritize, pt, ar_prep, is_cancelled=None):
         out = _step(ar_prep.pausal_ending, out)  # our own waqf (PBT's dropped teh marbuta)
         out = _step(_tanween_post, out)
     return _step(ar_prep.mark_wasl, out)
+
+
+# ---------------------------------------------------------------- Latin text without a secondary voice
+# Only used when no non-Arabic RHVoice voice is installed at all: the Arabic voice then reads Latin
+# text in a rough Arabic transliteration (fully vowelled, so it is spoken, not left silent or garbled).
+_FATHA, _KASRA, _DAMMA, _SUKUN = "َ", "ِ", "ُ", "ْ"
+_LAT_DI = {"sh": "ش", "ch": "تش", "th": "ث", "ph": "ف", "gh": "غ", "kh": "خ", "ck": "ك", "qu": "كو", "wh": "و"}
+_LAT_C = {"b": "ب", "c": "ك", "d": "د", "f": "ف", "g": "گ", "h": "ه", "j": "ج", "k": "ك", "l": "ل", "m": "م",
+          "n": "ن", "p": "پ", "q": "ك", "r": "ر", "s": "س", "t": "ت", "v": "ڤ", "w": "و", "x": "كْس", "z": "ز"}
+# vowel letter -> (harakah on the consonant before, long-vowel letter or "")
+_LAT_V = {"a": (_FATHA, "ا"), "e": (_KASRA, "ي"), "i": (_KASRA, "ي"), "o": (_DAMMA, "و"), "u": (_DAMMA, "و"),
+          "y": (_KASRA, "ي"), "à": (_FATHA, "ا"), "é": (_KASRA, "ي"), "è": (_KASRA, "ي"), "ê": (_KASRA, "ي")}
+_LAT_START = {_FATHA: "أَ", _KASRA: "إِ", _DAMMA: "أُ"}
+LATIN_NAMES = {"a": "إِيه", "b": "بِي", "c": "سِي", "d": "دِي", "e": "إِي", "f": "إِف", "g": "جِي", "h": "إِتْش",
+               "i": "آي", "j": "جِيه", "k": "كِيه", "l": "إِل", "m": "إِم", "n": "إِن", "o": "أُو", "p": "پِي",
+               "q": "كْيُو", "r": "آر", "s": "إِس", "t": "تِي", "u": "يُو", "v": "ڤِي", "w": "دَبْلْيُو", "x": "إِكْس",
+               "y": "وَاي", "z": "زِد"}
+
+
+def _latin_word(w):
+    if w.isupper() and 1 < len(w) <= 5:      # an acronym (NVDA, OK, PDF): letter by letter
+        return " ".join(LATIN_NAMES.get(c, "") for c in w.lower())
+    w = re.sub(r"(.)\1+", r"\1", w.lower())
+    if len(w) > 3 and w.endswith("e") and w[-2] not in "aeiouy":
+        w = w[:-1]                            # silent final e (file, make)
+    if len(w) == 1 and w in LATIN_NAMES:
+        return LATIN_NAMES[w]
+    out, i = [], 0
+    while i < len(w):
+        two = w[i:i + 2]
+        if two in _LAT_DI:
+            cons, i = _LAT_DI[two], i + 2
+        elif w[i] in _LAT_C:
+            cons, i = _LAT_C[w[i]], i + 1
+            if cons == "ك" and w[i - 1] == "c" and i < len(w) and w[i] in "eiy":
+                cons = "س"
+        elif w[i] in _LAT_V:
+            h, long_ = _LAT_V[w[i]]; i += 1
+            while i < len(w) and w[i] in _LAT_V:
+                i += 1                        # a vowel group is one vowel
+            out.append(_LAT_START[h] + (long_ if long_ != "ا" else "ا") if not out else long_)
+            continue
+        else:
+            i += 1; continue
+        # the consonant takes the vowel that follows it, or a sukun
+        if i < len(w) and w[i] in _LAT_V:
+            h, long_ = _LAT_V[w[i]]; i += 1
+            while i < len(w) and w[i] in _LAT_V:
+                i += 1
+            last = i >= len(w)
+            out.append(cons + h + (long_ if (last or len(w) <= 3) else ""))
+        else:
+            out.append(cons + _SUKUN)
+    return "".join(out)
+
+
+def latin_to_arabic(text):
+    return re.sub(r"[A-Za-zÀ-ÿ]+", lambda m: _latin_word(m.group(0)), text)

@@ -13,13 +13,16 @@ mkdir -p "$D/lib/x64" "$D/data/languages" "$D/data/voices" "$D/data/variants" "$
 
 # driver: RHVoice's official NVDA driver, patched for Fasih
 python3 "$HERE/patch_driver.py" "$T/rhvoice-nvda-driver/__init__.py" "$D/__init__.py"
-cp "$HERE/arabic_pipeline.py" "$HERE/loudness.py" "$D/"
+cp "$HERE/arabic_pipeline.py" "$HERE/loudness.py" "$REPO/scripts/fr_prep.py" "$D/"
 cp -r "$HERE/locale" "$B/"
+# Tools > Fasih > Download voices (catalogue of RHVoice Voice Manager, by Alexander Linkov)
+mkdir -p "$B/globalPlugins"; cp "$HERE/globalPlugins/fasihVoices.py" "$B/globalPlugins/"
 cp -r "$HERE/doc" "$B/"
 cp "$T/rhvoice-win-x64/RHVoice.dll" "$T/rhvoice-win-x64/libRHVoice_core.dll" "$D/lib/x64/"
 
 # languages and voices
 cp -r "$REPO/lang/Arabic" "$D/data/languages/"
+cp -r "$REPO/lang_fr/French" "$D/data/languages/"
 mkdir -p "$D/data/languages/English"; cp -r "$T/rhvoice-english/." "$D/data/languages/English/"
 for V in "$REPO"/voices/*/; do
   VN=$(basename "$V")
@@ -27,6 +30,8 @@ for V in "$REPO"/voices/*/; do
   cp "$V/voice.info" "$V/voice.params" "$D/data/voices/$VN/"
   cp "$V/24000/bpf.txt" "$D/data/voices/$VN/24000/"
   cp "$V"/variants/* "$D/data/variants/$VN/"
+  # Sharpening variants double the add-on's size: left out unless FASIH_SHARP=1 (they stay in the repository)
+  [ -n "${FASIH_SHARP:-}" ] || rm -f "$D/data/variants/$VN/sharp.patch"
   cp "$V/variants/base.data" "$D/data/voices/$VN/24000/voice.data"
 done
 mkdir -p "$D/data/voices/SLT"; cp -r "$T/rhvoice-slt/." "$D/data/voices/SLT/"
@@ -48,11 +53,11 @@ cp "$T/rawi/rawi_ensemble.onnx" "$T/rawi/vocab.json" "$D/arabic/lib/vowelizers/"
 
 cp "$REPO/README.md" "$B/"
 find "$B" -name "__pycache__" -prune -exec rm -rf {} +
-VOICES=$(ls "$REPO/voices" | paste -sd, - | sed 's/,/, /g')
+VOICES=$(for v in "$REPO"/voices/*/; do grep -q '^language=Arabic' "$v/voice.info" && basename "$v"; done | paste -sd, - | sed 's/,/, /g')
 cat > "$B/manifest.ini" <<EOF
 name = fasih
 summary = "Fasih (فصيح): Arabic RHVoice voices"
-description = """Fasih (فصيح): Arabic voices for the RHVoice engine ($VOICES). Non-neural speech synthesis (HTS models, WORLD vocoder) with neural diacritization (Rawi)."""
+description = """Fasih (فصيح): Arabic voices for the RHVoice engine ($VOICES), plus Elise, the first French RHVoice voice, as a secondary voice. Non-neural speech synthesis (HTS models, WORLD vocoder) with neural diacritization (Rawi)."""
 author = "Riad Assoum"
 url = https://github.com/riadassoum/Fasih
 version = $VER

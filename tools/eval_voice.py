@@ -10,6 +10,8 @@ import numpy as np, pyworld as pw, pysptk
 from numba import njit
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts"))
 from ar_prep import mark_wasl
+if os.environ.get("RHV_LANG") == "French":
+    from fr_prep import prepare as mark_wasl
 root, voice, hold = sys.argv[1:4]
 outdir = sys.argv[4] if len(sys.argv) > 4 else None
 lib = CDLL("/tmp/rhb2/src/lib/libRHVoice.so")

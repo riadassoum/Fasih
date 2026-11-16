@@ -1,5 +1,41 @@
 # Changelog
 
+## 1.2
+
+### Voices
+
+Fasih now has twelve Arabic voices and its first French one.
+
+- **Karim (male) and Rima (female)**, trained on about 4.8 hours each of the synthetic part of ArVoice (MBZUAI, CC BY 4.0), from Google's ar-XA-Wavenet-C and ar-XA-Wavenet-D voices.
+- **Lamees (female)**, a young voice trained on about 4.7 hours generated with Nabra-82M (oddadmix, Apache-2.0, a fine-tune of Kokoro-82M).
+- **Zayd (male)**, PlanetBlindTech's voice, adapted at their request: retrained with Fasih's recipe on their whole corpus of 10,023 clips (12.5 hours).
+- **Riad (male)**, my own voice. I gave a clip of my voice as the reference, and about 3.5 hours of my voice were generated from it with SILMA TTS (Apache-2.0) and trained like the other voices.
+- **Reem (female) and Aseel (male)**, trained by PlanetBlindTech with Fasih's recipe and added at their request: Reem on about 6.1 hours of synthetic speech from SILMA TTS, Aseel on about 12 hours made from the voice of Mr. Aseel Bashir, with his consent.
+- **Elise (female, French)**, the first French RHVoice voice, trained on the SIWIS French Speech Synthesis Database (9.2 hours of studio recordings, CC BY 4.0). It is a secondary voice: choose it under Secondary voice and Latin-script text is read in French.
+- **Every voice speaks at the same rate.** Sami, for example, spoke much more slowly than the others; all voices now speak at Jamal's pace, with pauses left as they were. NVDA's rate setting therefore means the same thing on every voice.
+- **Bass and tone brought closer together.** Each voice except Riad gets a gentle correction (at most about 4 dB) towards the average of the voices of its gender, so switching voices no longer changes the sound so much, and the loudness of every voice is matched again afterwards.
+- **The name of God (الله) is pronounced with a heavy lam** after a or u (وَاللَّهُ، قَالَ اللَّهُ) and a light one after i (بِسْمِ اللَّهِ) in every voice.
+- **Sharpening is no longer in the add-on,** to keep it small. The setting comes back when the voices are written again from their training output with `FASIH_SHARP=1` (`addon_src/build_addon.sh`).
+
+### French
+
+- **A French language for RHVoice**: a pronunciation lexicon of about 241,000 words (ipa-dict, MIT) with spelling rules for words it lacks, elided words joined to the next word (l'ami, jusqu'à), numbers read in full up to the billions (soixante-dix, quatre-vingts, vingt et un), syllables and stress. It works in RHVoice itself, outside Fasih too.
+- **Liaison** when Elise reads inside Fasih: after determiners, pronouns, prepositions and common adverbs (les‿amis, mon‿ami, chez‿eux, très‿important), in chains (c'est‿un‿honneur), before a mute h (un‿honneur, deux‿hommes), after plural adjectives (de petits‿enfants), in inversions (dit-‿il, vont-‿ils, allons-‿y) and in numbers (vingt‿et‿un, vingt-‿et-une heures, cent‿ans, neuf heures read with a v); never before an aspirated h (les héros) or after et.
+- **Numbers, times and ordinals in words** for Elise: 21 heures and 21h30 (vingt et une heures, with une before feminine nouns), 1er, 2e, 21e (premier, deuxième, vingt et unième), decimals (3,5) and 1 000; common abbreviations (M., Mme, etc.) too.
+- **Automatic secondary voice follows NVDA's language**: with NVDA in French, Latin text is read by Elise instead of the English voice (in 1.1 French menus and messages were read by the English voice, or by the Arabic voice when the secondary voice was off, and were unintelligible); otherwise an English voice is preferred.
+- **The secondary voice can no longer be turned off.** A saved None becomes Automatic. If no other voice is installed at all, the Arabic voice reads Latin text in a rough Arabic transliteration, with acronyms spelled out (NVDA, PDF), instead of falling silent or garbling it.
+
+### Arabic text
+
+- **Tatweel** (ـ) is dropped inside a word before diacritization, so مـحـمـد is read محمد, and named تَطْوِيل when it is alone.
+- **Invisible characters no longer freeze the voice.** The zero-width non-joiner, zero-width joiner, zero-width space, direction marks, BOM and soft hyphen sent alone to the engine made it hang for about 20 seconds while moving by character. Inside text they are removed; alone they are named (مَانِعُ ٱلْوَصْل، عَلَامَةُ ٱلْيَمِين...).
+- **A haraka written on a bare alif or on آ** (اُ، اِ، اْ، آَ) is dropped, so it is no longer read as an extra vowel or a stutter. The fathatan of كِتَاباً is kept.
+- **A final ي after an unvowelled letter** gets its kasra (في الدانمارك is read فِي ٱلدَّانِمَارْك, not as if the ي were a consonant).
+
+### Add-on
+
+- **Download more voices from NVDA's Tools menu** (Fasih > Download voices): every RHVoice voice published for Alexander Linkov's RHVoice Voice Manager, by language, with a real progress window (size, speed, time elapsed and remaining, Cancel) and a checksum check. Voices are installed as standard RHVoice voice add-ons, the same ones the Voice Manager installs, and become available as secondary voices after NVDA restarts.
+
 ## 1.1
 
 ### Voices
