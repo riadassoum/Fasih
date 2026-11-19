@@ -40,6 +40,9 @@ except NameError:
 	def _(text):
 		return text
 
+# Fasih's own voices beyond the ones bundled (Riad, Aseel, Elise): one zip each, attached to the
+# "voices" release of the Fasih repository, listed in voices.json there
+FASIH_URL = "https://github.com/riadassoum/Fasih/releases/download/voices/voices.json"
 PKG_VERSION = "1.18"
 PKG_URL = "https://rhvoice.kvark.crazedns.ru/packages-{version}.json"
 NVDA_ADDON_BUILD_NUMBER = "12"
@@ -116,6 +119,48 @@ class VoiceBundle(addonHandler.AddonBundle):
 
 	def __repr__(self):
 		return "RHVoice %s, %s voice" % (self._voice["name"], self._lang["name"])
+
+
+class FasihVoiceBundle(addonHandler.AddonBundle):
+	"""A Fasih voice pack as an NVDA add-on (RHVoice-voice-fasih-<id>): data/ is the voice for the
+	engine, variants/ the files Fasih's quality settings are built from (Fasih writes voice.data
+	from them when NVDA starts)."""
+
+	def __init__(self, voice):
+		self._installExceptions = []
+		self._voice = voice
+		self.files = {}
+		self._conf = ConfigObj(configspec=addonHandler.AddonManifest.configspec, encoding="utf-8", default_encoding="utf-8")
+		self._conf["name"] = "RHVoice-voice-fasih-%s" % voice["id"]
+		self._conf["summary"] = "Fasih %s (Arabic voice)" % voice["name"]
+		self._conf["description"] = voice.get("description", self._conf["summary"])
+		self._conf["author"] = voice.get("author", "Riad Assoum")
+		self._conf["version"] = voice["version"]
+		self._conf["minimumNVDAVersion"] = "2026.1.0"
+		self._conf["lastTestedNVDAVersion"] = "2099.4.0"
+		buf = BytesIO()
+		self._conf.write(outfile=buf)
+		buf.seek(0)
+		self._manifest = addonHandler.AddonManifest(buf)
+
+	@property
+	def assets(self):
+		return [("pack", self._voice)]
+
+	def extract(self, addonPath=None):
+		path = Path(self.pendingInstallPath)
+		path.mkdir(parents=True, exist_ok=True)
+		with open(path.joinpath(addonHandler.MANIFEST_FILENAME), "wb") as f:
+			self._conf.write(outfile=f)
+		with zipfile.ZipFile(self.files["pack"], "r") as z:
+			z.extractall(path)
+
+	@property
+	def manifest(self):
+		return self._manifest
+
+	def __repr__(self):
+		return "Fasih %s" % self._voice["name"]
 
 
 class _Downloader(threading.Thread):
@@ -263,12 +308,14 @@ class VoicesDialog(wx.Dialog):
 		self.restart = False
 		langs = pkgData.get("languages", [])
 		ui = (languageHandler.getLanguage() or "").split("_")[0]
+		if langs and langs[0].get("fasih") and ui not in [l.get("lang2code") for l in langs[1:]]:
+			ui = "ar"                      # NVDA in a language without voices: Fasih's own first
 		defIndex = next((i for i, l in enumerate(langs) if l.get("lang2code") == ui), 0)
 		if not any(l.get("lang2code") == ui for l in langs):
 			defIndex = next((i for i, l in enumerate(langs) if l.get("lang2code") == "en"), 0)
 		sizer = wx.BoxSizer(wx.VERTICAL)
 		sizer.Add(wx.StaticText(self, label=_("&Language:")), flag=wx.LEFT | wx.TOP, border=8)
-		self.langChoice = wx.Choice(self, choices=[LANG_LABELS.get(l.get("lang2code"), l.get("name", "?")) for l in langs])
+		self.langChoice = wx.Choice(self, choices=[(_("Arabic: Fasih voices") if l.get("fasih") else LANG_LABELS.get(l.get("lang2code"), l.get("name", "?"))) for l in langs])
 		self.langChoice.SetSelection(defIndex)
 		self.langChoice.Bind(wx.EVT_CHOICE, lambda e: self.refresh())
 		sizer.Add(self.langChoice, flag=wx.EXPAND | wx.ALL, border=8)
@@ -303,13 +350,17 @@ class VoicesDialog(wx.Dialog):
 		self.voiceList.DeleteAllItems()
 		self.bundles = []
 		for voice in lang.get("voices", []):
-			b = VoiceBundle(lang, voice)
+			b = FasihVoiceBundle(voice) if lang.get("fasih") else VoiceBundle(lang, voice)
 			self.bundles.append(b)
 			if b.isInstalled:
 				status = _("Will be removed after restart") if b.isPendingRemove else _("Installed")
 			else:
 				status = _("Will be installed after restart") if b.isPendingInstall else _("Not installed")
-			self.voiceList.Append((voice["name"], status, b.version))
+			label = voice["name"]
+			if lang.get("fasih"):
+				label = "%s (%s)" % (voice.get("name_ar", voice["name"]) if (languageHandler.getLanguage() or "").startswith("ar") else voice["name"],
+					_("female") if voice.get("gender") == "female" else _("male"))
+			self.voiceList.Append((label, status, b.version))
 		if self.bundles:
 			self.voiceList.Select(select)
 			self.voiceList.Focus(select)
@@ -362,7 +413,9 @@ class VoicesDialog(wx.Dialog):
 			messageBox(_("The voice could not be installed."), _("Error"), style=wx.OK | wx.ICON_ERROR, parent=self)
 			return
 		self.restart = True
-		messageBox(_("{voice} is installed. It will be available after NVDA restarts, as a secondary voice in Fasih.").format(voice=bundle._voice["name"]),
+		msg = (_("{voice} is installed. It will be available after NVDA restarts, among Fasih's voices.") if isinstance(bundle, FasihVoiceBundle)
+			else _("{voice} is installed. It will be available after NVDA restarts, as a secondary voice in Fasih."))
+		messageBox(msg.format(voice=bundle._voice["name"]),
 			_("Voice installed"), style=wx.OK | wx.ICON_INFORMATION, parent=self)
 		self.refresh(i)
 		self.voiceList.SetFocus()
@@ -423,11 +476,18 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 	def onVoices(self, evt=None):
 		import systemUtils
 		def fetch():
+			langs = []
 			try:
-				return _catalogue()
+				fv = requests.get(FASIH_URL, timeout=TIMEOUT).json()
+				if fv.get("voices"):
+					langs.append({"lang2code": "ar", "name": "Arabic (Fasih)", "fasih": True, "voices": fv["voices"]})
+			except Exception:
+				log.error("Fasih: Fasih voice list unavailable", exc_info=True)
+			try:
+				langs += _catalogue().get("languages", [])
 			except Exception:
 				log.error("Fasih: voice catalogue unavailable", exc_info=True)
-				return None
+			return {"languages": langs} if langs else None
 		progress = gui.IndeterminateProgressDialog(gui.mainFrame, _("Fasih"), _("Getting the list of voices..."))
 		try:
 			data = systemUtils.ExecAndPump(fetch).funcRes

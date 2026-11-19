@@ -27,7 +27,11 @@ rep('''    def __get_resource_paths(self):
         # official RHVoice voice add-ons (e.g. via RHVoice Voice Manager) are added here
         return [''')
 rep('''        init_params = RHVoice_init_params(
-            None,''', '''        init_params = RHVoice_init_params(
+            None,''', '''        try:
+            _apply_quality(_quality_state(), packs_only=True)   # packs installed since the last start
+        except Exception:
+            log.error("Fasih: cannot prepare the voice packs", exc_info=True)
+        init_params = RHVoice_init_params(
             data_dir.encode("utf-8"),''')
 # Arabic preprocessing runs on the TTS worker thread, never on NVDA's main thread.
 # Language switching follows ClaritySynth: the text is split by script; Arabic runs
@@ -181,7 +185,7 @@ rep('''        if self.__profile is None:
             self.__profile = self.__profiles[0]''', '''        self.__profiles = [p for p in self.__profiles if "+" not in p]
         ar = self._arabic_voices()
         if self.__profile not in ar:
-            self.__profile = "Jamal" if "Jamal" in ar else (ar[0] if ar else self.__profiles[0])
+            self.__profile = next((v for v in ("Riad", "Aseel", "Jamal") if v in ar), ar[0] if ar else self.__profiles[0])
         if not hasattr(self, "_secondary"):
             self._secondary = "auto"''')
 rep('''class SynthDriver(SynthDriver):''', '''_AR_RANGES = ((0x0600, 0x06FF), (0x0750, 0x077F), (0x08A0, 0x08FF), (0xFB50, 0xFDFF), (0xFE70, 0xFEFF))
@@ -439,64 +443,101 @@ def _quality_file_state():
     return st
 
 
-def _apply_quality(st):
-    """Write the voice files for these settings. Returns True if anything changed."""
-    if st == _quality_file_state():
-        return False
+def _stamp(st):
+    return ("clarity=%d\\nbreathiness=%s\\nsharpening=%d\\nrepair=%d\\nms=%d\\n" % (st["clarity"], st["breathiness"], 1 if st["sharpening"] else 0, 1 if st.get("repair") else 0, 1 if st.get("ms", True) else 0)).encode()
+
+
+def _voice_dirs():
+    """(name, voice dir, variants dir, is_pack): the bundled voices, then the Fasih voice packs
+    installed from Tools > Fasih > Download voices (add-ons named RHVoice-voice-fasih-*)."""
     vdir = os.path.join(data_dir, "voices")
-    beta = st["clarity"] * 0.6 / 100.0
     for name in os.listdir(vdir):
-        vd = os.path.join(vdir, name)
-        vdir2 = os.path.join(data_dir, "variants", name)
-        var = os.path.join(vdir2, "base.data")
-        if not os.path.isfile(var):
-            continue                      # e.g. the English voice keeps its own files
-        with open(var, "rb") as f:
-            b = bytearray(f.read())
-        patches = []
-        if st["breathiness"] != "b0":
-            patches.append(st["breathiness"] + ".patch")
-        if st["sharpening"]:
-            patches.append("sharp.patch")
-        if st.get("repair"):
-            patches.append("repair.patch")      # last: it also covers spectra Sharpening changed
-        for pn in patches:
-            pf = os.path.join(vdir2, pn)
-            if not os.path.isfile(pf):
-                continue
-            with open(pf, "rb") as f:
-                pd = f.read()
-            if pd[:4] != b"FPAT":
-                continue
-            (cnt,) = struct.unpack_from("<I", pd, 4)
-            pos = 8
-            for _i in range(cnt):
-                off, ln = struct.unpack_from("<QI", pd, pos)
-                pos += 12
-                b[off:off + ln] = pd[pos:pos + ln]
-                pos += ln
-        # every file is replaced in one step: never a half-written voice
-        _atomic_write(os.path.join(vd, "24000", "voice.data"), bytes(b))
-        gain = 0.7
-        try:
-            with open(os.path.join(data_dir, "variants", name, "gain.txt")) as gf:
-                gain = float(gf.read().strip())
-        except Exception:
-            pass
-        _atomic_write(os.path.join(vd, "voice.params"), ("beta=%.3f\\ngain=%.3f\\n" % (beta, gain)).encode())
-        # modulation postfilter: the engine applies ms_gain.txt when it sits next to voice.data
-        msrc = os.path.join(vdir2, "ms_gain.txt")
-        mdst = os.path.join(vd, "24000", "ms_gain.txt")
-        try:
-            if st.get("ms", True) and os.path.isfile(msrc):
-                with open(msrc, "rb") as f:
-                    _atomic_write(mdst, f.read())
-            elif os.path.exists(mdst):
-                os.remove(mdst)
-        except OSError:
-            log.error("Fasih: cannot update the modulation postfilter of %s" % name, exc_info=True)
-    _atomic_write(os.path.join(data_dir, "quality.txt"), ("clarity=%d\\nbreathiness=%s\\nsharpening=%d\\nrepair=%d\\nms=%d\\n" % (st["clarity"], st["breathiness"], 1 if st["sharpening"] else 0, 1 if st.get("repair") else 0, 1 if st.get("ms", True) else 0)).encode())
+        yield name, os.path.join(vdir, name), os.path.join(data_dir, "variants", name), False
+    try:
+        for addon in addonHandler.getRunningAddons():
+            if addon.name.lower().startswith("rhvoice-voice-fasih-"):
+                yield addon.name, os.path.join(addon.path, "data"), os.path.join(addon.path, "variants"), True
+    except Exception:
+        log.error("Fasih: cannot list the voice packs", exc_info=True)
+
+
+def _write_voice(st, name, vd, vdir2):
+    var = os.path.join(vdir2, "base.data")
+    if not os.path.isfile(var):
+        return False                      # e.g. the English voice keeps its own files
+    beta = st["clarity"] * 0.6 / 100.0
+    with open(var, "rb") as f:
+        b = bytearray(f.read())
+    patches = []
+    if st["breathiness"] != "b0":
+        patches.append(st["breathiness"] + ".patch")
+    if st["sharpening"]:
+        patches.append("sharp.patch")
+    if st.get("repair"):
+        patches.append("repair.patch")      # last: it also covers spectra Sharpening changed
+    for pn in patches:
+        pf = os.path.join(vdir2, pn)
+        if not os.path.isfile(pf):
+            continue
+        with open(pf, "rb") as f:
+            pd = f.read()
+        if pd[:4] != b"FPAT":
+            continue
+        (cnt,) = struct.unpack_from("<I", pd, 4)
+        pos = 8
+        for _i in range(cnt):
+            off, ln = struct.unpack_from("<QI", pd, pos)
+            pos += 12
+            b[off:off + ln] = pd[pos:pos + ln]
+            pos += ln
+    os.makedirs(os.path.join(vd, "24000"), exist_ok=True)
+    # every file is replaced in one step: never a half-written voice
+    _atomic_write(os.path.join(vd, "24000", "voice.data"), bytes(b))
+    gain = 0.7
+    try:
+        with open(os.path.join(vdir2, "gain.txt")) as gf:
+            gain = float(gf.read().strip())
+    except Exception:
+        pass
+    _atomic_write(os.path.join(vd, "voice.params"), ("beta=%.3f\\ngain=%.3f\\n" % (beta, gain)).encode())
+    # modulation postfilter: the engine applies ms_gain.txt when it sits next to voice.data
+    msrc = os.path.join(vdir2, "ms_gain.txt")
+    mdst = os.path.join(vd, "24000", "ms_gain.txt")
+    try:
+        if st.get("ms", True) and os.path.isfile(msrc):
+            with open(msrc, "rb") as f:
+                _atomic_write(mdst, f.read())
+        elif os.path.exists(mdst):
+            os.remove(mdst)
+    except OSError:
+        log.error("Fasih: cannot update the modulation postfilter of %s" % name, exc_info=True)
+    _atomic_write(os.path.join(vdir2, "quality.txt"), _stamp(st))
     return True
+
+
+def _pack_state_ok(st, vd, vdir2):
+    try:
+        with open(os.path.join(vdir2, "quality.txt"), "rb") as f:
+            return f.read() == _stamp(st) and os.path.isfile(os.path.join(vd, "24000", "voice.data"))
+    except OSError:
+        return False
+
+
+def _apply_quality(st, packs_only=False):
+    """Write the voice files for these settings. Each voice pack is checked against its own
+    stamp, so a pack installed later gets the current settings. True if anything changed."""
+    core = not packs_only and st != _quality_file_state()
+    changed = False
+    for name, vd, vdir2, is_pack in _voice_dirs():
+        if is_pack:
+            if not _pack_state_ok(st, vd, vdir2):
+                changed = _write_voice(st, name, vd, vdir2) or changed
+        elif core:
+            changed = _write_voice(st, name, vd, vdir2) or changed
+    if core:
+        _atomic_write(os.path.join(data_dir, "quality.txt"), _stamp(st))
+        changed = True
+    return changed
 
 
 class SynthDriver(SynthDriver):''')

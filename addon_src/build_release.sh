@@ -24,8 +24,12 @@ cp "$T/rhvoice-win-x64/RHVoice.dll" "$T/rhvoice-win-x64/libRHVoice_core.dll" "$D
 cp -r "$REPO/lang/Arabic" "$D/data/languages/"
 cp -r "$REPO/lang_fr/French" "$D/data/languages/"
 mkdir -p "$D/data/languages/English"; cp -r "$T/rhvoice-english/." "$D/data/languages/English/"
+# the add-on carries the core voices; the others are voice packs (tools/make_packs.py) that
+# Tools > Fasih > Download voices installs. FASIH_ALL=1 puts every voice in the add-on.
+CORE=${FASIH_CORE:-Riad Aseel Elise}
 for V in "$REPO"/voices/*/; do
   VN=$(basename "$V")
+  if [ -z "${FASIH_ALL:-}" ]; then case " $CORE " in *" $VN "*) ;; *) continue;; esac; fi
   mkdir -p "$D/data/voices/$VN/24000" "$D/data/variants/$VN"
   cp "$V/voice.info" "$V/voice.params" "$D/data/voices/$VN/"
   cp "$V/24000/bpf.txt" "$D/data/voices/$VN/24000/"
@@ -55,11 +59,11 @@ cp "$T/rawi/rawi_ensemble.onnx" "$T/rawi/vocab.json" "$D/arabic/lib/vowelizers/"
 
 cp "$REPO/README.md" "$B/"
 find "$B" -name "__pycache__" -prune -exec rm -rf {} +
-VOICES=$(for v in "$REPO"/voices/*/; do grep -q '^language=Arabic' "$v/voice.info" && basename "$v"; done | paste -sd, - | sed 's/,/, /g')
+VOICES=$(for v in "$D"/data/voices/*/; do if grep -q '^language=Arabic' "$v/voice.info"; then basename "$v"; fi; done | paste -sd, - | sed 's/,/, /g')
 cat > "$B/manifest.ini" <<EOF
 name = fasih
 summary = "Fasih (فصيح): Arabic RHVoice voices"
-description = """Fasih (فصيح): Arabic voices for the RHVoice engine ($VOICES), plus Elise, the first French RHVoice voice, as a secondary voice. Non-neural speech synthesis (HTS models, WORLD vocoder) with neural diacritization (Rawi)."""
+description = """Fasih (فصيح): Arabic voices for the RHVoice engine ($VOICES), plus Elise, the first French RHVoice voice, as a secondary voice; ten more Arabic voices can be downloaded from Tools > Fasih > Download voices. Non-neural speech synthesis (HTS models, WORLD vocoder) with neural diacritization (Rawi)."""
 author = "Riad Assoum"
 url = https://github.com/riadassoum/Fasih
 version = $VER

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Smaller add-on, voices on demand.** The add-on now carries Riad and Aseel (Riad is the default voice), the English voice SLT and the French voice Elise. The ten other Arabic voices (Jamal, Nour, Sami, Faris, Huda, Karim, Rima, Lamees, Zayd and Reem) are installed from Tools > Fasih > Download voices > "Arabic: Fasih voices", each as its own small add-on that NVDA keeps across Fasih updates and that follows Fasih's settings. If you used one of them, install it again after updating; until then Fasih speaks with Riad.
 - **Modulation postfilter** (on by default; a new setting turns it off): HMM voices change their sound too smoothly from moment to moment, which makes them a little muffled. Fasih now restores part of the natural movement measured in each voice's recordings (the time-invariant modulation spectrum postfilter of Takamichi et al., at half strength). Pitch, timing and loudness are unchanged; voices whose recordings are no longer available (Lamees, Riad, Reem, Aseel) use the average of the others.
 - **Riad** now has the same gentle tone correction as the other voices, with his pitch unchanged.
 - **Text in a marked language goes to a voice of that language.** When a web page or document marks a passage as French, English or another language (and NVDA's automatic language switching is on), that passage is read by an installed voice of that language; without such a mark, or without such a voice, the secondary voice reads it as before.

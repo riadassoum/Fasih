@@ -271,3 +271,17 @@ msgstr "تعذّر جلب قائمة الأصوات. تحقق من اتصالك 
 
 msgid "Modulation postfilter (livelier, less muffled)"
 msgstr "مرشّح التعديل (صوت أكثر حيوية وأقل كتمانًا)"
+
+msgid "Arabic: Fasih voices"
+msgstr "العربية: أصوات فصيح"
+
+msgid "female"
+msgstr "نسائي"
+
+msgid "male"
+msgstr "رجالي"
+
+msgid ""
+"{voice} is installed. It will be available after NVDA restarts, among "
+"Fasih's voices."
+msgstr "ثُبِّت {voice}، وسيكون متاحًا بين أصوات فصيح بعد إعادة تشغيل NVDA."
