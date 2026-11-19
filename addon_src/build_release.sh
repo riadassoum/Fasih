@@ -40,9 +40,9 @@ for V in "$REPO"/voices/*/; do
   # modulation postfilter, on by default (the Modulation postfilter setting removes it)
   [ -s "$V/variants/ms_gain.txt" ] && cp "$V/variants/ms_gain.txt" "$D/data/voices/$VN/24000/"
 done
-mkdir -p "$D/data/voices/SLT"; cp -r "$T/rhvoice-slt/." "$D/data/voices/SLT/"
-sed -i 's/^gain=.*/gain=0.5/' "$D/data/voices/SLT/voice.params"
-grep -q '^gain=' "$D/data/voices/SLT/voice.params" || echo "gain=0.5" >> "$D/data/voices/SLT/voice.params"
+mkdir -p "$D/data/voices/Bdl"; cp -r "$T/rhvoice-bdl/." "$D/data/voices/Bdl/"
+sed -i 's/^gain=.*/gain=0.6/' "$D/data/voices/Bdl/voice.params"
+grep -q '^gain=' "$D/data/voices/Bdl/voice.params" || echo "gain=0.6" >> "$D/data/voices/Bdl/voice.params"
 printf 'clarity=50\nbreathiness=b0\nsharpening=0\nrepair=0\nms=1\n' > "$D/data/quality.txt"
 
 # Arabic text pipeline: ClaritySynth modules (Riad Assoum) with Fasih's patches, PBT components

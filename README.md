@@ -6,7 +6,7 @@ Developer: Riad Assoum ([github.com/riadassoum](https://github.com/riadassoum)).
 
 ## The voices
 
-The add-on comes with Riad and Aseel, the English voice SLT and the French voice Elise. The other ten Arabic voices are voice packs: in NVDA's Tools menu, choose Fasih > Download voices, then "Arabic: Fasih voices", and install the ones you want (they become available after NVDA restarts). This keeps the add-on small.
+The add-on comes with Riad and Aseel, the English voice Bdl and the French voice Elise. The other ten Arabic voices are voice packs: in NVDA's Tools menu, choose Fasih > Download voices, then "Arabic: Fasih voices", and install the ones you want (they become available after NVDA restarts). This keeps the add-on small.
 
 All the Arabic voices speak at the same pace and the same loudness, and voices of the same gender have been brought close in bass and tone, so you can switch between them without readjusting NVDA.
 
@@ -28,7 +28,7 @@ Known limits: Jamal reads in a Classical style; the voices trained on synthetic 
 
 ## Arabic with English or French
 
-Each piece of text is split by script, the way I do it in ClaritySynth. Arabic goes to the Arabic voice you choose, and everything else goes to the secondary voice. By default the secondary voice is chosen automatically: a voice in NVDA's own language if there is one (Elise when NVDA is in French), otherwise an English voice (the bundled SLT), otherwise the first non-Arabic RHVoice voice found. When a web page or document marks a passage with its language and NVDA's automatic language switching is on, that passage is read by an installed voice of that language. Choose Elise as the secondary voice to have Latin text read in French; Fasih then adds the liaisons (les‿amis, c'est‿un) and expands common abbreviations for her. Voices installed with Kvark's RHVoice Voice Manager are picked up too. The Arabic and English voices are matched in loudness, so switching between them doesn't jump in volume, and the output is about as loud as other screen-reader voices: a look-ahead limiter lowers the gain on the loudest peaks instead of clipping them.
+Each piece of text is split by script, the way I do it in ClaritySynth. Arabic goes to the Arabic voice you choose, and everything else goes to the secondary voice. By default the secondary voice is chosen automatically: a voice in NVDA's own language if there is one (Elise when NVDA is in French), otherwise an English voice (the bundled Bdl), otherwise the first non-Arabic RHVoice voice found. When a web page or document marks a passage with its language and NVDA's automatic language switching is on, that passage is read by an installed voice of that language. Choose Elise as the secondary voice to have Latin text read in French; Fasih then adds the liaisons (les‿amis, c'est‿un) and expands common abbreviations for her. Voices installed with Kvark's RHVoice Voice Manager are picked up too. The Arabic and English voices are matched in loudness, so switching between them doesn't jump in volume, and the output is about as loud as other screen-reader voices: a look-ahead limiter lowers the gain on the loudest peaks instead of clipping them.
 
 ## More voices
 
@@ -79,7 +79,7 @@ Put a file called `user-dic.json` in `%APPDATA%\nvda\Fasih-config\`. It is a lis
 - `scripts/`: corpus download, WORLD feature extraction, alignment, labels and training (`run_voice.sh`), and `fr_prep.py`, the French front end (liaison, abbreviations). The corpora themselves are not included; the scripts download them from their original sources.
 - `engine/`: `rhvoice-world-vocoder.patch` for RHVoice (at the commit in `RHVOICE_BASE_COMMIT`) and the WORLD sources to copy into `src/core/world/`. I cross-built the Windows DLLs with zig.
 - `addon_src/`: the NVDA driver patches, the voice downloader (`globalPlugins/fasihVoices.py`), the Arabic text pipeline and the Rawi helper (`rawi_host/`, C source and Windows build). `build_release.sh VERSION` builds the add-on from a clean checkout of this repository with nothing else installed but bash, python3 and zip. `build_addon.sh` is the development build, which writes the voices from training output.
-- `third_party/`: what the release build packages from other projects: RHVoice's NVDA driver and Windows libraries (built from source with the WORLD patch), RHVoice's English language and the SLT voice, ClaritySynth's Arabic modules, ONNX Runtime and the Rawi model.
+- `third_party/`: what the release build packages from other projects: RHVoice's NVDA driver and Windows libraries (built from source with the WORLD patch), RHVoice's English language and the Bdl voice, ClaritySynth's Arabic modules, ONNX Runtime and the Rawi model.
 - `tools/make_packs.py`: builds the voice packs and their list (`voices.json`) for the "voices" release.
 - `tools/`: the training stages (`new_voice.sh`), calibration, `freeze_stats.py`, and `hts_edit.py` / `prebuilt.py`, which match a voice delivered already built.
 - `tests/test_arabic.py`: Arabic regression tests (waqf, hamzat al-wasl, helping vowels, merging your own harakat, script splitting, and the full pipeline when Rawi is available).

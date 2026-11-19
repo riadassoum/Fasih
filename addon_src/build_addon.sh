@@ -72,13 +72,13 @@ for spec in $PREBUILT; do
   printf 'beta=0.300\ngain=0.7\n' > "$D/data/voices/$VN/voice.params"
 done
 printf 'clarity=50\nbreathiness=b0\nsharpening=0\nrepair=0\n' > "$D/data/quality.txt"
-# English (RHVoice language data, LGPL) + SLT voice (CMU license), 24 kHz only
-mkdir -p "$D/data/languages/English" "$D/data/voices/SLT"
+# English (RHVoice language data, LGPL) + Bdl voice (CMU license), 24 kHz only
+mkdir -p "$D/data/languages/English" "$D/data/voices/Bdl"
 cp /tmp/rh_English/* "$D/data/languages/English/" 2>/dev/null || true
-cp /tmp/rh_slt-eng/voice.info /tmp/rh_slt-eng/voice.params /tmp/rh_slt-eng/README.md "$D/data/voices/SLT/"
-cp -r /tmp/rh_slt-eng/24000 "$D/data/voices/SLT/"
+cp /tmp/rh_bdl-eng/voice.info /tmp/rh_bdl-eng/voice.params /tmp/rh_bdl-eng/README.md "$D/data/voices/Bdl/"
+cp -r /tmp/rh_bdl-eng/24000 "$D/data/voices/Bdl/"
 # loudness matched to the Arabic voices (RHVoice's lowest allowed gain is 0.5)
-sed -i 's/^gain=.*/gain=0.5/' "$D/data/voices/SLT/voice.params"; grep -q '^gain=' "$D/data/voices/SLT/voice.params" || echo "gain=0.5" >> "$D/data/voices/SLT/voice.params"
+sed -i 's/^gain=.*/gain=0.6/' "$D/data/voices/Bdl/voice.params"; grep -q '^gain=' "$D/data/voices/Bdl/voice.params" || echo "gain=0.6" >> "$D/data/voices/Bdl/voice.params"
 # Arabic text pipeline (from ClaritySynth, by Riad Assoum) + our wasl marker
 for f in ar_tashkeel.py ar_g2p.py ar_textnorm.py _libboot.py data_paths.py ort_config.py thread_calibration.py; do cp "$CS/$f" "$D/arabic/"; done
 cp -r "$CS/lib_pure" "$D/arabic/"

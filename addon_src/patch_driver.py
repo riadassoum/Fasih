@@ -180,7 +180,7 @@ rep('''    def speak(self, speechSequence):
 rep('''        log.info("Using RHVoice version {}".format(self.__lib.RHVoice_get_version().decode()))''',
     '''        log.info("Using RHVoice version {}".format(self.__lib.RHVoice_get_version().decode()))
         arabic_pipeline.preload()''')
-# Primary voice = an Arabic voice; secondary voice = any non-Arabic voice (default SLT)
+# Primary voice = an Arabic voice; secondary voice = any non-Arabic voice (default Bdl)
 rep('''        if self.__profile is None:
             self.__profile = self.__profiles[0]''', '''        self.__profiles = [p for p in self.__profiles if "+" not in p]
         ar = self._arabic_voices()
@@ -291,6 +291,7 @@ rep('''    def _get_availableVoices(self):
         # automatic (or a saved voice that is no longer installed): a voice in NVDA's own language
         # (French NVDA -> a French voice), then an English voice, then the first non-Arabic voice found
         others = [p for p in self.__profiles if p not in self._arabic_voices()]
+        others.sort(key=lambda p: p != "Bdl")      # the English voice that comes with Fasih first
         try:
             ui = (languageHandler.getLanguage() or "").lower()[:2]
         except Exception:
