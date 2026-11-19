@@ -94,21 +94,48 @@ def _ordinal(n):
     return w + "ième"
 
 
+def _digits(s):
+    return " ".join(_U[int(c)] for c in s)
+
+
+def _decimal(whole, frac):
+    """3,05 -> trois virgule zéro cinq: the zeros after the comma are read; a long fraction digit by digit."""
+    w = number_words(int(whole)) if len(whole) <= 12 else _digits(whole)
+    zeros = len(frac) - len(frac.lstrip("0"))
+    rest = frac[zeros:]
+    parts = ["zéro"] * zeros
+    if rest:
+        parts.append(number_words(int(rest)) if len(rest) <= 3 else _digits(rest))
+    return w + " virgule " + " ".join(parts)
+
+
 def _numbers(text):
     text = re.sub(r"\b(\d{1,2})\s?h\s?(\d{2})\b", lambda m: f"{m.group(1)} heures {m.group(2)}", text)
     text = re.sub(r"\b1(er|re|ère)\b", lambda m: "premier" if m.group(1) == "er" else "première", text)
-    text = re.sub(r"\b(\d+)(e|ème|eme)\b", lambda m: _ordinal(int(m.group(1))), text)
-    text = re.sub(r"\b(\d+),(\d+)\b", lambda m: f"{number_words(int(m.group(1)))} virgule {number_words(int(m.group(2)))}" if len(m.group(1)) < 13 else m.group(0), text)
+    text = re.sub(r"\b(\d{1,12})(e|ème|eme)\b", lambda m: _ordinal(int(m.group(1))), text)
+    text = re.sub(r"\b(\d+),(\d+)\b", lambda m: _decimal(m.group(1), m.group(2)), text)
 
     def card(m):
         n = m.group(1)
-        if len(n) > 12: return n
+        if len(n) > 12: return _digits(n)
         w = number_words(int(n))
         nxt = text[m.end():].lstrip().split(" ")[0].lower().strip(".,;:!?") if m.end() < len(text) else ""
-        if nxt in FEM and (w == "un" or w.endswith(" un")):
+        if nxt in FEM and (w == "un" or w.endswith((" un", "-un"))):
             w += "e"
         return w
     return re.sub(r"\b(\d+)\b", card, text)
+
+
+def _no_liaison(word):
+    """Aspirated h and other words refusing liaison, plural and feminine forms included
+    (handicaps, hautes, hiboux)."""
+    w = word.split("'")[0]
+    if w in NO_LIAISON_NEXT:
+        return True
+    for cut in ("s", "x", "es", "e"):
+        if w.endswith(cut) and w[:-len(cut)] in NO_LIAISON_NEXT:
+            return True
+    return False
 
 
 def _tail(word):
@@ -145,14 +172,14 @@ def prepare(text):
                 c = "t"
             elif low.startswith(("et", "un", "huit", "onze")) and w in ("vingt", "trente", "quarante", "cinquante", "soixante"):
                 c = None
-            elif w not in ("deux", "trois", "six", "dix", "vingt", "cent") or low.split("'")[0] in NO_LIAISON_NEXT:
+            elif w not in ("deux", "trois", "six", "dix", "vingt", "cent") or _no_liaison(low):
                 c = None
         if w == "vingt" and low == "et":
             c = "t"
         if w == "neuf" and low in ("heures", "ans", "hommes"):
             toks[i] = t[:-1] + "ve"          # neuf‿heures: the f itself becomes v (read as neuve)
             continue
-        if not c or (low.split("'")[0] in NO_LIAISON_NEXT and not (w == "vingt" and low == "et")):
+        if not c or (_no_liaison(low) and not (w == "vingt" and low == "et")):
             continue
         if low[0] in VOWEL_START or (low[0] == "h" and len(low) > 1):
             toks[i + 2] = LIAISON + c + nxt

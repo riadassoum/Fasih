@@ -4,6 +4,10 @@
 
 - **Modulation postfilter** (on by default; a new setting turns it off): HMM voices change their sound too smoothly from moment to moment, which makes them a little muffled. Fasih now restores part of the natural movement measured in each voice's recordings (the time-invariant modulation spectrum postfilter of Takamichi et al., at half strength). Pitch, timing and loudness are unchanged; voices whose recordings are no longer available (Lamees, Riad, Reem, Aseel) use the average of the others.
 - **Riad** now has the same gentle tone correction as the other voices, with his pitch unchanged.
+- **Text in a marked language goes to a voice of that language.** When a web page or document marks a passage as French, English or another language (and NVDA's automatic language switching is on), that passage is read by an installed voice of that language; without such a mark, or without such a voice, the secondary voice reads it as before.
+- **French numbers read correctly in more cases**: the zeros after the decimal comma are read (3,05 is trois virgule zéro cinq, no longer trois virgule cinq), very long numbers and fractions are read digit by digit instead of being skipped, and une is used after numbers ending in un before a feminine noun (quatre-vingt-une heures).
+- **French liaison** is no longer made before plural or feminine forms of words that refuse it (les handicaps, les hautes).
+- **Cancelling a voice download** closes the window at once, even when the server has stopped answering, and a stalled download now gives up after a short time instead of waiting indefinitely.
 
 ## 1.2
 

@@ -1,32 +1,37 @@
 # Build notes
 
-## Layout (/home/claude/rhv)
-- corpus/: ClArTTS 9500 utts, 11.16 h, 24 kHz wav; text.tsv = id \t dur \t diacritized text
-- lang/: our own Arabic data-only RHVoice language. gen_foma.py + gen_rest.py generate src/*.foma;
-  build_lang.sh -> lang/Arabic (needs foma at /usr/local/bin, RHVoice src at /tmp/rh for att2bin/dtree2bin,
-  /tmp/alb/labelling.xml as template). Phones: b t th j H x d dh r z s sh S D T Z E g f q k l m n h w y Q
-  (+ v p G ch loans), vowels a i u aa ii uu, pau. Stress (Classical rule) in syl.foma via "_stress".
-- scripts/ar_prep.py: normalize (compose hamza/madda marks) + mark_wasl (mid-phrase bare alif -> U+0671).
-  Used IDENTICALLY in training labels and in the NVDA add-on.
-- scripts/feats.py: WORLD harvest/cheaptrick/d4c -> mgc(31, a=.466), lf0, bap(7 bands, dB). Audio x32768 (int16 units).
-  --bpf writes our own 7-band filter bank (voice/bpf.txt). Validated with tools/vocode (RHVoice HTS vocoder): RMS ratio 1.05.
-- Voicing fix: frame voiced only if harvest>0 AND bap band0 < -10 dB (applied in train.py stats).
-- scripts/align.py: monophone 5-state Viterbi training (numba). init / iter / iter --pauses / final --pauses
-  -> work/align/*.npy (unit,state,start,end), work/mono/*.lab
-- scripts/full_labels.py: RHVoice-make-hts-labels -l work/mono -> work/full/*.lab (pauses rephrased)
-- scripts/train.py stats | trees [mdl] | write OUT/voice.data  (MDL decision trees, grouped-sum split search)
-- Voice dir: data/voices/<Name>/{voice.info, voice.params, 24000/{voice.data,bpf.txt}}
-- Test synth: RHVOICE_DATA_PATH=/home/claude/rhv/data RHVOICE_CONFIG_PATH=/tmp/labt /tmp/rhb2/src/test/RHVoice-test -p <Name> -o out.wav
-- Linux RHVoice build: /tmp/rhb2 (boost include flags; tclap patched for C++20; data subdir disabled)
-- Windows DLLs: /tmp/rhwin via zig (tools/zig/z*), flags -D_LIBCPP_ENABLE_CXX17_REMOVED_* -D_LIBCPP_ENABLE_CXX20_REMOVED_*
-- Add-on: addon_src/build_addon.sh VOICE_DIR VERSION OUT.nvda-addon (forks official driver, adds arabic_pipeline:
-  ClaritySynth ar_textnorm + ar_tashkeel(Rawi) + ar_g2p merge + ar_prep). ClaritySynth clone: /home/claude/riadassoum/claritysynth
+How Fasih is put together, for anyone rebuilding or retraining it. The README explains what the add-on does; this file explains how its parts are made.
 
-## Status
-- Smoke test voice (744 utts) trained, RHVoice loads + speaks it (data/voices/Riad-test).
-- Full feature extraction running (two feats.py processes, resumable: rerun same command ranges 0-4750, 4750-9500).
+## Building the add-on
 
-## Next
-1. when feats done: align init, iter x4, iter --pauses x2, final --pauses, full_labels, train stats, trees, write
-2. synth tests, then build add-on with final voice name
-3. later: CD re-alignment pass; tune MDL/min_occ; lexicon (هذا/ذلك/لكن/هؤلاء dagger alifs); English fallback
+`addon_src/build_release.sh VERSION OUT.nvda-addon` builds the add-on from this repository alone: the voices in `voices/`, the languages in `lang/Arabic` and `lang_fr/French`, the engine DLLs in `third_party/rhvoice-win-x64`, Rawi, the driver patches and the documentation. Set `FASIH_SHARP=1` to keep Sharpening patches when the voices have them.
+
+`tests/test_arabic.py` runs the text tests (Arabic pipeline, French front end, patches, limiter, downloader). The full Rawi tests also need `RAWI_ORT_LIB` (an ONNX Runtime library) and `FASIH_ADDON_DIR` (a built driver folder).
+
+## Engine
+
+RHVoice with two changes, in `engine/rhvoice-world-vocoder.patch` (against the commit in `engine/RHVOICE_BASE_COMMIT`):
+
+- the WORLD vocoder (sources in `engine/world`), used by voices whose label format contains `WORLD`;
+- the modulation spectrum postfilter: when a voice has `ms_gain.txt` next to its `voice.data`, every mel-cepstral trajectory of each generation window is filtered in the modulation-frequency domain with those gains. `tools/ms_estimate.py` measures them from a voice's recordings.
+
+The Windows DLLs are cross-compiled with zig (clang for x86_64-windows-gnu); libc++ needs `-D_LIBCPP_ENABLE_CXX17_REMOVED_FEATURES -D_LIBCPP_ENABLE_CXX20_REMOVED_FEATURES`. A Linux build of the same tree is what the training tools load (`RHVOICE_LIB`, `RHVOICE_LABELS`).
+
+## Languages
+
+- `lang/`: the Arabic data-only language. `gen_foma.py` and `gen_rest.py` write the foma sources; `build_lang.sh` compiles them with foma and RHVoice's `att2bin` and `dtree2bin` (set `RH` to an RHVoice source checkout).
+- `lang_fr/`: the French language. `gen_fr.py` turns the ipa-dict lexicon (fetched by `build_lang.sh` when missing) and the letter-to-sound rules into foma sources; `build_lang.sh` compiles them the same way.
+- `scripts/ar_prep.py` and `scripts/fr_prep.py` prepare text identically in training and in the add-on (wasl marks for Arabic; liaison, numbers and abbreviations for French).
+
+## Training a voice
+
+`tools/new_voice.sh ROOT CORPUS` trains one voice. `CORPUS` holds `wav/` (24 kHz) and `text.tsv` (id, duration, text). Every stage is resumable; run the same command again after an interruption.
+
+1. Labels (`make_ssml.py`, RHVoice's label maker), features (`feats.py`: WORLD F0, mel-cepstrum, aperiodicity; `feats2.py`: 40 coefficients).
+2. Alignment (`align.py`), full-context labels (`full_labels.py`), statistics and decision trees (`train.py stats`, `train.py trees`), realignment, larger trees.
+3. Duration cap, separate pause tree, cleaned pitch statistics, pitch trees, and a calibration of spectral detail against held-out recordings (`calib.sh`).
+4. `train.py write OUT/voice.data` writes the voice. Options (environment variables) set the speaking rate, level, tone filter, the heavy lam of الله and other corrections; `addon_src/build_addon.sh` holds the values used for each voice.
+
+For another language set `RHV_LANG`, `RHV_LANG_DIR`, `RHV_DATA`, and `RHV_F0_MIN`/`RHV_F0_MAX` for the voice's pitch range.
+
+`tools/freeze_stats.py` keeps only the statistics a finished voice needs to be written again. `tools/hts_edit.py` and `tools/prebuilt.py` match a voice delivered already built (rate, level, tone) without its training data.

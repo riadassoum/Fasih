@@ -7,7 +7,7 @@
 # Features are deleted at the end (writing a voice does not need them; they can be re-extracted).
 set -e
 R=$1; SRC=$2
-H=/home/claude/rhv/tools
+H=$(cd "$(dirname "$0")" && pwd)
 if [ ! -s "$R/work/train2v2/tree_mgc_4.pkl" ]; then
   # features in two processes, then the rest of the base pipeline
   # (part b starts once part a has set up the root and made the labels)

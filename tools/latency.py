@@ -1,10 +1,10 @@
 """Time-to-first-audio and loudness per voice profile, through libRHVoice (as NVDA uses it).
 usage: latency.py DATA_DIR CONFIG_DIR profile=text [profile=text ...]"""
-import sys, time, threading
+import os, sys, time, threading
 from ctypes import *
 import numpy as np
 
-lib = CDLL("/tmp/rhb2/src/lib/libRHVoice.so")
+lib = CDLL(os.environ.get("RHVOICE_LIB", "/tmp/rhb2/src/lib/libRHVoice.so"))
 SR_CB = CFUNCTYPE(c_int, c_int, c_void_p); SPEECH_CB = CFUNCTYPE(c_int, POINTER(c_short), c_uint, c_void_p)
 MARK_CB = CFUNCTYPE(c_int, c_char_p, c_void_p); WORD_CB = CFUNCTYPE(c_int, c_uint, c_uint, c_void_p)
 AUDIO_CB = CFUNCTYPE(c_int, c_char_p, c_void_p); DONE_CB = CFUNCTYPE(None, c_void_p)

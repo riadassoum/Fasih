@@ -198,5 +198,41 @@ for _src, _want in [("C'est un honneur.", "C'est \u203ftun \u203fnhonneur."), ("
                     ("Le 21e siècle", "Le vingt \u203ftet unième siècle"), ("de petits enfants", "de petits \u203fzenfants"), ("1 000 euros", "mille euros")]:
     check("French: " + _src, _fp.prepare(_src), _want)
 
+# French numbers: decimals keep their zeros, long numbers are read digit by digit, agreement
+for _src, _want in [("3,05", "trois virgule zéro cinq"), ("0,001", "zéro virgule zéro zéro un"),
+                    ("81 heures", "quatre-vingt-une heures"), ("3,5", "trois virgule cinq")]:
+    check("French number: " + _src, _fp.prepare(_src), _want)
+check("French: long fraction does not fail", "virgule un deux trois" in _fp.prepare("1,123456789012345"), True)
+check("French: very long number digit by digit", _fp.prepare("1234567890123456").startswith("un deux trois"), True)
+check("French: no liaison before inflected aspirated h", _fp.prepare("les handicaps"), "les handicaps")
+check("French: no liaison before hautes", _fp.prepare("les hautes"), "les hautes")
+
+# voice downloader: a download cancelled before it starts sends no request
+import types as _types, threading as _th
+_fake = {"calls": 0}
+class _R:
+    def __init__(self, *a, **k): _fake["calls"] += 1; self.headers = {}
+    def __enter__(self): return self
+    def __exit__(self, *a): return False
+    def raise_for_status(self): pass
+    def iter_content(self, chunk_size=1): return iter([])
+_stubs = {}
+for _m in ["wx", "addonHandler", "globalPluginHandler", "globalVars", "gui", "gui.message", "gui.addonGui", "languageHandler", "logHandler", "configobj", "requests"]:
+    _stubs[_m] = sys.modules.get(_m); sys.modules[_m] = _types.ModuleType(_m)
+sys.modules["gui.message"].messageBox = None; sys.modules["gui.addonGui"].promptUserForRestart = None
+sys.modules["logHandler"].log = _types.SimpleNamespace(error=lambda *a, **k: None)
+sys.modules["configobj"].ConfigObj = object; sys.modules["addonHandler"].AddonBundle = object
+sys.modules["wx"].Dialog = object; sys.modules["globalPluginHandler"].GlobalPlugin = object
+sys.modules["requests"].head = _R; sys.modules["requests"].get = _R
+_fv = {}
+exec(compile(open(os.path.join(REPO, "addon_src", "globalPlugins", "fasihVoices.py"), encoding="utf-8").read(), "fasihVoices", "exec"), _fv)
+_w = _fv["_Downloader"]([("data", "http://x/a.zip", None), ("langdata", "http://x/b.zip", None)], "/tmp")
+_w.cancel.set(); _w.run()
+check("downloader: cancelled before start sends no request", _fake["calls"], 0)
+check("downloader: cancelled download reports no error", _w.error, None)
+for _m, _v in _stubs.items():
+    if _v is None: sys.modules.pop(_m, None)
+    else: sys.modules[_m] = _v
+
 print("\n%d failure(s)" % fails)
 sys.exit(1 if fails else 0)

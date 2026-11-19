@@ -2,9 +2,12 @@
 # Build the French data-only RHVoice language into $OUT (default ../French)
 set -e
 HERE=$(cd "$(dirname "$0")" && pwd)
-RH=${RH:-/tmp/rh}
+# RH: an RHVoice source checkout (for att2bin and dtree2bin)
+RH=${RH:?set RH to an RHVoice source checkout}
 OUT=${1:-$HERE/French}
-LEX=${LEX:-/home/claude/ext/ipa-dict/data/fr_FR.txt}
+# the pronunciation lexicon (ipa-dict, MIT); fetched once if it is not there
+LEX=${LEX:-$HERE/fr_FR.txt}
+[ -s "$LEX" ] || curl -sSL -o "$LEX" https://raw.githubusercontent.com/open-dict-data/ipa-dict/master/data/fr_FR.txt
 GEN=$HERE/src
 python3 "$HERE/gen_fr.py" "$LEX" "$GEN"
 mkdir -p "$OUT"
@@ -16,7 +19,7 @@ for f in g2p syl tok downcase gpos spell numbers key msg lseq; do
 done
 python3 "$RH/src/scripts/general/dtree2bin" phrasing.tree "$OUT/phrasing.dt"
 cp phonemes.xml "$OUT/"
-cp /home/claude/rhv/lang/Arabic/labelling.xml "$OUT/labelling.xml"
+cp "$HERE/../lang/Arabic/labelling.xml" "$OUT/labelling.xml"
 python3 - "$OUT/graph.txt" <<'PY'
 import sys
 L = "abcdefghijklmnopqrstuvwxyzàâæçèéêëîïñôöùûüÿœ"

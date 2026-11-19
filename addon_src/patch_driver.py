@@ -94,11 +94,26 @@ rep('''    def speak(self, speechSequence):
                         cur[0], cur[1] = voice, list(state.values())
                 cur[1].append(item)
 
+            latin = [secondary]
+
+            def emit_latin(chunk):
+                v = latin[0]
+                if not v:
+                    emit(primary, arabic_pipeline.latin_to_arabic(chunk))
+                elif self.__voice_languages.get(v, "").lower().startswith("fr"):
+                    emit(v, _fr(chunk))
+                else:
+                    emit(v, chunk)
+
             for item in seq:
                 if cancel.is_set():
                     return
                 if isinstance(item, LangChangeCommand):
-                    continue                     # the script decides the voice
+                    # an explicit language (a web page's lang, NVDA's automatic language switching)
+                    # picks the voice for Latin text when one of that language is installed;
+                    # otherwise, and for Arabic, the script decides as before
+                    latin[0] = self._voice_for_language(item.lang) or secondary
+                    continue
                 if isinstance(item, str) and not char_mode and len(item) > 300:
                     # a long text (say all, a whole page) is prepared and spoken sentence
                     # group by sentence group: speech starts after the first one, and a
@@ -112,7 +127,7 @@ rep('''    def speak(self, speechSequence):
                             log.error("Fasih: text pipeline failed", exc_info=True)
                             new = piece
                         for is_ar, chunk in _split_by_script(new):
-                            emit(primary, chunk) if is_ar else (emit(secondary, _fr(chunk) if fr_sec else chunk) if secondary else emit(primary, arabic_pipeline.latin_to_arabic(chunk)))
+                            emit(primary, chunk) if is_ar else emit_latin(chunk)
                         if cancel.is_set():
                             return
                         if has_text(cur[1]):
@@ -134,7 +149,7 @@ rep('''    def speak(self, speechSequence):
                         emit(primary, CharacterModeCommand(True))
                         continue
                     for is_ar, chunk in _split_by_script(new):
-                        emit(primary, chunk) if is_ar else (emit(secondary, _fr(chunk) if fr_sec else chunk) if secondary else emit(primary, arabic_pipeline.latin_to_arabic(chunk)))
+                        emit(primary, chunk) if is_ar else emit_latin(chunk)
                     continue
                 if isinstance(item, CharacterModeCommand):
                     char_mode = item.state
@@ -251,6 +266,19 @@ rep('''    def _get_availableVoices(self):
     def _get_availableVoices(self):
         ar = self._arabic_voices() or self.__profiles
         return OrderedDict((p, VoiceInfo(p, p, self.__voice_languages[p])) for p in ar)
+
+    def _voice_for_language(self, lang):
+        """An installed non-Arabic voice of this language (a LangChangeCommand), else None."""
+        code = (lang or "").lower().replace("-", "_").split("_")[0]
+        if not code or code == "ar":
+            return None
+        sec = self._secondary_profile()
+        if sec and self.__voice_languages.get(sec, "").lower()[:2] == code:
+            return sec                    # the chosen secondary voice first, when it fits
+        for p in self.__profiles:
+            if p not in self._arabic_voices() and self.__voice_languages.get(p, "").lower()[:2] == code:
+                return p
+        return None
 
     def _secondary_profile(self):
         sv = getattr(self, "_secondary", "auto")

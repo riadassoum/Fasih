@@ -9,6 +9,7 @@ import base64
 import hashlib
 import json
 import shutil
+import tempfile
 import threading
 import time
 import zipfile
@@ -42,6 +43,8 @@ except NameError:
 PKG_VERSION = "1.18"
 PKG_URL = "https://rhvoice.kvark.crazedns.ru/packages-{version}.json"
 NVDA_ADDON_BUILD_NUMBER = "12"
+# (connect, read) timeouts: a stalled server ends the download instead of hanging it
+TIMEOUT = (10, 20)
 
 LANG_LABELS = {
 	"az": _("Azerbaijani"), "be": _("Belarusian"), "cs": _("Czech"), "en": _("English"), "eo": _("Esperanto"),
@@ -136,16 +139,20 @@ class _Downloader(threading.Thread):
 			self.start_time = time.monotonic()
 			sizes = []
 			for _key, url, _md5 in self.items:
+				if self.cancel.is_set():
+					return
 				try:
-					r = requests.head(url, allow_redirects=True, timeout=15)
+					r = requests.head(url, allow_redirects=True, timeout=TIMEOUT)
 					sizes.append(int(r.headers.get("Content-Length", "0")) or None)
 				except Exception:
 					sizes.append(None)
 			self.total = sum(sizes) if all(sizes) else None
 			for key, url, md5 in self.items:
+				if self.cancel.is_set():
+					return
 				path = Path(self.folder, "%s.zip" % key)
 				digest = hashlib.md5()
-				with requests.get(url, stream=True, timeout=30) as resp:
+				with requests.get(url, stream=True, timeout=TIMEOUT) as resp:
 					resp.raise_for_status()
 					with open(path, "wb") as f:
 						for chunk in resp.iter_content(chunk_size=64 * 1024):
@@ -239,10 +246,12 @@ class DownloadDialog(wx.Dialog):
 			self.EndModal(wx.ID_OK if not w.error and not w.cancel.is_set() else wx.ID_ABORT if w.error else wx.ID_CANCEL)
 
 	def onCancel(self, evt):
+		# the dialog closes at once; the worker stops at its next check (or when the network gives
+		# up, at most TIMEOUT later) and its files are removed then (see VoicesDialog.onInstall)
 		self.worker.cancel.set()
-		self.cancelButton.Disable()
-		self.status.ChangeValue(_("Cancelling..."))
-		# the worker stops at its next block; onTimer then closes the dialog
+		self.timer.Stop()
+		if self.IsModal():
+			self.EndModal(wx.ID_CANCEL)
 
 
 class VoicesDialog(wx.Dialog):
@@ -320,17 +329,21 @@ class VoicesDialog(wx.Dialog):
 		i, bundle = self.selected()
 		if bundle is None:
 			return
-		folder = Path(globalVars.appArgs.configPath, "Fasih-config", "downloads")
-		shutil.rmtree(folder, ignore_errors=True)
-		folder.mkdir(parents=True, exist_ok=True)
+		base = Path(globalVars.appArgs.configPath, "Fasih-config", "downloads")
+		base.mkdir(parents=True, exist_ok=True)
+		folder = Path(tempfile.mkdtemp(dir=str(base)))     # one folder per download
 		items = [(key, asset["dataUrl"], asset.get("dataMd5")) for key, asset in bundle.assets]
 		dlg = DownloadDialog(self, _("Downloading {voice}").format(voice=bundle._voice["name"]), items, folder)
 		result = dlg.ShowModal()
-		error = dlg.worker.error
-		bundle.files = dict(dlg.worker.paths)
+		worker = dlg.worker
+		error = worker.error
+		bundle.files = dict(worker.paths)
 		dlg.Destroy()
 		if result == wx.ID_CANCEL:
-			shutil.rmtree(folder, ignore_errors=True)
+			def cleanup():
+				worker.join(60)
+				shutil.rmtree(folder, ignore_errors=True)
+			threading.Thread(target=cleanup, daemon=True).start()
 			self.voiceList.SetFocus()
 			return
 		if result != wx.ID_OK:

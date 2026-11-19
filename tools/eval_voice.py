@@ -14,7 +14,7 @@ if os.environ.get("RHV_LANG") == "French":
     from fr_prep import prepare as mark_wasl
 root, voice, hold = sys.argv[1:4]
 outdir = sys.argv[4] if len(sys.argv) > 4 else None
-lib = CDLL("/tmp/rhb2/src/lib/libRHVoice.so")
+lib = CDLL(os.environ.get("RHVOICE_LIB", "/tmp/rhb2/src/lib/libRHVoice.so"))
 SR_CB = CFUNCTYPE(c_int, c_int, c_void_p); SPEECH_CB = CFUNCTYPE(c_int, POINTER(c_short), c_uint, c_void_p)
 MARK_CB = CFUNCTYPE(c_int, c_char_p, c_void_p); WORD_CB = CFUNCTYPE(c_int, c_uint, c_uint, c_void_p)
 AUDIO_CB = CFUNCTYPE(c_int, c_char_p, c_void_p); DONE_CB = CFUNCTYPE(None, c_void_p)

@@ -2,7 +2,7 @@
 another pitch range, into ROOT/work/feat/{lf0,bap}. For voices whose pitch leaves the default
 60-400 Hz range (the tracker then locks onto half the pitch: octave leaps)."""
 import sys, os, numpy as np, soundfile as sf
-sys.path.insert(0, "/home/claude/rhv/scripts")
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts"))
 import feats
 R, part, nparts, fmin, fmax = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), float(sys.argv[4]), float(sys.argv[5])
 feats.F0_MIN, feats.F0_MAX = fmin, fmax
