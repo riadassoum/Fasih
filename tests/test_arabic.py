@@ -263,5 +263,12 @@ check("no hamza on bare yaa", _tsn["_restore_hamza"]("كاين", "كَائِنٍ
 check("lost hamza restored", _tsn["_restore_hamza"]("سأل", "سَالَ"), "سَألَ")
 check("no kasra on hamza above alif", _tsn["_restore_hamza"]("الأحداث", "ٱلْأِحْدَاث"), "ٱلْأَحْدَاث")
 
+check("textnorm honorific sign", _tn.normalize("النبي \uFDFA"), "النبي صلى الله عليه وسلم")
+check("textnorm (رض)", _tn.normalize("عمر (رض) قال"), "عمر رضي الله عنه قال")
+check("textnorm emoji selector dropped", "\uFE0F" in _tn.normalize("أحبك \u2764\uFE0F"), False)
+check("no shadda on mi'a", _tsn["_restore_hamza"]("مئة", "مِئَّةُ"), "مِئَةُ")
+_ap2 = open(os.path.join(REPO, "addon_src", "arabic_pipeline.py"), encoding="utf-8").read()
+_apn2 = {}; exec(_ap2[_ap2.index("_PUNCT ="):_ap2.index("return s.translate(_PUNCT) if s else s") + 40], _apn2)
+check("Arabic question mark reaches the engine as ?", _apn2["_engine_punct"]("هل ذهبت؟ نعم؛ ثم"), "هل ذهبت? نعم; ثم")
 print("\n%d failure(s)" % fails)
 sys.exit(1 if fails else 0)

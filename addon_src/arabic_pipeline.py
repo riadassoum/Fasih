@@ -249,9 +249,18 @@ def process(text, diacritize=True, is_cancelled=None):
             return out  # pure Latin/other text: the English voice reads it
     out, keep = _protect(out, options.get("mixed_priority", "auto"))
     try:
-        return _unprotect(_arabic_core(out, diacritize, pt, ar_prep, is_cancelled), keep)
+        return _engine_punct(_unprotect(_arabic_core(out, diacritize, pt, ar_prep, is_cancelled), keep))
     except Exception:
-        return _unprotect(out, keep)
+        return _engine_punct(_unprotect(out, keep))
+
+
+# The engine only knows Latin ? and ; as sentence ends: with ؟ and ؛ a
+# question got a comma's pause and no question intonation.
+_PUNCT = str.maketrans({"\u061F": "?", "\u061B": ";", "\u2026": "..."})
+
+
+def _engine_punct(s):
+    return s.translate(_PUNCT) if s else s
 
 
 _ABD = re.compile("(?<![\u0621-\u064a])(\u0639\u0628\u062f)(?=\u0627\u0644[\u0621-\u064a]{2})")

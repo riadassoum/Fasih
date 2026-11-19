@@ -647,6 +647,14 @@ def normalize(text, opts=None):
     try:
         t = _to_ascii_digits(text)
         t = t.replace("\u066B", ".").replace("\u066C", ",")
+        # honorifics written as one sign or as a bracketed letter
+        for a, b in (("\uFDFA", " صلى الله عليه وسلم "), ("\uFDFB", " جل جلاله "), ("\uFDFD", " بسم الله الرحمن الرحيم "),
+                     ("(ص)", " صلى الله عليه وسلم "), ("(صلعم)", " صلى الله عليه وسلم "), ("(رض)", " رضي الله عنه "),
+                     ("(رضي)", " رضي الله عنه "), ("(ع)", " عليه السلام "), ("(عليه السلام)", " عليه السلام "),
+                     ("(رحمه الله)", " رحمه الله "), ("(تعالى)", " تعالى ")):
+            t = t.replace(a, b)
+        # emoji presentation selectors and joiners carry no sound
+        t = re.sub("[\uFE0E\uFE0F\u200D]", "", t)
         # 1,250,000 -> 1250000 (groups of exactly three digits only)
         t = re.sub(r"(?<![\d,])\d{1,3}(?:,\d{3})+(?![\d,]|\.\d)", lambda m: m.group(0).replace(",", ""), t)
         # -5 at the start of a number (not a range like 3-5)

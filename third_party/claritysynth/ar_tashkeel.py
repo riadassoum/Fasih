@@ -318,6 +318,9 @@ def _restore_hamza(original, diacritized):
     # a hamza above alif never takes kasra, one below never takes fatha/damma
     res = re.sub("\u0623\u0650", "\u0623\u064E", res)
     res = re.sub("\u0625[\u064E\u064F]", "\u0625\u0650", res)
+    # مئة never has a shadda (the model sometimes writes مِئَّة)
+    res = re.sub("(\u0645\u0650?\u0626\u064E?)\u0651", "\\1", res)
+    res = re.sub("(\u0645\u0650\u0626)\u0652(?=\u062A)", "\\1\u064E", res)     # مِئْتان -> مِئَتان
     return res
 
 
