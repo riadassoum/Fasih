@@ -339,6 +339,15 @@ def load_user_dictionary(config_dir):
             if orig and repl:
                 pat = build_flexible_regex(orig)
                 if pat:
+                    # Fasih: an Arabic entry also matches after the attached
+                    # prefixes و ف ب ل ك (لجبران, وجبران), which are kept
+                    lead = "(?<!%s)" % AR_ANY_PRECEDING
+                    if pat.pattern.startswith(lead):
+                        try:
+                            pat = re.compile(lead + "(?P<pre>[\u0648\u0641]?[\u0628\u0644\u0643]?" + TASHKEEL_PATTERN + ")"
+                                             + pat.pattern[len(lead):], pat.flags)
+                        except Exception:
+                            pass
                     rules.append(CompiledRule(orig, repl, pat))
         _user_compiled_rules = rules
     except Exception:
@@ -399,5 +408,8 @@ def apply_user_dictionary(text):
         return text
     res = text
     for rule in _user_compiled_rules:
-        res = rule.pattern.sub(rule.replacement, res)
+        if "pre" in rule.pattern.groupindex:
+            res = rule.pattern.sub(lambda m, r=rule.replacement: (m.group("pre") or "") + r, res)
+        else:
+            res = rule.pattern.sub(lambda m, r=rule.replacement: r, res)
     return res

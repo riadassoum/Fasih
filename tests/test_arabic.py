@@ -270,5 +270,17 @@ check("no shadda on mi'a", _tsn["_restore_hamza"]("مئة", "مِئَّةُ"), "
 _ap2 = open(os.path.join(REPO, "addon_src", "arabic_pipeline.py"), encoding="utf-8").read()
 _apn2 = {}; exec(_ap2[_ap2.index("_PUNCT ="):_ap2.index("return s.translate(_PUNCT) if s else s") + 40], _apn2)
 check("Arabic question mark reaches the engine as ?", _apn2["_engine_punct"]("هل ذهبت؟ نعم؛ ثم"), "هل ذهبت? نعم; ثم")
+# user pronunciation dictionary: whole words, also after attached prefixes
+import json as _json
+_pk = types.ModuleType("fpbt"); _pk.__path__ = [os.path.join(REPO, "addon_src", "pbt")]; sys.modules["fpbt"] = _pk
+_dm = importlib.import_module("fpbt.dictionary_manager")
+_dd = tempfile.mkdtemp()
+_json.dump([{"original": "جبران", "replacement": "جُبْرَان"}, {"original": "NVDA", "replacement": "إِنْ فِي دِي إِيه"}],
+           open(os.path.join(_dd, "user-dic.json"), "w", encoding="utf-8"), ensure_ascii=False)
+_dm.load_user_dictionary(_dd)
+check("dictionary after a prefix", _dm.apply_user_dictionary("قرأت لجبران"), "قرأت لجُبْرَان")
+check("dictionary not inside a longer word", _dm.apply_user_dictionary("جبرانية"), "جبرانية")
+check("dictionary Latin, any case", _dm.apply_user_dictionary("nvda"), "إِنْ فِي دِي إِيه")
+shutil.rmtree(_dd, ignore_errors=True)
 print("\n%d failure(s)" % fails)
 sys.exit(1 if fails else 0)

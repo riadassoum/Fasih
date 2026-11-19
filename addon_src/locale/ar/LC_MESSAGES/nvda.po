@@ -285,3 +285,46 @@ msgid ""
 "{voice} is installed. It will be available after NVDA restarts, among "
 "Fasih's voices."
 msgstr "ثُبِّت {voice}، وسيكون متاحًا بين أصوات فصيح بعد إعادة تشغيل NVDA."
+
+msgid "&Pronunciation dictionary..."
+msgstr "&قاموس النطق..."
+
+msgid "Words Fasih should say differently"
+msgstr "كلمات تريد أن ينطقها فصيح بطريقة مختلفة"
+
+msgid "Fasih pronunciation dictionary"
+msgstr "قاموس النطق في فصيح"
+
+msgid "&Entries:"
+msgstr "&المدخلات:"
+
+msgid "Written"
+msgstr "تُكتب"
+
+msgid "Said as"
+msgstr "تُنطق"
+
+msgid "&Add..."
+msgstr "إ&ضافة..."
+
+msgid "&Edit..."
+msgstr "&تعديل..."
+
+
+msgid "&Listen"
+msgstr "ا&ستماع"
+
+msgid "Add entry"
+msgstr "إضافة مدخل"
+
+msgid "Edit entry"
+msgstr "تعديل مدخل"
+
+msgid "&Word or phrase as written:"
+msgstr "ال&كلمة أو العبارة كما تُكتب:"
+
+msgid "&Say it as (add diacritics where needed):"
+msgstr "ا&نطقها هكذا (أضف التشكيل حيث يلزم):"
+
+msgid "The dictionary could not be saved."
+msgstr "تعذّر حفظ القاموس."

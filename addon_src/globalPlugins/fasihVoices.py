@@ -460,6 +460,143 @@ def _catalogue():
 	return data
 
 
+# --- Pronunciation dictionary (Tools > Fasih > Pronunciation dictionary) ---
+# Entries are kept in Fasih-config/user-dic.json, which the driver reads; a word
+# matches whatever diacritics it is written with, and only as a whole word.
+
+def _dic_path():
+	import os
+	d = os.path.join(globalVars.appArgs.configPath, "Fasih-config")
+	os.makedirs(d, exist_ok=True)
+	return d, os.path.join(d, "user-dic.json")
+
+
+def _reload_dictionary(folder):
+	import sys
+	for name, mod in list(sys.modules.items()):
+		if name.endswith("fasih.pbt.dictionary_manager") and mod is not None:
+			try:
+				mod.load_user_dictionary(folder)
+			except Exception:
+				log.error("Fasih: dictionary reload failed", exc_info=True)
+
+
+def _speak(text):
+	import speech
+	speech.cancelSpeech()
+	speech.speakText(text)
+
+
+class EntryDialog(wx.Dialog):
+
+	def __init__(self, parent, title, original="", replacement=""):
+		super().__init__(parent, title=title)
+		sizer = wx.BoxSizer(wx.VERTICAL)
+		sizer.Add(wx.StaticText(self, label=_("&Word or phrase as written:")), flag=wx.ALL, border=5)
+		self.original = wx.TextCtrl(self, value=original)
+		sizer.Add(self.original, flag=wx.EXPAND | wx.LEFT | wx.RIGHT, border=5)
+		sizer.Add(wx.StaticText(self, label=_("&Say it as (add diacritics where needed):")), flag=wx.ALL, border=5)
+		self.replacement = wx.TextCtrl(self, value=replacement)
+		sizer.Add(self.replacement, flag=wx.EXPAND | wx.LEFT | wx.RIGHT, border=5)
+		listen = wx.Button(self, label=_("&Listen"))
+		listen.Bind(wx.EVT_BUTTON, lambda e: _speak(self.replacement.GetValue() or self.original.GetValue()))
+		sizer.Add(listen, flag=wx.ALL, border=5)
+		sizer.Add(self.CreateButtonSizer(wx.OK | wx.CANCEL), flag=wx.ALL | wx.ALIGN_RIGHT, border=5)
+		self.SetSizerAndFit(sizer)
+		self.SetSize((420, -1))
+		self.original.SetFocus()
+
+
+class DictionaryDialog(wx.Dialog):
+
+	def __init__(self, parent):
+		super().__init__(parent, title=_("Fasih pronunciation dictionary"))
+		self.folder, self.path = _dic_path()
+		try:
+			with open(self.path, "r", encoding="utf-8") as f:
+				self.entries = [e for e in json.load(f) if e.get("original") and e.get("replacement")]
+		except Exception:
+			self.entries = []
+		sizer = wx.BoxSizer(wx.VERTICAL)
+		sizer.Add(wx.StaticText(self, label=_("&Entries:")), flag=wx.ALL, border=5)
+		self.list = wx.ListCtrl(self, style=wx.LC_REPORT | wx.LC_SINGLE_SEL, size=(460, 260))
+		self.list.AppendColumn(_("Written"), width=220)
+		self.list.AppendColumn(_("Said as"), width=220)
+		sizer.Add(self.list, proportion=1, flag=wx.EXPAND | wx.LEFT | wx.RIGHT, border=5)
+		row = wx.BoxSizer(wx.HORIZONTAL)
+		for label, handler in ((_("&Add..."), self.onAdd), (_("&Edit..."), self.onEdit),
+		                       (_("&Remove"), self.onRemove), (_("&Listen"), self.onListen)):
+			b = wx.Button(self, label=label)
+			b.Bind(wx.EVT_BUTTON, handler)
+			row.Add(b, flag=wx.ALL, border=5)
+		sizer.Add(row)
+		sizer.Add(self.CreateButtonSizer(wx.OK | wx.CANCEL), flag=wx.ALL | wx.ALIGN_RIGHT, border=5)
+		self.Bind(wx.EVT_BUTTON, self.onOk, id=wx.ID_OK)
+		self.list.Bind(wx.EVT_LIST_ITEM_ACTIVATED, self.onEdit)
+		self.SetSizerAndFit(sizer)
+		self.refresh()
+		self.list.SetFocus()
+
+	def refresh(self, select=0):
+		self.list.DeleteAllItems()
+		for e in self.entries:
+			self.list.Append((e["original"], e["replacement"]))
+		if self.entries:
+			select = max(0, min(select, len(self.entries) - 1))
+			self.list.Select(select)
+			self.list.Focus(select)
+
+	def _ask(self, title, e=None):
+		d = EntryDialog(self, title, *(((e["original"], e["replacement"])) if e else ()))
+		try:
+			if d.ShowModal() != wx.ID_OK:
+				return None
+			o, r = d.original.GetValue().strip(), d.replacement.GetValue().strip()
+			return {"original": o, "replacement": r} if o and r else None
+		finally:
+			d.Destroy()
+
+	def onAdd(self, evt):
+		e = self._ask(_("Add entry"))
+		if e:
+			self.entries = [x for x in self.entries if x["original"] != e["original"]] + [e]
+			self.refresh(len(self.entries) - 1)
+
+	def onEdit(self, evt):
+		i = self.list.GetFirstSelected()
+		if i < 0:
+			return
+		e = self._ask(_("Edit entry"), self.entries[i])
+		if e:
+			self.entries[i] = e
+			self.refresh(i)
+
+	def onRemove(self, evt):
+		i = self.list.GetFirstSelected()
+		if i >= 0:
+			del self.entries[i]
+			self.refresh(i)
+
+	def onListen(self, evt):
+		i = self.list.GetFirstSelected()
+		if i >= 0:
+			_speak(self.entries[i]["replacement"])
+
+	def onOk(self, evt):
+		try:
+			tmp = self.path + ".tmp"
+			with open(tmp, "w", encoding="utf-8") as f:
+				json.dump(self.entries, f, ensure_ascii=False, indent=1)
+			import os
+			os.replace(tmp, self.path)
+		except Exception:
+			log.error("Fasih: could not save the dictionary", exc_info=True)
+			messageBox(_("The dictionary could not be saved."), _("Error"), style=wx.OK | wx.ICON_ERROR)
+			return
+		_reload_dictionary(self.folder)
+		self.EndModal(wx.ID_OK)
+
+
 class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 
 	def __init__(self):
@@ -471,7 +608,16 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		self.menu = wx.Menu()
 		item = self.menu.Append(wx.ID_ANY, _("&Download voices..."), _("Download more RHVoice voices for Fasih's secondary voice"))
 		gui.mainFrame.sysTrayIcon.Bind(wx.EVT_MENU, self.onVoices, item)
+		item = self.menu.Append(wx.ID_ANY, _("&Pronunciation dictionary..."), _("Words Fasih should say differently"))
+		gui.mainFrame.sysTrayIcon.Bind(wx.EVT_MENU, self.onDictionary, item)
 		self.menuItem = tools.AppendSubMenu(self.menu, _("&Fasih"))
+
+	def onDictionary(self, evt=None):
+		gui.mainFrame.prePopup()
+		d = DictionaryDialog(gui.mainFrame)
+		d.ShowModal()
+		d.Destroy()
+		gui.mainFrame.postPopup()
 
 	def onVoices(self, evt=None):
 		import systemUtils
