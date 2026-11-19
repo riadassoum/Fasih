@@ -185,7 +185,7 @@ rep('''        if self.__profile is None:
             self.__profile = self.__profiles[0]''', '''        self.__profiles = [p for p in self.__profiles if "+" not in p]
         ar = self._arabic_voices()
         if self.__profile not in ar:
-            self.__profile = next((v for v in ("Riad", "Aseel", "Jamal") if v in ar), ar[0] if ar else self.__profiles[0])
+            self.__profile = next((v for v in ("Aseel", "Riad", "Jamal") if v in ar), ar[0] if ar else self.__profiles[0])
         if not hasattr(self, "_secondary"):
             self._secondary = "auto"''')
 rep('''class SynthDriver(SynthDriver):''', '''_AR_RANGES = ((0x0600, 0x06FF), (0x0750, 0x077F), (0x08A0, 0x08FF), (0xFB50, 0xFDFF), (0xFE70, 0xFEFF))
