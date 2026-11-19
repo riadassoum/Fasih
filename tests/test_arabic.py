@@ -234,5 +234,34 @@ for _m, _v in _stubs.items():
     if _v is None: sys.modules.pop(_m, None)
     else: sys.modules[_m] = _v
 
+
+# --- text normalization (numbers, abbreviations): no word may be eaten or glued
+sys.path.insert(0, os.path.join(REPO, "third_party", "claritysynth"))
+import ar_textnorm as _tn
+for src, want in [
+        ("الرَّحِيْم.", "الرَّحِيْم."), ("بسم الله الرحمن الرحيم.", "بسم الله الرحمن الرحيم."), ("الرحيـم.", "الرحيـم."),
+        ("وقال: م.", "وقال: م."), ("توفي سنة 632م. ثم", "توفي سنة ستمئة واثنين وثلاثين ميلادي. ثم"),
+        ("سنة 1445هـ.", "سنة ألف وأربعمئة وخمسة وأربعين هجري."), ("قال د. أحمد إن م. سامي وصل.", "قال دكتور أحمد إن مهندس سامي وصل."),
+        ("الساعة 9:15 م", "الساعة التاسعة والربع مساء"), ("الساعة 10:30 صباحا.", "الساعة العاشرة والنصف صباحا."),
+        ("عندي 3 كتب و5 سيارات.", "عندي ثلاثة كتب وخمس سيارات."), ("حضر 21 طالبة.", "حضر إحدى وعشرون طالبة."),
+        ("3 ملفات و4 اجتماعات", "ثلاثة ملفات وأربعة اجتماعات"), ("5 دقائق", "خمس دقائق"), ("عددهم 13 طالبا", "عددهم ثلاثة عشر طالبا"),
+        ("خلال 20 دقيقة", "خلال عشرين دقيقة"), ("في عام 2026", "في عام ألفين وستة وعشرين"),
+        ("العدد 1,250,000 نسمة", "العدد مليون ومئتان وخمسون ألفا نسمة"), ("درجة الحرارة -5 درجات", "درجة الحرارة سالب خمس درجات"),
+        ("الإصدار 2.5.1", "الإصدار اثنان نقطة خمسة نقطة واحد"), ("1/2 كوب", "نصف كوب"), ("3-5 أيام", "ثلاثة إلى خمسة أيام"),
+        ("الدرس الـ5", "الدرس الخامس"), ("الحلقة الـ3", "الحلقة الثالثة"), ("القرن الـ21", "القرن الحادي والعشرون"),
+        ("في 15/8/2024", "في الخامس عشر من أغسطس ألفين وأربعة وعشرين"), ("في 2 مايو", "في الثاني من مايو"),
+        ("ص 45", "صفحة خمسة وأربعون"), ("المرتبة 1 والمرتبة 2", "المرتبة واحد والمرتبة اثنان"), ("خلال وقت", "خلال وقت")]:
+    check("textnorm " + src, _tn.normalize(src), want)
+# the diacritizer never adds a hamza the text does not have
+_ts = open(os.path.join(REPO, "third_party", "claritysynth", "ar_tashkeel.py"), encoding="utf-8").read()
+_tsn = {"unicodedata": unicodedata, "re": re}
+exec(_ts[_ts.index("_HAMZA_FORMS ="):_ts.index("_HAMZA_BASE = {")], _tsn)
+_b = _ts.index("_HAMZA_BASE = {"); exec(_ts[_b:_ts.index("}", _b) + 1], _tsn)
+exec(_ts[_ts.index("def _restore_hamza"):_ts.index("\nclass ", _ts.index("def _restore_hamza"))], _tsn)
+check("no hamza on bare waw", _tsn["_restore_hamza"]("البور", "البُؤَرَ"), "البُورَ")
+check("no hamza on bare yaa", _tsn["_restore_hamza"]("كاين", "كَائِنٍ"), "كَاينٍ")
+check("lost hamza restored", _tsn["_restore_hamza"]("سأل", "سَالَ"), "سَألَ")
+check("no kasra on hamza above alif", _tsn["_restore_hamza"]("الأحداث", "ٱلْأِحْدَاث"), "ٱلْأَحْدَاث")
+
 print("\n%d failure(s)" % fails)
 sys.exit(1 if fails else 0)

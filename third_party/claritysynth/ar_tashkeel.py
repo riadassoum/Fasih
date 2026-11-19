@@ -278,30 +278,47 @@ def _restore_hamza(original, diacritized):
     output has its bare base letter, restore the original letter."""
     if not original or not diacritized:
         return diacritized
-    if not any(c in _HAMZA_FORMS for c in original):
-        return diacritized
+    # The reverse also happens: the model writes a hamza on a bare waw or yaa
+    # that the writer never wrote (البور -> البؤر, كاين -> كائن). A bare
+    # و / ي / ى in the text stays bare.
     orig_letters = [c for c in original
                     if not ("\u064B" <= c <= "\u0652" or c == "\u0670")]
     out = []
     oi = 0
+    bare = False                    # the last letter was a hamza we took off
     for ch in diacritized:
         if "\u064B" <= ch <= "\u0652" or ch == "\u0670":
-            out.append(ch)          # a diacritic: keep
+            if not bare:
+                out.append(ch)      # a diacritic: keep
+            continue                # (its mark was meant for the hamza: a long vowel has none)
+        if ch in ("\u0654", "\u0655") and oi and orig_letters[oi - 1] in "\u0648\u064A\u0649":
+            # a hamza added on a bare waw/yaa: drop it with its vowel mark
+            while out and ("\u064B" <= out[-1] <= "\u0652"):
+                out.pop()
+            bare = True
             continue
         if ch in ("\u0653", "\u0654", "\u0655"):
             # stray combining hamza/maddah: the composed letter is already
             # restored, so dropping this avoids a doubled hamza (مُؤَٔمِن).
             continue
+        bare = False
         if oi < len(orig_letters):
             o = orig_letters[oi]
             if o in _HAMZA_FORMS and (ch == _HAMZA_BASE.get(o) or ch == o):
                 out.append(o)
+            elif o in "\u0648\u064A\u0649" and ch in "\u0624\u0626":
+                out.append(o)
+                bare = True
             else:
                 out.append(ch)
             oi += 1
         else:
             out.append(ch)
-    return unicodedata.normalize("NFC", "".join(out))
+    res = unicodedata.normalize("NFC", "".join(out))
+    # a hamza above alif never takes kasra, one below never takes fatha/damma
+    res = re.sub("\u0623\u0650", "\u0623\u064E", res)
+    res = re.sub("\u0625[\u064E\u064F]", "\u0625\u0650", res)
+    return res
 
 
 class _Rawi(object):

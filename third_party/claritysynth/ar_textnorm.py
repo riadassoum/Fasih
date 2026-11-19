@@ -103,9 +103,166 @@ def _spell_digits(digits):
     return " ".join(names.get(c, c) for c in digits)
 
 
-def _cardinal(n):
-    w = _num2words(int(n))
-    return w if w else str(n)
+# ---------------------------------------------------------------------------
+# Arabic cardinals, written for Fasih: gender agreement, case, joined waw.
+# ---------------------------------------------------------------------------
+_U_M = ["صفر", "واحد", "اثنان", "ثلاثة", "أربعة", "خمسة", "ستة", "سبعة", "ثمانية", "تسعة", "عشرة"]
+_U_F = ["صفر", "واحدة", "اثنتان", "ثلاث", "أربع", "خمس", "ست", "سبع", "ثماني", "تسع", "عشر"]
+_TENS = {2: "عشرون", 3: "ثلاثون", 4: "أربعون", 5: "خمسون", 6: "ستون", 7: "سبعون", 8: "ثمانون", 9: "تسعون"}
+_HUND = {1: "مئة", 2: "مئتان", 3: "ثلاثمئة", 4: "أربعمئة", 5: "خمسمئة", 6: "ستمئة", 7: "سبعمئة", 8: "ثمانمئة", 9: "تسعمئة"}
+# singular, dual, plural (3-10), accusative singular (11-99)
+_SCALES = [(10 ** 12, ("تريليون", "تريليونان", "تريليونات", "تريليونا")),
+           (10 ** 9, ("مليار", "ملياران", "مليارات", "مليارا")),
+           (10 ** 6, ("مليون", "مليونان", "ملايين", "مليونا")),
+           (10 ** 3, ("ألف", "ألفان", "آلاف", "ألفا"))]
+
+
+def _below100(n, fem):
+    if n <= 10:
+        return (_U_F if fem else _U_M)[n]
+    if n < 20:
+        u = n - 10
+        if u == 1:
+            return "إحدى عشرة" if fem else "أحد عشر"
+        if u == 2:
+            return "اثنتا عشرة" if fem else "اثنا عشر"
+        return (_U_F[u] + " عشرة") if fem else (_U_M[u] + " عشر")
+    t, u = divmod(n, 10)
+    if not u:
+        return _TENS[t]
+    if u == 1:
+        unit = "إحدى" if fem else "واحد"
+    else:
+        unit = (_U_F if fem else _U_M)[u]
+    return unit + " و" + _TENS[t]
+
+
+def _below1000(n, fem):
+    h, r = divmod(n, 100)
+    parts = []
+    if h:
+        parts.append(_HUND[h])
+    if r or not h:
+        parts.append(_below100(r, fem))
+    return " و".join(parts)
+
+
+def _ar_cardinal(n, fem=False, gen=False):
+    """MSA cardinal. fem: the counted noun is feminine (affects the last
+    group only). gen: genitive/accusative forms (عشرين، اثنين، ألفين)."""
+    n = int(n)
+    if n == 0:
+        return "صفر"
+    neg = n < 0
+    n = abs(n)
+    parts = []
+    for size, (one, two, few, acc) in _SCALES:
+        m, n = divmod(n, size)
+        if not m:
+            continue
+        if m == 1:
+            parts.append(one)
+        elif m == 2:
+            parts.append(two)
+        else:
+            r = m % 100
+            word = few if 3 <= r <= 10 else (acc if r >= 11 else one)
+            parts.append(_below1000(m, False) + " " + word)
+    if n:
+        parts.append(_below1000(n, fem))
+    out = " و".join(parts)
+    if gen:
+        out = _genitive(out)
+    return ("سالب " + out) if neg else out
+
+
+def _genitive(s):
+    w = s.split(" ")
+    rep = {"اثنان": "اثنين", "اثنتان": "اثنتين", "اثنا": "اثني", "اثنتا": "اثنتي",
+           "مئتان": "مئتين", "ألفان": "ألفين", "مليونان": "مليونين",
+           "ملياران": "مليارين", "تريليونان": "تريليونين"}
+    out = []
+    for x in w:
+        pre = "و" if x.startswith("و") and x[1:] in rep or (x.startswith("و") and x[1:] in _TENS.values()) else ""
+        core = x[len(pre):]
+        if core in rep:
+            core = rep[core]
+        elif core in _TENS.values():
+            core = core[:-2] + "ين"
+        out.append(pre + core)
+    return " ".join(out)
+
+
+# Plurals in -ات whose singular is masculine (ثلاثة ملفات), and broken
+# plurals whose singular is feminine (ثلاث دقائق).
+_MASC_AT = set("""ملفات حسابات مطارات فيديوهات مستشفيات حيوانات مشروعات منتجات مسلسلات
+مليارات مستويات سجلات مجلدات مؤتمرات مكونات محركات متغيرات مخططات قطارات جنيهات دولارات
+كيلومترات سنتيمترات مترات بايتات ميغابايتات جيجابايتات ميجابايتات تيرابايتات مقررات
+مهرجانات معسكرات مختبرات مسدسات موتورات تلفزيونات تليفونات باصات أوتوبيسات بنطلونات
+إعلانات حمامات نباتات ملحقات مرفقات مقترحات مواعيد""".split())
+_FEM_BROKEN = set("""دقائق رسائل مدن دول نساء ليال ليالي جوائز وسائل قصص صور غرف نقاط
+قطع مدارس قرى سور أعين أيد أرجل حروب شمس أنفس نفوس أرض أراض أراضي طرق مرات سنين
+سيوف حقائب جزر ذخائر ركائز فرائض شرائح خرائط حدائق كنائس مساجد بطاقات""".split())
+
+
+def _noun_gender(word, n):
+    """Guess whether the noun counted by n is feminine."""
+    w = re.sub("[ً-ْـ]", "", word or "")
+    w = re.sub("^(?:ال)", "", w)
+    if not w:
+        return False
+    if w in _MASC_AT:
+        return False
+    if w in _FEM_BROKEN:
+        return True
+    if w.endswith("ات") and len(w) > 3:
+        # تفعيلات / افتعالات / استفعالات are verbal nouns, masculine
+        if (w.startswith("ت") and len(w) >= 7) or re.match("^(?:است|ا.ت)", w):
+            return False
+        return True
+    r = n % 100
+    if w.endswith("ة"):
+        # 3-10 take a plural; a plural in ة (طلبة، أساتذة) is masculine
+        return not (3 <= r <= 10)
+    return False
+
+
+_GEN_BEFORE = set("""في من إلى الى على عن حتى منذ مذ بعد قبل خلال حوالي حوالى نحو لمدة مدة
+عام سنة العام السنة بين أكثر أقل أي كل بحوالي بنحو وفي ومن وإلى وعلى وعن وبعد وقبل وخلال وحوالي
+فمن ففي لكل بكل""".split())
+
+_ORD_M = ["", "الأول", "الثاني", "الثالث", "الرابع", "الخامس", "السادس", "السابع", "الثامن", "التاسع", "العاشر"]
+_ORD_F = ["", "الأولى", "الثانية", "الثالثة", "الرابعة", "الخامسة", "السادسة", "السابعة", "الثامنة", "التاسعة", "العاشرة"]
+
+
+def _ordinal_def(n, fem=False):
+    """الأول ... التاسع والتسعون (definite), otherwise ال + cardinal."""
+    n = int(n)
+    tbl = _ORD_F if fem else _ORD_M
+    if 1 <= n <= 10:
+        return tbl[n]
+    if n < 20:
+        if n == 11:
+            return "الحادية عشرة" if fem else "الحادي عشر"
+        u = tbl[n - 10]
+        return u + (" عشرة" if fem else " عشر")
+    if n < 100:
+        t, u = divmod(n, 10)
+        tens = "ال" + _TENS[t]
+        if not u:
+            return tens
+        unit = ("الحادية" if fem else "الحادي") if u == 1 else tbl[u]
+        return unit + " و" + tens
+    if n == 100:
+        return "المئة"
+    return "ال" + _ar_cardinal(n)
+
+
+def _cardinal(n, fem=False, gen=False):
+    try:
+        return _ar_cardinal(int(n), fem, gen)
+    except Exception:
+        return str(n)
 
 
 def _ordinal(n, feminine=False):
@@ -243,8 +400,8 @@ def _x_dates(t, opts):
         y = int(y)
         if y < 100:                       # 25/7/26 -> 2026 heuristic
             y += 2000 if y < 50 else 1900
-        out = "%s من %s %s" % (_ordinal_definite(d), _MONTHS[mo],
-                               _cardinal(y))
+        out = "%s من %s %s" % (_ordinal_def(d), _MONTHS[mo],
+                               _cardinal(y, gen=True))
         if opts.get("hijri") and _Gregorian is not None:
             try:
                 h = _Gregorian(y, mo, d).to_hijri()
@@ -255,6 +412,15 @@ def _x_dates(t, opts):
                 pass
         return out
 
+    # 2 مايو 2024 / 15 كانون الثاني -> الثاني من مايو ألفين وأربعة وعشرين
+    names = "|".join(sorted(set(_MONTHS[1:] + _HIJRI_MONTHS[1:] + [
+        "أبريل", "ابريل", "إبريل", "اغسطس", "اكتوبر", "أيار", "حزيران", "تموز", "آب", "أيلول",
+        "تشرين الأول", "تشرين الثاني", "كانون الأول", "كانون الثاني", "شباط", "آذار", "نيسان",
+        "جانفي", "فيفري", "أفريل", "ماي", "جوان", "جويلية", "أوت"]), key=len, reverse=True))
+    t = re.sub(r"(?<!\d)(\d{1,2})\s+(" + names + r")(?![\u0621-\u064A])(?:\s+(\d{3,4})(?!\d))?",
+               lambda m: "%s من %s%s" % (_ordinal_def(int(m.group(1))), m.group(2),
+                                        (" " + _cardinal(m.group(3), gen=True)) if m.group(3) else "")
+               if 1 <= int(m.group(1)) <= 31 else m.group(0), t)
     # d/m/y or d-m-y with 1-2 digit day/month and 2-4 digit year
     t = re.sub(r"\b(\d{1,2})[/\-](\d{1,2})[/\-](\d{2,4})\b", repl, t)
     return t
@@ -263,12 +429,13 @@ def _x_dates(t, opts):
 def _x_times(t, opts):
     if not opts.get("times"):
         return t
+    period_words = r"(?:صباحا|صباحًا|صباحاً|مساء|مساءً|مساءا|ظهرا|ظهرًا|ليلا|ليلًا|فجرا|فجرًا|عصرا|عصرًا|ص|م)(?![\u0621-\u064A])"
 
     def repl(m):
         h, mi = int(m.group(1)), int(m.group(2))
         if not (0 <= h <= 23 and 0 <= mi <= 59):
             return m.group(0)
-        period = ""
+        given = m.group(3)
         if h == 0:
             hh, period = 12, "منتصف الليل"
         elif h < 12:
@@ -277,22 +444,26 @@ def _x_times(t, opts):
             hh, period = 12, "ظهرا"
         else:
             hh, period = h - 12, "مساء"
-        base = "الساعة %s" % _ordinal_definite(hh)
-        if mi == 0:
-            pass
-        elif mi == 15:
+        if given:
+            g = given.strip()
+            period = {"ص": "صباحا", "م": "مساء"}.get(g, g)
+        base = "الساعة %s" % _ordinal_def(hh, fem=True)
+        if mi == 15:
             base += " والربع"
         elif mi == 30:
             base += " والنصف"
         elif mi == 45:
             base += " إلا ربعا"
-        else:
-            base += " و%s دقيقة" % _cardinal(mi)
+        elif mi == 1:
+            base += " ودقيقة"
+        elif mi == 2:
+            base += " ودقيقتان"
+        elif mi:
+            base += " و%s %s" % (_cardinal(mi, fem=True), "دقائق" if 3 <= mi <= 10 else "دقيقة")
         return base + " " + period
 
-    # remove an immediately preceding "الساعة" so we do not say it twice
-    t = re.sub(r"الساعة\s+(?=\d{1,2}:\d{2})", "", t)
-    return re.sub(r"(?<!\d)(\d{1,2}):(\d{2})(?!\d)", repl, t)
+    t = re.sub(r"(?:ال)?ساعة\s+(?=\d{1,2}:\d{2})", "", t)
+    return re.sub(r"(?<![\d:])(\d{1,2}):(\d{2})(?![\d:])(\s*" + period_words + r")?", repl, t)
 
 
 def _x_currency(t, opts):
@@ -347,7 +518,12 @@ def _x_math(t, opts):
     t = re.sub(r"(?<=\d)\s*\+\s*(?=\d)", " زائد ", t)
     t = re.sub(r"(?<=\d)\s*[-−]\s*(?=\d)", " ناقص ", t)
     t = re.sub(r"(?<=\d)\s*[×x]\s*(?=\d)", " ضرب ", t)
-    t = re.sub(r"(?<=\d)\s*[÷/]\s*(?=\d)", " قسمة ", t)
+    t = re.sub(r"(?<=\d)\s*÷\s*(?=\d)", " قسمة ", t)
+    fr = {(1, 2): "نصف", (1, 3): "ثلث", (2, 3): "ثلثان", (1, 4): "ربع", (3, 4): "ثلاثة أرباع",
+          (1, 5): "خمس", (1, 8): "ثمن", (1, 10): "عشر"}
+    t = re.sub(r"(?<![\d/])(\d)/(\d{1,2})(?![\d/])",
+               lambda m: fr.get((int(m.group(1)), int(m.group(2))), m.group(0)), t)
+    t = re.sub(r"(?<=\d)\s*/\s*(?=\d)", " على ", t)
     t = re.sub(r"(?<=\d)\s*=\s*", " يساوي ", t)
     return t
 
@@ -368,10 +544,12 @@ def _x_phone(t, opts):
 def _x_ordinals(t, opts):
     if not opts.get("ordinals"):
         return t
-    # الـ21 / الـ 21  -> definite ordinal (ـ is Arabic tatweel, not \b-safe)
-    t = re.sub(r"الـ\s*(\d{1,3})",
-               lambda m: "ال" + _ordinal(int(m.group(1))), t)
-    return t
+
+    def repl(m):
+        fem = bool(m.group(1)) and m.group(1).rstrip().endswith("ة")
+        return (m.group(1) or "") + _ordinal_def(int(m.group(2)), fem)
+    # الـ21 / الـ 21 / ال21 -> definite ordinal, feminine after a feminine noun
+    return re.sub(r"([\u0621-\u064A]+\s+)?(?<![\u0621-\u064A])ال(?:ـ\s*)?(\d{1,3})(?!\d)", repl, t)
 
 
 def _x_roman(t, opts):
@@ -391,21 +569,33 @@ def _x_roman(t, opts):
 def _x_numbers(t, opts):
     if not opts.get("numbers"):
         return t
-    # remaining bare integers / decimals
+    # versions and addresses: 2.5.1 -> اثنان نقطة خمسة نقطة واحد
+    t = re.sub(r"(?<![\d.])\d+(?:\.\d+){2,}(?![\d.])",
+               lambda m: " نقطة ".join(_cardinal(x) if not (len(x) > 1 and x[0] == "0") else _spell_digits(x)
+                                       for x in m.group(0).split(".")), t)
+    # simple fractions
+    fr = {(1, 2): "نصف", (1, 3): "ثلث", (2, 3): "ثلثان", (1, 4): "ربع", (3, 4): "ثلاثة أرباع",
+          (1, 5): "خمس", (1, 8): "ثمن", (1, 10): "عشر"}
+    t = re.sub(r"(?<![\d/])(\d)/(\d{1,2})(?![\d/])",
+               lambda m: fr.get((int(m.group(1)), int(m.group(2))), m.group(0)), t)
     t = re.sub(r"\d+\.\d+", lambda m: _cardinal_dec(m.group(0)), t)
 
     def _int_repl(m):
-        s = m.group(0)
-        # A number with a leading zero (06, 007) is a code/time/ID, not a
-        # cardinal — int("06") would silently drop the zero and read "six".
-        # Read every digit by name instead: "صفر ستة". A bare "0" stays the
-        # word صفر. Long digit runs (>= 7, e.g. phone numbers) are also read
-        # digit-by-digit, which is how people expect them spoken.
-        if (len(s) > 1 and s[0] == "0") or len(s) >= 7:
-            return _spell_digits(s)
-        return _cardinal(s)
+        s = m.group(2)
+        before, after = m.group(1) or "", m.group(3) or ""
+        # A number with a leading zero (06, 007) is a code, not a cardinal;
+        # a long run (phone numbers, IDs) is read digit by digit.
+        if (len(s) > 1 and s[0] == "0") or len(s) >= 10:
+            return before + _spell_digits(s) + after
+        prev = re.findall("[\u0621-\u064A]+", before)
+        gen = bool(prev) and prev[-1] in _GEN_BEFORE
+        noun = re.match(r"\s*([\u0621-\u064A\u064B-\u0652]+)", after)
+        # one and two follow their noun (كتاب واحد), so the next word says nothing
+        fem = _noun_gender(noun.group(1), int(s)) if noun and int(s) % 100 not in (1, 2) else False
+        return before + _cardinal(s, fem=fem, gen=gen) + after
 
-    t = re.sub(r"\d+", _int_repl, t)
+    # look at the word before (case) and the word after (gender)
+    t = re.sub(r"((?:^|[\u0621-\u064A]+)\s*)?(?<!\d)(\d+)(?!\d)(\s*[\u0621-\u064A\u064B-\u0652]*)", _int_repl, t)
     return t
 
 
@@ -421,21 +611,23 @@ def _x_symbols(t, opts):
 def _x_abbrev(t, opts):
     if not opts.get("abbrev"):
         return t
-    # An Arabic letter that could continue a word. If the character right
-    # after the abbreviation is one of these, it is NOT an abbreviation but
-    # the start of a longer word (e.g. "م." inside "م.ك" is fine, but the
-    # bare form must never eat into a real word), so we require a non-letter
-    # (space, punctuation, digit, end of string) to follow.
-    ar_letter = r"[\u0621-\u064A\u0670\u0671]"
+    # Anything that can be part of a word: letters, harakat, tatweel, digits,
+    # Persian/Urdu letters and presentation forms. An abbreviation must stand
+    # alone: whitespace, punctuation or the edge of the text on both sides.
+    word = r"[\u0610-\u061A\u0620-\u065F\u0660-\u0669\u0670-\u06D3\u06D5-\u06ED\u06FA-\u06FF\uFB50-\uFDFF\uFE70-\uFEFFA-Za-z0-9_]"
+    # years: "632م" / "1990 م." / "1445هـ" -> ميلادي / هجري
+    t = re.sub(r"(?<![\d:])(\d{3,4})\s*م(?=\.?(?:$|[\s.,،؛:!?؟)\]»]))", r"\1 ميلادي", t)
+    t = re.sub(r"(?<![\d:])(\d{3,4})\s*(?:هـ|ه)(?=\.?(?:$|[\s.,،؛:!?؟)\]»]))", r"\1 هجري", t)
     for ab, full in sorted(_ABBREV.items(), key=lambda kv: -len(kv[0])):
         esc = re.escape(ab)
-        # left boundary: not preceded by an Arabic letter (so we don't match
-        # the tail of a word); right boundary: not followed by an Arabic
-        # letter (so "مج" can never turn "مجلة" into "مجلدلة"). A trailing dot
-        # in the abbreviation already supplies part of that boundary.
-        pattern = r"(?<!" + ar_letter + r")" + esc + r"(?!" + ar_letter + r")"
-        t = re.sub(pattern, full, t)
-    return t
+        if ab.endswith(".") and len(ab) == 2:
+            # a one-letter title (د. م. أ. ت.) only before a following word,
+            # never at the end of a sentence where it is just a word's last letter
+            pattern = r"(?<!" + word + r")" + esc + r"(?=\s*[\u0621-\u064A])"
+        else:
+            pattern = r"(?<!" + word + r")" + esc + r"(?!" + word + r")"
+        t = re.sub(pattern, full + " ", t)
+    return re.sub(r" +(?=[.,،؛:!?؟])", "", t)
 
 
 # ---------------------------------------------------------------------------
@@ -454,6 +646,18 @@ def normalize(text, opts=None):
         o.update({k: v for k, v in opts.items() if k in DEFAULTS})
     try:
         t = _to_ascii_digits(text)
+        t = t.replace("\u066B", ".").replace("\u066C", ",")
+        # 1,250,000 -> 1250000 (groups of exactly three digits only)
+        t = re.sub(r"(?<![\d,])\d{1,3}(?:,\d{3})+(?![\d,]|\.\d)", lambda m: m.group(0).replace(",", ""), t)
+        # -5 at the start of a number (not a range like 3-5)
+        t = re.sub(r"(?:(?<=^)|(?<=[\s(:=]))[-−](?=\d)", "سالب ", t)
+        # ص 45 / ج 2 / ع 3 before a number
+        t = re.sub(r"(?<![\u0600-\u06FF\w])(ص|ج|ع|ط)\.?\s*(\d{1,4})(?!\d)",
+                   lambda m: {"ص": "صفحة", "ج": "الجزء", "ع": "العدد", "ط": "الطبعة"}[m.group(1)] + " " + _cardinal(m.group(2)), t)
+        # "و 11" -> "و11": the waw belongs to the number
+        t = re.sub(r"(?<![\u0621-\u064A])و\s+(?=\d)", "و", t)
+        # 3-5 is a range
+        t = re.sub(r"(?<=\d)[-–](?=\d)(?!\d{1,2}[-/]\d)", " إلى ", t)
         # Order is important — see module docstring.
         t = _x_abbrev(t, o)
         t = _x_dates(t, o)
