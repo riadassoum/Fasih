@@ -268,3 +268,6 @@ msgstr "جارٍ جلب قائمة الأصوات..."
 msgid ""
 "The list of voices could not be retrieved. Check your internet connection."
 msgstr "تعذّر جلب قائمة الأصوات. تحقق من اتصالك بالإنترنت."
+
+msgid "Modulation postfilter (livelier, less muffled)"
+msgstr "مرشّح التعديل (صوت أكثر حيوية وأقل كتمانًا)"

@@ -33,11 +33,13 @@ for V in "$REPO"/voices/*/; do
   # Sharpening variants double the add-on's size: left out unless FASIH_SHARP=1 (they stay in the repository)
   [ -n "${FASIH_SHARP:-}" ] || rm -f "$D/data/variants/$VN/sharp.patch"
   cp "$V/variants/base.data" "$D/data/voices/$VN/24000/voice.data"
+  # modulation postfilter, on by default (the Modulation postfilter setting removes it)
+  [ -s "$V/variants/ms_gain.txt" ] && cp "$V/variants/ms_gain.txt" "$D/data/voices/$VN/24000/"
 done
 mkdir -p "$D/data/voices/SLT"; cp -r "$T/rhvoice-slt/." "$D/data/voices/SLT/"
 sed -i 's/^gain=.*/gain=0.5/' "$D/data/voices/SLT/voice.params"
 grep -q '^gain=' "$D/data/voices/SLT/voice.params" || echo "gain=0.5" >> "$D/data/voices/SLT/voice.params"
-printf 'clarity=50\nbreathiness=b0\nsharpening=0\nrepair=0\n' > "$D/data/quality.txt"
+printf 'clarity=50\nbreathiness=b0\nsharpening=0\nrepair=0\nms=1\n' > "$D/data/quality.txt"
 
 # Arabic text pipeline: ClaritySynth modules (Riad Assoum) with Fasih's patches, PBT components
 cp "$T"/claritysynth/*.py "$D/arabic/"; cp -r "$T/claritysynth/lib_pure" "$D/arabic/"

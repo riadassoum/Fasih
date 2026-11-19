@@ -12,19 +12,35 @@ index f5fadd2..e5c8114 100644
  set(package_name "RHVoice_core")
  
 diff --git a/src/core/hts_vocoder_wrapper.cpp b/src/core/hts_vocoder_wrapper.cpp
-index eeadbe7..b49b911 100644
+index eeadbe7..2a09be6 100644
 --- a/src/core/hts_vocoder_wrapper.cpp
 +++ b/src/core/hts_vocoder_wrapper.cpp
-@@ -18,6 +18,8 @@
+@@ -18,14 +18,23 @@
  #include <iostream>
  #include "core/hts_vocoder_wrapper.hpp"
  #include "HTS_hidden.h"
 +#include <cstring>
 +#include "world/synthesisrealtime.h"
++#include <fstream>
++#include <complex>
++#include <cstdlib>
++#include <cstdio>
  
  namespace RHVoice
  {
-@@ -36,6 +38,11 @@ namespace RHVoice
+   hts_vocoder_wrapper::hts_vocoder_wrapper()
+   {}
+ 
+-  void hts_vocoder_wrapper::init(_HTS_Engine* e, pitch::editor* ed, double psh)
++  void hts_vocoder_wrapper::init(_HTS_Engine* e, pitch::editor* ed, double psh, const std::string& model_path)
+   {
++    ms_gain.clear();
++    if(!model_path.empty())
++      ms_load(model_path+"/ms_gain.txt");
+     vocoder.reset(new _HTS_Vocoder);
+     engine=e;
+     pitch_editor=ed;
+@@ -36,6 +45,11 @@ namespace RHVoice
                             0,
                             HTS_Engine_get_sampling_frequency(engine),
                             HTS_Engine_get_fperiod(engine));
@@ -36,7 +52,7 @@ index eeadbe7..b49b911 100644
  }
  
    void hts_vocoder_wrapper::clear()
-@@ -44,6 +51,7 @@ namespace RHVoice
+@@ -44,6 +58,7 @@ namespace RHVoice
        return;
      HTS_Vocoder_clear(vocoder.get());
      vocoder.reset();
@@ -44,7 +60,153 @@ index eeadbe7..b49b911 100644
      engine=nullptr;
      pitch_editor=nullptr;
      count=0;
-@@ -109,6 +117,8 @@ namespace RHVoice
+@@ -69,12 +84,22 @@ namespace RHVoice
+           ++l;
+       }
+     const auto m=i+n;
++    ms_filter();
++    static FILE* dump=std::getenv("RHVOICE_DUMP_MGC")?std::fopen(std::getenv("RHVOICE_DUMP_MGC"), "ab"):nullptr;
+     for(auto j=i; j<m; ++j)
+       {
+         frame_t f;
+         f.index=count;
+         auto spec=HTS_PStreamSet_get_parameter_vector(pss, 0, j);
+-        f.spec.assign(spec, spec+nspec);
++        if(!ms_spec.empty() && j<ms_spec.size())
++          f.spec=ms_spec[j];
++        else
++          f.spec.assign(spec, spec+nspec);
++        if(dump)
++          {
++            std::vector<float> fv(f.spec.begin(), f.spec.end());
++            std::fwrite(fv.data(), sizeof(float), fv.size(), dump);
++          }
+         f.lf0=HTS_NODATA;
+         if(HTS_PStreamSet_get_msd_flag(pss, 1, j) == TRUE)
+           {
+@@ -105,10 +130,130 @@ namespace RHVoice
+     do_synth();
+   }
+ 
++  void hts_vocoder_wrapper::ms_load(const std::string& path)
++  {
++    std::ifstream in(path);
++    if(!in)
++      return;
++    std::size_t d=0, k=0;
++    if(!(in>>d>>k>>ms_frame_rate) || d==0 || k<2)
++      return;
++    std::vector<std::vector<double>> g(d, std::vector<double>(k, 1.0));
++    for(auto& row: g)
++      for(auto& v: row)
++        if(!(in>>v))
++          return;
++    ms_step=(ms_frame_rate/2.0)/static_cast<double>(k-1);
++    ms_gain.swap(g);
++  }
++
++  namespace
++  {
++    void fft(std::vector<std::complex<double>>& a, bool inverse)
++    {
++      const std::size_t n=a.size();
++      for(std::size_t i=1, j=0; i<n; ++i)
++        {
++          std::size_t bit=n>>1;
++          for(; j&bit; bit>>=1)
++            j^=bit;
++          j^=bit;
++          if(i<j)
++            std::swap(a[i], a[j]);
++        }
++      for(std::size_t len=2; len<=n; len<<=1)
++        {
++          const double ang=2*M_PI/static_cast<double>(len)*(inverse?1:-1);
++          const std::complex<double> wl(std::cos(ang), std::sin(ang));
++          for(std::size_t i=0; i<n; i+=len)
++            {
++              std::complex<double> w(1);
++              for(std::size_t j=0; j<len/2; ++j)
++                {
++                  const auto u=a[i+j], v=a[i+j+len/2]*w;
++                  a[i+j]=u+v;
++                  a[i+j+len/2]=u-v;
++                  w*=wl;
++                }
++            }
++        }
++      if(inverse)
++        for(auto& x: a)
++          x/=static_cast<double>(n);
++    }
++  }
++
++  // The spectral trajectory of the whole generation window, each coefficient filtered in the
++  // modulation-frequency domain (mean kept, the window mirrored at both ends to avoid edges).
++  void hts_vocoder_wrapper::ms_filter()
++  {
++    ms_spec.clear();
++    if(ms_gain.empty())
++      return;
++    auto* pss=&engine->pss;
++    const std::size_t T=HTS_PStreamSet_get_total_frame(pss);
++    const std::size_t D=std::min<std::size_t>(HTS_PStreamSet_get_vector_length(pss, 0), ms_gain.size());
++    const std::size_t nspec=HTS_PStreamSet_get_vector_length(pss, 0);
++    if(T<8)
++      return;
++    ms_spec.resize(T);
++    for(std::size_t t=0; t<T; ++t)
++      {
++        auto v=HTS_PStreamSet_get_parameter_vector(pss, 0, t);
++        ms_spec[t].assign(v, v+nspec);
++      }
++    const std::size_t pad=std::min<std::size_t>(T-1, 64);
++    std::size_t n=1;
++    while(n<T+2*pad)
++      n<<=1;
++    std::vector<std::complex<double>> a(n);
++    const auto& g0=ms_gain[0];
++    for(std::size_t d=0; d<D; ++d)
++      {
++        double mean=0;
++        for(std::size_t t=0; t<T; ++t)
++          mean+=ms_spec[t][d];
++        mean/=static_cast<double>(T);
++        std::fill(a.begin(), a.end(), std::complex<double>(0));
++        for(std::size_t i=0; i<T+2*pad; ++i)
++          {
++            long t=static_cast<long>(i)-static_cast<long>(pad);
++            if(t<0) t=-t;
++            if(t>=static_cast<long>(T)) t=2*(static_cast<long>(T)-1)-t;
++            a[i]=ms_spec[t][d]-mean;
++          }
++        fft(a, false);
++        const auto& g=ms_gain[d];
++        for(std::size_t b=1; b<=n/2; ++b)
++          {
++            const double hz=ms_frame_rate*static_cast<double>(b)/static_cast<double>(n);
++            const double pos=hz/ms_step;
++            std::size_t k=static_cast<std::size_t>(pos);
++            double gain;
++            if(k+1>=g.size())
++              gain=g.back();
++            else
++              {
++                const double fr=pos-static_cast<double>(k);
++                gain=g[k]*(1-fr)+g[k+1]*fr;
++              }
++            a[b]*=gain;
++            if(b!=n-b)
++              a[n-b]*=gain;
++          }
++        fft(a, true);
++        for(std::size_t t=0; t<T; ++t)
++          ms_spec[t][d]=a[t+pad].real()+mean;
++      }
++    (void)g0;
++  }
++
+   void hts_vocoder_wrapper::finish()
    {
      pitch_editor->finish();
      do_synth();
@@ -53,7 +215,7 @@ index eeadbe7..b49b911 100644
    }
  
    void hts_vocoder_wrapper::do_synth()
-@@ -128,6 +138,12 @@ namespace RHVoice
+@@ -128,6 +273,12 @@ namespace RHVoice
            }
          if(f.voiced)
            lf0+=pitch_shift;
@@ -66,7 +228,7 @@ index eeadbe7..b49b911 100644
          HTS_Vocoder_synthesize(vocoder.get(),
                                 nspec - 1,
                                 lf0,
-@@ -142,4 +158,179 @@ namespace RHVoice
+@@ -142,4 +293,179 @@ namespace RHVoice
          fq.pop();
        }
    }
@@ -246,8 +408,38 @@ index eeadbe7..b49b911 100644
 +      world_frame(z, 0.0);
 +  }
  }
+diff --git a/src/core/language.cpp b/src/core/language.cpp
+index 35e0b51..dcdfdcf 100644
+--- a/src/core/language.cpp
++++ b/src/core/language.cpp
+@@ -738,6 +738,12 @@ cfg.register_setting(lcfg.tok_sent);
+     auto& labeller=get_hts_labeller();
+     for(const auto& flag: lcfg.ph_flags.get())
+       labeller.define_ph_flag_feature(flag);
++    // every phoneme property can also be asked about as ext_<property> in a data-only language's labels
++    {
++      const phoneme_feature_set& phfs=get_phoneme_set().get_feature_set();
++      for(phoneme_feature_set::const_iterator it(phfs.begin());it!=phfs.end();++it)
++        labeller.define_extra_phonetic_feature(*it);
++    }
+   }
+ 
+   void language::register_default_features()
+diff --git a/src/core/str_hts_engine_impl.cpp b/src/core/str_hts_engine_impl.cpp
+index 3240baa..1ba7426 100644
+--- a/src/core/str_hts_engine_impl.cpp
++++ b/src/core/str_hts_engine_impl.cpp
+@@ -136,7 +136,7 @@ namespace RHVoice
+     check_units();
+     set_speed();
+     queue_labels();
+-    vocoder.init(engine.get(), &pitch_editor, pitch_shift);
++    vocoder.init(engine.get(), &pitch_editor, pitch_shift, model_path);
+     while(fill_lab_view())
+       {
+         HTS_Engine_refresh(engine.get());
 diff --git a/src/include/core/hts_vocoder_wrapper.hpp b/src/include/core/hts_vocoder_wrapper.hpp
-index ec29cb4..c3f1711 100644
+index ec29cb4..3b85c04 100644
 --- a/src/include/core/hts_vocoder_wrapper.hpp
 +++ b/src/include/core/hts_vocoder_wrapper.hpp
 @@ -19,6 +19,7 @@
@@ -258,10 +450,29 @@ index ec29cb4..c3f1711 100644
  #include "pitch.hpp"
  
  struct _HTS_Vocoder;
-@@ -56,6 +57,27 @@ namespace RHVoice
+@@ -33,7 +34,7 @@ namespace RHVoice
+     hts_vocoder_wrapper(hts_vocoder_wrapper&)=delete;
+     hts_vocoder_wrapper& operator=(hts_vocoder_wrapper&)=delete;
+     ~hts_vocoder_wrapper();
+-    void init(_HTS_Engine*, pitch::editor*, double);
++    void init(_HTS_Engine*, pitch::editor*, double, const std::string& model_path=std::string());
+     void clear();
+     void synth(std::size_t i, std::size_t n);
+     void finish();
+@@ -56,6 +57,37 @@ namespace RHVoice
      std::size_t count{0};
      std::queue<frame_t> fq;
      double pitch_shift{0};
++
++    // ---- modulation spectrum postfilter (Fasih): ms_gain.txt next to voice.data ----
++    // gains[d][k]: gain of the spectral trajectory of coefficient d at modulation frequency
++    // k*ms_step Hz (time-invariant MS postfilter, Takamichi et al. 2014)
++    std::vector<std::vector<double>> ms_gain;
++    double ms_step{1.0};
++    double ms_frame_rate{200.0};
++    std::vector<std::vector<double>> ms_spec;   // filtered spectral trajectory of the current window
++    void ms_load(const std::string& path);
++    void ms_filter();
 +
 +    // ---- WORLD vocoder (voices whose FULLCONTEXT_FORMAT contains "WORLD") ----
 +    struct world_frame_t

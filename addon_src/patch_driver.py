@@ -395,7 +395,7 @@ def _atomic_write(dst, data):
 
 def _quality_file_state():
     """Quality settings as stored in the voice files."""
-    st = {"clarity": 50, "breathiness": "b0", "sharpening": False, "repair": False}
+    st = {"clarity": 50, "breathiness": "b0", "sharpening": False, "repair": False, "ms": True}
     try:
         with open(os.path.join(data_dir, "quality.txt"), encoding="utf-8") as f:
             for line in f:
@@ -404,7 +404,7 @@ def _quality_file_state():
                     st[k] = int(v)
                 elif k == "breathiness":
                     st[k] = v
-                elif k in ("sharpening", "repair"):
+                elif k in ("sharpening", "repair", "ms"):
                     st[k] = v == "1"
     except Exception:
         pass
@@ -456,7 +456,18 @@ def _apply_quality(st):
         except Exception:
             pass
         _atomic_write(os.path.join(vd, "voice.params"), ("beta=%.3f\\ngain=%.3f\\n" % (beta, gain)).encode())
-    _atomic_write(os.path.join(data_dir, "quality.txt"), ("clarity=%d\\nbreathiness=%s\\nsharpening=%d\\nrepair=%d\\n" % (st["clarity"], st["breathiness"], 1 if st["sharpening"] else 0, 1 if st.get("repair") else 0)).encode())
+        # modulation postfilter: the engine applies ms_gain.txt when it sits next to voice.data
+        msrc = os.path.join(vdir2, "ms_gain.txt")
+        mdst = os.path.join(vd, "24000", "ms_gain.txt")
+        try:
+            if st.get("ms", True) and os.path.isfile(msrc):
+                with open(msrc, "rb") as f:
+                    _atomic_write(mdst, f.read())
+            elif os.path.exists(mdst):
+                os.remove(mdst)
+        except OSError:
+            log.error("Fasih: cannot update the modulation postfilter of %s" % name, exc_info=True)
+    _atomic_write(os.path.join(data_dir, "quality.txt"), ("clarity=%d\\nbreathiness=%s\\nsharpening=%d\\nrepair=%d\\nms=%d\\n" % (st["clarity"], st["breathiness"], 1 if st["sharpening"] else 0, 1 if st.get("repair") else 0, 1 if st.get("ms", True) else 0)).encode())
     return True
 
 
@@ -536,6 +547,12 @@ rep('''    def terminate(self):''', '''    # quality settings: rewrite voice fil
     def _set_consonantRepair(self, v):
         self._quality_set("repair", bool(v))
 
+    def _get_modulationPostfilter(self):
+        return _quality_state().get("ms", True)
+
+    def _set_modulationPostfilter(self, v):
+        self._quality_set("ms", bool(v))
+
     def terminate(self):''')
 # 2) PlanetBlindTech audio post-filter (DC/rumble high-pass + soft limiter) in the audio path
 rep('''    def do_play(self, data, index=None):
@@ -564,6 +581,7 @@ except Exception:
 # 3) settings: read emojis, pausal ending; dictionaries
 rep('''        BooleanDriverSetting("sharpening", "Sharpening (crisper sound)", defaultVal=False, availableInSettingsRing=True),''', '''        BooleanDriverSetting("sharpening", "Sharpening (crisper sound)", defaultVal=False, availableInSettingsRing=True),
         BooleanDriverSetting("consonantRepair", "Consonant repair (crisper ق ط ش, may sound muffled)", defaultVal=False, availableInSettingsRing=True),
+        BooleanDriverSetting("modulationPostfilter", "Modulation postfilter (livelier, less muffled)", defaultVal=True, availableInSettingsRing=True),
         BooleanDriverSetting("readEmojis", "Read emojis and symbols by name", defaultVal=True),
         BooleanDriverSetting("pausalEnding", "Pausal ending (waqf) at end of sentences", defaultVal=True),
         DriverSetting("mixedPriority", "Mixed Arabic and Latin text", defaultVal="auto", availableInSettingsRing=True),''')
@@ -756,7 +774,7 @@ rep('''        arabic_pipeline.preload()''', '''        arabic_pipeline.preload(
 # --- 1.1: translations (locale/<lang>/LC_MESSAGES/nvda.mo) ---------------------------------
 s = s.replace("import addonHandler\n", "import addonHandler\ntry:\n    addonHandler.initTranslation()\nexcept Exception:\n    pass\ntry:\n    _\nexcept NameError:\n    def _(text):\n        return text\n", 1)
 for _lit in ["&Secondary voice (for non-Arabic text)", "Clarity (postfilter)", "Breathiness",
-             "Sharpening (crisper sound)", "Consonant repair (crisper ق ط ش, may sound muffled)", "Read emojis and symbols by name",
+             "Sharpening (crisper sound)", "Consonant repair (crisper ق ط ش, may sound muffled)", "Modulation postfilter (livelier, less muffled)", "Read emojis and symbols by name",
              "Pausal ending (waqf) at end of sentences", "Mixed Arabic and Latin text",
              "Natural (recommended)", "Less", "Low", "Very low",
              "Automatic: Latin text as written, by the secondary voice",

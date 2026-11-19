@@ -44,6 +44,7 @@ These are in NVDA's voice settings. The secondary voice, Clarity, Breathiness, S
 - **Clarity**: how strongly the voice is sharpened by the postfilter.
 - **Breathiness**: from natural down to very low breath noise.
 - **Sharpening**: a crisper, more detailed spectrum. To keep the add-on small, it appears only when the voices are written again from their training output with `FASIH_SHARP=1` (`addon_src/build_addon.sh`).
+- **Modulation postfilter**: on by default. It restores part of the natural movement of the voice from moment to moment, measured on each voice's recordings, so the voices sound livelier and less muffled. Turn it off to hear the voices as trained.
 - **Consonant repair**: removes the breathy cough some voices make on ق ط ش, at the cost of a somewhat muffled sound. Off by default.
 - **Read emojis and symbols by name**.
 - **Pausal ending (waqf)**: the last word of a sentence is read in its pausal form.

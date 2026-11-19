@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- **Modulation postfilter** (on by default; a new setting turns it off): HMM voices change their sound too smoothly from moment to moment, which makes them a little muffled. Fasih now restores part of the natural movement measured in each voice's recordings (the time-invariant modulation spectrum postfilter of Takamichi et al., at half strength). Pitch, timing and loudness are unchanged; voices whose recordings are no longer available (Lamees, Riad, Reem, Aseel) use the average of the others.
+- **Riad** now has the same gentle tone correction as the other voices, with his pitch unchanged.
+
 ## 1.2
 
 ### Voices
