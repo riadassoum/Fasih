@@ -652,11 +652,35 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			return
 		tools = gui.mainFrame.sysTrayIcon.toolsMenu
 		self.menu = wx.Menu()
-		item = self.menu.Append(wx.ID_ANY, _("&Download voices..."), _("Download more RHVoice voices for Fasih's secondary voice"))
+		item = self.menu.Append(wx.ID_ANY, _("&Download voices..."), _("Download more Fasih voices and voices in other languages"))
 		gui.mainFrame.sysTrayIcon.Bind(wx.EVT_MENU, self.onVoices, item)
 		item = self.menu.Append(wx.ID_ANY, _("&Pronunciation dictionary..."), _("Words Fasih should say differently"))
 		gui.mainFrame.sysTrayIcon.Bind(wx.EVT_MENU, self.onDictionary, item)
 		self.menuItem = tools.AppendSubMenu(self.menu, _("&Fasih"))
+		wx.CallLater(6000, self._movedVoiceNotice)
+
+	def _movedVoiceNotice(self):
+		"""Once after updating from 1.2: the chosen voice is now a download."""
+		import os
+		path = os.path.join(globalVars.appArgs.configPath, "Fasih-config", "missing_voice.txt")
+		try:
+			with open(path, encoding="utf-8") as f:
+				voice = f.read().strip()
+			os.remove(path)
+		except Exception:
+			return
+		if not voice:
+			return
+		msg = _("{voice} is no longer part of the Fasih add-on, so Fasih is speaking with Aseel for now. "
+		        "{voice} and the other Arabic voices can be downloaded from Tools > Fasih > Download voices. "
+		        "Open it now?").format(voice=voice)
+		gui.mainFrame.prePopup()
+		try:
+			answer = messageBox(msg, _("Fasih"), style=wx.YES_NO | wx.ICON_INFORMATION)
+		finally:
+			gui.mainFrame.postPopup()
+		if answer == wx.YES:
+			self.onVoices()
 
 	def onDictionary(self, evt=None):
 		gui.mainFrame.prePopup()

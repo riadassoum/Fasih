@@ -818,7 +818,18 @@ rep('''        voice = voice.split("+")[0]          # profiles saved by earlier 
             changed = voice != self.__profile
             self.__profile = voice
             if changed:
-                self._warm(voice)''')
+                self._warm(voice)
+        elif voice in _MOVED_TO_PACKS:
+            # a voice from 1.2 that is now a download: speak with the default
+            # voice and let the Fasih menu tell the user once where it went
+            try:
+                os.makedirs(config_path, exist_ok=True)
+                with open(os.path.join(config_path, "missing_voice.txt"), "w", encoding="utf-8") as f:
+                    f.write(voice)
+            except Exception:
+                pass''')
+rep('''config_path = os.path.join(globalVars.appArgs.configPath, "Fasih-config")''', '''config_path = os.path.join(globalVars.appArgs.configPath, "Fasih-config")
+_MOVED_TO_PACKS = ("Jamal", "Nour", "Sami", "Faris", "Huda", "Karim", "Rima", "Lamees", "Zayd", "Reem")''')
 rep('''    def _set_secondaryVoice(self, v):
         self._secondary = v if v in self._get_availableSecondaryvoices() else "auto"''', '''    def _set_secondaryVoice(self, v):
         self._secondary = v if v in self._get_availableSecondaryvoices() else "auto"

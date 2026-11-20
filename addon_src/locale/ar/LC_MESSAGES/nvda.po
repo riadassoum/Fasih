@@ -337,3 +337,9 @@ msgstr "&تحديث"
 
 msgid "Full case endings (classical reading)"
 msgstr "الإعراب الكامل (قراءة فصحى تامة)"
+
+msgid "Download more Fasih voices and voices in other languages"
+msgstr "تنزيل مزيد من أصوات فصيح وأصوات بلغات أخرى"
+
+msgid "{voice} is no longer part of the Fasih add-on, so Fasih is speaking with Aseel for now. {voice} and the other Arabic voices can be downloaded from Tools > Fasih > Download voices. Open it now?"
+msgstr "لم يعد الصوت {voice} جزءًا من إضافة فصيح، لذلك يتكلم فصيح الآن بصوت أصيل. يمكنك تنزيل {voice} والأصوات العربية الأخرى من «أدوات» ثم «فصيح» ثم «تنزيل أصوات». هل تريد فتحها الآن؟"
