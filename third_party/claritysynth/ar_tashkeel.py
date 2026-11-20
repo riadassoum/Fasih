@@ -464,7 +464,7 @@ def _load(name):
         return _run
 
     if name == "rawi":
-        path = _find_tashkeel_file("rawi_ensemble.onnx")
+        path = _find_tashkeel_file("rawi_fasih.onnx")
         if not path:
             return False
         r = _Rawi(path)

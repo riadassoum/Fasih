@@ -56,7 +56,7 @@ cp -r "$HERE/pbt" "$D/pbt"; touch "$D/pbt/__init__.py"
 # Rawi diacritizer: separate helper process + ONNX Runtime + model
 cp "$HERE/rawi_host/rawi_host.exe" "$D/arabic/lib/"
 cp "$T"/onnxruntime/* "$D/arabic/lib/onnxruntime/capi/"
-cp "$T/rawi/rawi_ensemble.onnx" "$T/rawi/vocab.json" "$D/arabic/lib/vowelizers/"
+cp "$T/rawi/rawi_fasih.onnx" "$T/rawi/vocab.json" "$D/arabic/lib/vowelizers/"
 
 cp "$REPO/README.md" "$B/"
 find "$B" -name "__pycache__" -prune -exec rm -rf {} +
