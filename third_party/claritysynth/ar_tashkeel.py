@@ -321,6 +321,8 @@ def _restore_hamza(original, diacritized):
     # مئة never has a shadda (the model sometimes writes مِئَّة)
     res = re.sub("(\u0645\u0650?\u0626\u064E?)\u0651", "\\1", res)
     res = re.sub("(\u0645\u0650\u0626)\u0652(?=\u062A)", "\\1\u064E", res)     # مِئْتان -> مِئَتان
+    # الاستخدام / الانتظار: the alif after al- is a hamzat wasl with kasra, never fatha
+    res = re.sub("([\u0671\u0627]\u0644)\u064E(\u0627)(?=[\u0621-\u064A]\u0652)", "\\1\u0650\\2", res)
     return res
 
 

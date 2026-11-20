@@ -97,9 +97,9 @@ def _to_ascii_digits(s):
 
 def _spell_digits(digits):
     """Read a run of digits one by one (phone numbers, codes, IDs)."""
-    names = {"0": "صفر", "1": "واحد", "2": "اثنان", "3": "ثلاثة",
-             "4": "أربعة", "5": "خمسة", "6": "ستة", "7": "سبعة",
-             "8": "ثمانية", "9": "تسعة"}
+    names = {"0": "صِفْرْ", "1": "وَاحِدْ", "2": "اِثْنَانْ", "3": "ثَلَاثَهْ",
+             "4": "أَرْبَعَهْ", "5": "خَمْسَهْ", "6": "سِتَّهْ", "7": "سَبْعَهْ",
+             "8": "ثَمَانِيَهْ", "9": "تِسْعَهْ"}
     return " ".join(names.get(c, c) for c in digits)
 
 
@@ -258,6 +258,12 @@ def _ordinal_def(n, fem=False):
     return "ال" + _ar_cardinal(n)
 
 
+def _gen_at(t, start):
+    """Genitive when the word just before position `start` is a preposition etc."""
+    m = re.search(r"([\u0621-\u064A]+)\s*$", t[:start])
+    return bool(m) and m.group(1) in _GEN_BEFORE
+
+
 def _cardinal(n, fem=False, gen=False):
     try:
         return _ar_cardinal(int(n), fem, gen)
@@ -357,8 +363,8 @@ _SYMBOLS = {
     ">": "أكبر من", "≤": "أصغر أو يساوي", "≥": "أكبر أو يساوي",
     "±": "زائد أو ناقص", "×": "ضرب", "÷": "قسمة", "√": "جذر",
     "∞": "ما لا نهاية", "π": "باي", "°": "درجة", "µ": "ميكرو",
-    "©": "حقوق محفوظة", "®": "علامة مسجلة", "™": "علامة تجارية",
-    "§": "فقرة", "†": "خنجر", "•": "نقطة", "★": "نجمة", "☆": "نجمة",
+    "©": "حقوق النشر", "®": "علامة مسجلة", "™": "علامة تجارية",
+    "§": "فقرة", "†": "خنجر", "•": "،", "◦": "،", "▪": "،", "★": "نجمة", "☆": "نجمة",
     "→": "يؤدي إلى", "←": "من", "↔": "ذهابا وإيابا", "⇒": "إذن",
 }
 
@@ -462,6 +468,22 @@ def _x_times(t, opts):
             base += " و%s %s" % (_cardinal(mi, fem=True), "دقائق" if 3 <= mi <= 10 else "دقيقة")
         return base + " " + period
 
+    # durations: 1:02:03, 0:45, and m:ss after a word for a recording
+    def dur(h, mi, se):
+        parts = []
+        for n, one, two, few, many in ((h, "ساعة", "ساعتان", "ساعات", "ساعة"), (mi, "دقيقة", "دقيقتان", "دقائق", "دقيقة"),
+                                       (se, "ثانية", "ثانيتان", "ثوان", "ثانية")):
+            if n == 1:
+                parts.append(one)
+            elif n == 2:
+                parts.append(two)
+            elif n:
+                parts.append("%s %s" % (_cardinal(n, fem=True), few if 3 <= n <= 10 else many))
+        return " و".join(parts) or "صفر ثانية"
+    t = re.sub(r"(?<![\d:])(\d{1,2}):(\d{2}):(\d{2})(?![\d:])", lambda m: dur(int(m.group(1)), int(m.group(2)), int(m.group(3))), t)
+    t = re.sub(r"(?<![\d:])0:(\d{2})(?![\d:])", lambda m: dur(0, 0, int(m.group(1))), t)
+    t = re.sub(r"((?:فيديو|مقطع|صوتية|صوتي|المدة|مدة|الطول|طول|أغنية|حلقة|بودكاست)[^\d\n]{0,12}?)(?<![\d:])(\d{1,2}):(\d{2})(?![\d:])",
+               lambda m: m.group(1) + dur(0, int(m.group(2)), int(m.group(3))), t)
     t = re.sub(r"(?:ال)?ساعة\s+(?=\d{1,2}:\d{2})", "", t)
     return re.sub(r"(?<![\d:])(\d{1,2}):(\d{2})(?![\d:])(\s*" + period_words + r")?", repl, t)
 
@@ -475,23 +497,23 @@ def _x_currency(t, opts):
         esym = re.escape(sym)
         # amount then symbol
         t = re.sub(r"(\d+(?:\.\d+)?)\s*" + esym,
-                   lambda m: _amount_words(m.group(1), _CURRENCY[sym]), t)
+                   lambda m: _amount_words(m.group(1), _CURRENCY[sym], _gen_at(m.string, m.start())), t)
         # symbol then amount (mostly $, £, €)
         if sym in ("$", "£", "€", "¥"):
             t = re.sub(esym + r"\s*(\d+(?:\.\d+)?)",
-                       lambda m: _amount_words(m.group(1), _CURRENCY[sym]), t)
+                       lambda m: _amount_words(m.group(1), _CURRENCY[sym], _gen_at(m.string, m.start())), t)
     return t
 
 
-def _amount_words(num, unit):
+def _amount_words(num, unit, gen=False):
     if "." in num:
         whole, frac = num.split(".", 1)
-        w = _cardinal(whole)
+        w = _cardinal(whole, gen=gen)
         # read fractional part as sub-unit count (piastres/fils/cents feel)
         if frac and int(frac):
             return "%s %s و%s" % (w, unit, _cardinal(frac.ljust(2, "0")[:2]))
         return "%s %s" % (w, unit)
-    return "%s %s" % (_cardinal(num), unit)
+    return "%s %s" % (_cardinal(num, gen=gen), unit)
 
 
 def _x_percent(t, opts):
@@ -582,26 +604,30 @@ def _x_numbers(t, opts):
 
     def _int_repl(m):
         s = m.group(2)
-        before, after = m.group(1) or "", m.group(3) or ""
+        before, after = m.group(1) or "", ""
+        follow = m.group(3) or ""
         # A number with a leading zero (06, 007) is a code, not a cardinal;
         # a long run (phone numbers, IDs) is read digit by digit.
         if (len(s) > 1 and s[0] == "0") or len(s) >= 10:
             return before + _spell_digits(s) + after
         prev = re.findall("[\u0621-\u064A]+", before)
         gen = bool(prev) and prev[-1] in _GEN_BEFORE
-        noun = re.match(r"\s*([\u0621-\u064A\u064B-\u0652]+)", after)
+        noun = re.match(r"\s*([\u0621-\u064A\u064B-\u0652]+)", follow)
         # one and two follow their noun (كتاب واحد), so the next word says nothing
         fem = _noun_gender(noun.group(1), int(s)) if noun and int(s) % 100 not in (1, 2) else False
         return before + _cardinal(s, fem=fem, gen=gen) + after
 
     # look at the word before (case) and the word after (gender)
-    t = re.sub(r"((?:^|[\u0621-\u064A]+)\s*)?(?<!\d)(\d+)(?!\d)(\s*[\u0621-\u064A\u064B-\u0652]*)", _int_repl, t)
+    t = re.sub(r"((?:^|[\u0621-\u064A]+)\s*)?(?<!\d)(\d+)(?!\d)(?=(\s*[\u0621-\u064A\u064B-\u0652]*))", _int_repl, t)
     return t
 
 
 def _x_symbols(t, opts):
     if not opts.get("symbols"):
         return t
+    if "©" in t and "حقوق" in t:
+        t = t.replace("©", " ")                 # "جميع الحقوق محفوظة ©"
+    t = re.sub(r"(رقم\s*)#", r"\1", t)        # "رقم #4521"
     for sym, word in _SYMBOLS.items():
         if sym in t:
             t = t.replace(sym, " %s " % word)
@@ -664,6 +690,24 @@ def normalize(text, opts=None):
                    lambda m: {"ص": "صفحة", "ج": "الجزء", "ع": "العدد", "ط": "الطبعة"}[m.group(1)] + " " + _cardinal(m.group(2)), t)
         # "و 11" -> "و11": the waw belongs to the number
         t = re.sub(r"(?<![\u0621-\u064A])و\s+(?=\d)", "و", t)
+        # file names: تقرير_المبيعات_2025 -> words
+        t = re.sub(r"(?<=[\u0621-\u064A\w])_(?=[\u0621-\u064A\w])", " ", t)
+        # "1 - 20" is a range too, unless the text is arithmetic
+        if "=" not in t:
+            t = re.sub(r"(?<=\d) [-–] (?=\d)", " إلى ", t)
+        # a version number after its word: الإصدار 2026.3 -> ألفان وستة وعشرون نقطة ثلاثة
+        t = re.sub(r"((?:ال)?(?:إصدار|اصدار|نسخة|تحديث)\s+|[vV]\s?)(\d+)\.(\d+)(?![\d.])",
+                   lambda m: m.group(1) + _cardinal(m.group(2)) + " نقطة " + _cardinal(m.group(3)), t)
+        # list letters: "أ) صواب" -> "ألف، صواب"
+        t = re.sub(r"(?:(?<=^)|(?<=\n))\s*([أبجدهوزحطي])[).-]\s+",
+                   lambda m: {"أ": "أَلِفْ", "ب": "بَاءْ", "ج": "جِيمْ", "د": "دَالْ", "ه": "هَاءْ", "و": "وَاوْ", "ز": "زَايْ",
+                              "ح": "حَاءْ", "ط": "طَاءْ", "ي": "يَاءْ"}[m.group(1)] + "، ", t)
+        # units after a number
+        for u, w in ((r"كم\s*/\s*س(?:اعة)?", "كيلومتر في الساعة"), (r"كم", "كيلومتر"), (r"سم", "سنتيمتر"), (r"مم", "مليمتر"),
+                     (r"كغ|كجم", "كيلوغرام"), (r"غ|جم", "غرام"), (r"مل", "مليلتر"), (r"ل", "لتر"), (r"م²", "متر مربع"),
+                     (r"km/h", "كيلومتر في الساعة"), (r"kg", "كيلوغرام"), (r"km", "كيلومتر"), (r"cm", "سنتيمتر"),
+                     (r"GB|غيغا", "غيغابايت"), (r"MB|ميغا", "ميغابايت"), (r"KB", "كيلوبايت"), (r"TB", "تيرابايت")):
+            t = re.sub(r"(\d)\s*(?:" + u + r")(?![\u0621-\u064Aa-zA-Z²/])", r"\1 " + w, t)
         # 3-5 is a range
         t = re.sub(r"(?<=\d)[-–](?=\d)(?!\d{1,2}[-/]\d)", " إلى ", t)
         # Order is important — see module docstring.

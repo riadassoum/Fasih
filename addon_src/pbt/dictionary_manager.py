@@ -195,7 +195,11 @@ def _fix_split(cp, tts):
     return out
 
 
-_FASIH_WORDS = {"ثم": "ثُمّ"}   # last letter: shadda kept, vowel left to the sentence
+_FASIH_WORDS = {"ثم": "ثُمّ",   # last letter: shadda kept, vowel left to the sentence
+                # screen-reader words the diacritizer misreads when they stand alone (زر read as زُرْ)
+                "زر": "زِرّ", "ملف": "مِلَفّ", "ملفات": "مِلَفَّات", "مربع": "مُرَبَّع", "مربعات": "مُرَبَّعَات",
+                "مجلد": "مُجَلَّد", "مجلدات": "مُجَلَّدَات", "لديك": "لَدَيْكَ", "سياسة": "سِيَاسَة",
+                "محمي": "مَحْمِيّ", "معطل": "مُعَطَّل", "مفعل": "مُفَعَّل", "محدد": "مُحَدَّد"}
 _MARKS_RE = re.compile(r"[\u064B-\u0652\u0670]")
 
 
