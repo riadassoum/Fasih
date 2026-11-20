@@ -78,7 +78,7 @@ cp /tmp/rh_English/* "$D/data/languages/English/" 2>/dev/null || true
 cp /tmp/rh_bdl-eng/voice.info /tmp/rh_bdl-eng/voice.params /tmp/rh_bdl-eng/README.md "$D/data/voices/Bdl/"
 cp -r /tmp/rh_bdl-eng/24000 "$D/data/voices/Bdl/"
 # loudness matched to the Arabic voices (RHVoice's lowest allowed gain is 0.5)
-sed -i 's/^gain=.*/gain=0.6/' "$D/data/voices/Bdl/voice.params"; grep -q '^gain=' "$D/data/voices/Bdl/voice.params" || echo "gain=0.6" >> "$D/data/voices/Bdl/voice.params"
+sed -i 's/^gain=.*/gain=0.5/' "$D/data/voices/Bdl/voice.params"; grep -q '^gain=' "$D/data/voices/Bdl/voice.params" || echo "gain=0.5" >> "$D/data/voices/Bdl/voice.params"
 # Arabic text pipeline (from ClaritySynth, by Riad Assoum) + our wasl marker
 for f in ar_tashkeel.py ar_g2p.py ar_textnorm.py _libboot.py data_paths.py ort_config.py thread_calibration.py; do cp "$CS/$f" "$D/arabic/"; done
 cp -r "$CS/lib_pure" "$D/arabic/"
