@@ -19,7 +19,7 @@ _boot_lock = threading.Lock()
 _ready = None
 
 # user-adjustable (set by the driver)
-options = {"read_emojis": True, "pausal_ending": True, "mixed_priority": "auto"}
+options = {"read_emojis": True, "pausal_ending": True, "full_case": False, "mixed_priority": "auto"}
 
 
 def _log_error(msg):
@@ -291,6 +291,8 @@ def _arabic_core(out, diacritize, pt, ar_prep, is_cancelled=None):
         out = _step(pt.fix_bare_hamza_vowel, out)
         out = _step(pt.swap_tanween_fatha_alif, out)
     out = _step(_tanween_post, out)
+    if not options.get("full_case", False):
+        out = _step(ar_prep.light_case, out)     # everyday reading: no case endings mid-phrase
     if options.get("pausal_ending", True):
         out = _step(ar_prep.pausal_ending, out)  # our own waqf (PBT's dropped teh marbuta)
         out = _step(_tanween_post, out)

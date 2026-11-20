@@ -290,5 +290,11 @@ check("dictionary after a prefix", _dm.apply_user_dictionary("قرأت لجبر�
 check("dictionary not inside a longer word", _dm.apply_user_dictionary("جبرانية"), "جبرانية")
 check("dictionary Latin, any case", _dm.apply_user_dictionary("nvda"), "إِنْ فِي دِي إِيه")
 shutil.rmtree(_dd, ignore_errors=True)
+# light case endings: no i'rab mid-phrase, but keep what carries meaning or joining
+sys.path.insert(0, os.path.join(REPO, "scripts")); import ar_prep as _arp
+check("light: tanween dropped mid-phrase", _arp.light_case("هَذَا كِتَابٌ جَدِيدٌ مُفِيدٌ جِدًّا."), "هَذَا كِتَاب جَدِيد مُفِيد جِدًّا.")
+check("light: vowel kept before al-", _arp.light_case("ذَهَبَ ٱلْوَلَدُ إِلَى ٱلْبَيْتِ"), "ذَهَبَ ٱلْوَلَد إِلَى ٱلْبَيْتِ")
+check("light: first-person and feminine endings kept", _arp.light_case("قَرَأْتُ كِتَابًا وَلَكِ هَدِيَّةٌ"), "قَرَأْتُ كِتَابًا وَلَكِ هَدِيَّةٌ")
+check("light: comma is a pause", _arp.light_case("رَأَيْتُ وَلَدًا صَغِيرًا، ثُمَّ"), "رَأَيْتُ وَلَدًا صَغِيرَا، ثُمَّ")
 print("\n%d failure(s)" % fails)
 sys.exit(1 if fails else 0)

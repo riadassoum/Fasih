@@ -654,12 +654,19 @@ rep('''        BooleanDriverSetting("sharpening", "Sharpening (crisper sound)", 
         BooleanDriverSetting("modulationPostfilter", "Modulation postfilter (livelier, less muffled)", defaultVal=True, availableInSettingsRing=True),
         BooleanDriverSetting("readEmojis", "Read emojis and symbols by name", defaultVal=True),
         BooleanDriverSetting("pausalEnding", "Pausal ending (waqf) at end of sentences", defaultVal=True),
+        BooleanDriverSetting("fullCaseEndings", "Full case endings (classical reading)", defaultVal=False, availableInSettingsRing=True),
         DriverSetting("mixedPriority", "Mixed Arabic and Latin text", defaultVal="auto", availableInSettingsRing=True),''')
 rep('''    def terminate(self):''', '''    def _get_readEmojis(self):
         return arabic_pipeline.options["read_emojis"]
 
     def _set_readEmojis(self, v):
         arabic_pipeline.options["read_emojis"] = bool(v)
+
+    def _get_fullCaseEndings(self):
+        return arabic_pipeline.options.get("full_case", False)
+
+    def _set_fullCaseEndings(self, v):
+        arabic_pipeline.options["full_case"] = bool(v)
 
     def _get_pausalEnding(self):
         return arabic_pipeline.options["pausal_ending"]
@@ -845,7 +852,7 @@ rep('''        arabic_pipeline.preload()''', '''        arabic_pipeline.preload(
 s = s.replace("import addonHandler\n", "import addonHandler\ntry:\n    addonHandler.initTranslation()\nexcept Exception:\n    pass\ntry:\n    _\nexcept NameError:\n    def _(text):\n        return text\n", 1)
 for _lit in ["&Secondary voice (for non-Arabic text)", "Clarity (postfilter)", "Breathiness",
              "Sharpening (crisper sound)", "Consonant repair (crisper ق ط ش, may sound muffled)", "Modulation postfilter (livelier, less muffled)", "Read emojis and symbols by name",
-             "Pausal ending (waqf) at end of sentences", "Mixed Arabic and Latin text",
+             "Pausal ending (waqf) at end of sentences", "Full case endings (classical reading)", "Mixed Arabic and Latin text",
              "Natural (recommended)", "Less", "Low", "Very low",
              "Automatic: Latin text as written, by the secondary voice",
              "Arabic first: numbers, symbols and Roman numerals in Arabic",

@@ -334,3 +334,6 @@ msgstr "يتوفّر تحديث"
 
 msgid "&Update"
 msgstr "&تحديث"
+
+msgid "Full case endings (classical reading)"
+msgstr "الإعراب الكامل (قراءة فصحى تامة)"

@@ -63,6 +63,37 @@ def pausal_ending(text: str) -> str:
     return _END.sub(lambda m: _waqf_word(m.group(1)), text)
 
 
+_PHRASE_END = re.compile(r"([\u0621-\u064A\u0671][\u0621-\u064A\u0671\u064B-\u0652\u0670]*)(?=\s*[,:\u060C\u061B;])")
+
+
+def light_case(text: str) -> str:
+    """Everyday reading: no case endings in the middle of a phrase. Tanween and a final
+    damma or kasra are dropped, and a comma or colon is a pause like a full stop. Kept: the
+    vowel before hamzat al-wasl (it carries the joining), words in ة (their t is heard in
+    connected speech), the feminine ـكِ ـتِ (meaning), and fatha (past-tense verbs)."""
+    text = _PHRASE_END.sub(lambda m: _waqf_word(m.group(1)), text)
+    words = list(_word.finditer(text))
+    out, pos = [], 0
+    for i, m in enumerate(words):
+        w = m.group(0)
+        nxt = words[i + 1] if i + 1 < len(words) else None
+        joined = nxt is not None and not _phrase_break.search(text[m.end():nxt.start()])
+        before_wasl = joined and nxt.group(0)[:1] in (ALEF, WASLA)
+        bare = re.sub("[" + MARKS + "]", "", w)
+        if (joined and not before_wasl and len(bare) > 2 and not bare.endswith("\u0629")
+                and not re.search("[\u0643\u062A][\u064F\u0650]$", w)):
+            if re.search("[\u064C\u064D]$", w):
+                w = w[:-1]                                   # tanween damm/kasr
+            elif re.search("\u064B$", w) and not bare.endswith(("\u0627", "\u0649")):
+                w = w[:-1]                                   # tanween fath without alif
+            elif re.search("\u0651?[\u064F\u0650]$", w) and not re.search("\u0651[\u064F\u0650]$", w):
+                w = w[:-1]                                   # final damma / kasra
+        out.append(text[pos:m.start()] + w)
+        pos = m.end()
+    out.append(text[pos:])
+    return "".join(out)
+
+
 def _helping_vowel(word: str) -> str:
     """Two silent letters meet across hamzat al-wasl (مِنْ ٱلصَّبْرِ): the first takes a
     helping vowel. Fatha after مِن, damma after the plural مْ (هُمْ، كُمْ، تُمْ), kasra otherwise."""
