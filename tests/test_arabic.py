@@ -230,6 +230,14 @@ _w = _fv["_Downloader"]([("data", "http://x/a.zip", None), ("langdata", "http://
 _w.cancel.set(); _w.run()
 check("downloader: cancelled before start sends no request", _fake["calls"], 0)
 check("downloader: cancelled download reports no error", _w.error, None)
+check("pack update: newer version offered", _fv["_newer"]("1.3.1", "1.3.0"), True)
+check("pack update: same version", _fv["_newer"]("1.3.0", "1.3.0"), False)
+check("pack update: not installed", _fv["_newer"]("1.3.0", None), False)
+_vb = _fv["FasihVoiceBundle"].__new__(_fv["FasihVoiceBundle"]); _vb._voice = {"name": "Sami"}
+_fv["__file__"] = os.path.join(REPO, "addon_src", "globalPlugins", "fasihVoices.py")
+check("sample shipped for each pack voice", all(os.path.isfile(os.path.join(REPO, "addon_src", "samples", n + ".wav"))
+      for n in ["Jamal", "Nour", "Sami", "Faris", "Huda", "Karim", "Rima", "Lamees", "Zayd", "Reem"]), True)
+check("sample found for a Fasih voice", bool(_fv["_sample"](_vb)), True)
 for _m, _v in _stubs.items():
     if _v is None: sys.modules.pop(_m, None)
     else: sys.modules[_m] = _v

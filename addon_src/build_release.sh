@@ -17,6 +17,7 @@ cp "$HERE/arabic_pipeline.py" "$HERE/loudness.py" "$REPO/scripts/fr_prep.py" "$D
 cp -r "$HERE/locale" "$B/"
 # Tools > Fasih > Download voices (catalogue of RHVoice Voice Manager, by Alexander Linkov)
 mkdir -p "$B/globalPlugins"; cp "$HERE/globalPlugins/fasihVoices.py" "$B/globalPlugins/"
+mkdir -p "$B/samples"; cp "$HERE"/samples/*.wav "$B/samples/"   # Listen, in Tools > Fasih > Download voices
 cp -r "$HERE/doc" "$B/"
 cp "$T/rhvoice-win-x64/RHVoice.dll" "$T/rhvoice-win-x64/libRHVoice_core.dll" "$D/lib/x64/"
 

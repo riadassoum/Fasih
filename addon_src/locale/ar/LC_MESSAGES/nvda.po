@@ -328,3 +328,9 @@ msgstr "ا&نطقها هكذا (أضف التشكيل حيث يلزم):"
 
 msgid "The dictionary could not be saved."
 msgstr "تعذّر حفظ القاموس."
+
+msgid "Update available"
+msgstr "يتوفّر تحديث"
+
+msgid "&Update"
+msgstr "&تحديث"

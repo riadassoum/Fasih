@@ -32,7 +32,7 @@ Each piece of text is split by script, the way I do it in ClaritySynth. Arabic g
 
 ## More voices
 
-In NVDA's Tools menu, **Fasih > Download voices** lists the RHVoice voices of every language published for Alexander Linkov's (kvark128) RHVoice Voice Manager. Choose a language and a voice and press Install: a progress window shows the size, the speed and the time elapsed and remaining, and Cancel stops the download at once. The voice is installed as a standard RHVoice voice add-on, the same one the Voice Manager installs, and after NVDA restarts it can be chosen as Fasih's secondary voice (Automatic picks it when it is in NVDA's language). Remove uninstalls it.
+In NVDA's Tools menu, **Fasih > Download voices** lists the RHVoice voices of every language published for Alexander Linkov's (kvark128) RHVoice Voice Manager. Choose a language and a voice and press Install: a progress window shows the size, the speed and the time elapsed and remaining, and Cancel stops the download at once. Fasih's own Arabic voices are listed first, under "Arabic: Fasih voices": Listen plays a short sample of the selected voice before you download it, and when I publish a better version of a voice you already have, its status says "Update available" and the Install button becomes Update. The voice is installed as a standard RHVoice voice add-on, the same one the Voice Manager installs, and after NVDA restarts it can be chosen as Fasih's secondary voice (Automatic picks it when it is in NVDA's language). Remove uninstalls it.
 
 ## Diacritization
 
@@ -52,9 +52,9 @@ These are in NVDA's voice settings. The secondary voice, Clarity, Breathiness, S
 - **Pausal ending (waqf)**: the last word of a sentence is read in its pausal form.
 - **Mixed Arabic and Latin text**: Automatic (Latin text goes to the secondary voice exactly as written, with a number just before a Latin word, as in 5 PM), Arabic first (numbers, symbols and Roman numerals read in Arabic, as in 1.0), or Secondary voice first (numbers too).
 
-## User dictionary
+## Pronunciation dictionary
 
-Put a file called `user-dic.json` in `%APPDATA%\nvda\Fasih-config\`. It is a list of `{"original": "...", "replacement": "..."}` entries, and the replacement may be fully diacritized. Restart NVDA or select the synthesizer again to apply it.
+In NVDA's Tools menu, **Fasih > Pronunciation dictionary** lists the words you want said differently. Add a word as it is written and how it should be said (diacritize it as much as you need), press Listen to hear it, and OK applies it at once. A word matches however it is diacritized and also with و ف ب ل ك attached (an entry for جبران also fixes لجبران), but never inside a longer word. The entries are kept in `%APPDATA%\nvda\Fasih-config\user-dic.json`.
 
 ## How it is made
 
@@ -67,7 +67,7 @@ Put a file called `user-dic.json` in `%APPDATA%\nvda\Fasih-config\`. It is a lis
 - **ClaritySynth 3.0** (my own add-on): Arabic text normalization for numbers, dates and currency, Rawi diacritization, and keeping the user's own harakat.
 - **PlanetBlindTech** (rhvoice-arabic, GPL-3.0), with their blessing: the default pronunciation dictionary, the user dictionary, emoji and symbol names, single-character names, presentation-form cleanup, post-diacritization fixes and the design of the audio post-filter (the DC/rumble high-pass Fasih still uses; its limiter is now a look-ahead gain limiter of mine). Their project also showed me the data-only language approach and the stock-RHVoice packaging that Fasih follows. Thank you.
 - **RHVoice Voice Manager** by Alexander Linkov (kvark128, GPL): the voice catalogue and the packaging of its voices as NVDA add-ons, which Fasih's Download voices uses.
-- **RHVoice**: Olga Yakovleva and contributors (LGPL). **WORLD**: Masanori Morise (BSD). **foma**: Mans Hulden. **ONNX Runtime**: Microsoft (MIT).
+- **RHVoice**: Olga Yakovleva and contributors (LGPL), and the English voice Bdl (CMU ARCTIC, CMU license). **WORLD**: Masanori Morise (BSD). **foma**: Mans Hulden. **ONNX Runtime**: Microsoft (MIT).
 - **PlanetBlindTech** also for **Zayd** (his corpus and their trust in letting me adapt him) and for **Reem** and **Aseel**, which their team trained with Fasih's recipe. Thanks to **Mr. Aseel Bashir** for allowing his voice to be used.
 - **Corpora and models**: ClArTTS (MBZUAI); the Arabic Speech Corpus (Nawar Halabi, CC BY 4.0); NeoBoy/arabic-tts-wav-24k (MIT); ArVoice (Toyin, Marew, Alblooshi, Magdy and Aldarmaki, MBZUAI, Interspeech 2025, CC BY 4.0); Nabra-82M (oddadmix, Apache-2.0, built on Kokoro-82M by hexgrad); SILMA TTS (SILMA AI, Apache-2.0); the SIWIS French Speech Synthesis Database (Honnet, Lazaridis, Garner and Yamagishi, Idiap, CC BY 4.0); ipa-dict (open-dict-data, MIT) for the French lexicon.
 

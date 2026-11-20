@@ -299,6 +299,32 @@ class DownloadDialog(wx.Dialog):
 			self.EndModal(wx.ID_CANCEL)
 
 
+def _installed_version(bundle):
+	try:
+		return addonHandler.Addon(bundle.installPath).version
+	except Exception:
+		return None
+
+
+def _newer(available, installed):
+	"""True when the catalogue offers a newer version than the one installed."""
+	def key(v):
+		return tuple(int(x) if x.isdigit() else 0 for x in str(v).replace("-", ".").split("."))
+	try:
+		return bool(installed) and key(available) > key(installed)
+	except Exception:
+		return False
+
+
+def _sample(bundle):
+	"""A short recording of a Fasih voice, shipped with the add-on (samples/<Name>.wav)."""
+	if not isinstance(bundle, FasihVoiceBundle):
+		return None
+	import os
+	path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "samples", bundle._voice.get("name", "") + ".wav")
+	return path if os.path.isfile(path) else None
+
+
 class VoicesDialog(wx.Dialog):
 	"""Languages and voices of the RHVoice catalogue, with Install and Remove."""
 
@@ -328,12 +354,14 @@ class VoicesDialog(wx.Dialog):
 		buttons = wx.BoxSizer(wx.HORIZONTAL)
 		self.installButton = wx.Button(self, label=_("&Install"))
 		self.removeButton = wx.Button(self, label=_("&Remove"))
+		self.listenButton = wx.Button(self, label=_("&Listen"))
 		closeButton = wx.Button(self, wx.ID_CLOSE, _("Cl&ose"))
-		for b in (self.installButton, self.removeButton, closeButton):
+		for b in (self.installButton, self.removeButton, self.listenButton, closeButton):
 			buttons.Add(b, flag=wx.ALL, border=4)
 		sizer.Add(buttons, flag=wx.ALIGN_CENTER | wx.ALL, border=4)
 		self.installButton.Bind(wx.EVT_BUTTON, self.onInstall)
 		self.removeButton.Bind(wx.EVT_BUTTON, self.onRemove)
+		self.listenButton.Bind(wx.EVT_BUTTON, self.onListen)
 		closeButton.Bind(wx.EVT_BUTTON, lambda e: self.Close())
 		self.Bind(wx.EVT_CLOSE, self.onClose)
 		self.SetEscapeId(wx.ID_CLOSE)
@@ -354,6 +382,8 @@ class VoicesDialog(wx.Dialog):
 			self.bundles.append(b)
 			if b.isInstalled:
 				status = _("Will be removed after restart") if b.isPendingRemove else _("Installed")
+				if not b.isPendingRemove and not b.isPendingInstall and _newer(b.version, _installed_version(b)):
+					status = _("Update available")
 			else:
 				status = _("Will be installed after restart") if b.isPendingInstall else _("Not installed")
 			label = voice["name"]
@@ -373,8 +403,21 @@ class VoicesDialog(wx.Dialog):
 	def updateButtons(self):
 		_i, b = self.selected()
 		pending = b is None or b.requiresRestart
-		self.installButton.Enable(bool(b) and not pending and not b.isInstalled)
+		update = bool(b) and b.isInstalled and not pending and _newer(b.version, _installed_version(b))
+		self.installButton.SetLabel(_("&Update") if update else _("&Install"))
+		self.installButton.Enable(bool(b) and not pending and (not b.isInstalled or update))
 		self.removeButton.Enable(bool(b) and not pending and b.isInstalled)
+		self.listenButton.Enable(bool(b) and _sample(b) is not None)
+
+	def onListen(self, evt):
+		_i, b = self.selected()
+		path = _sample(b) if b else None
+		if path:
+			import nvwave
+			try:
+				nvwave.playWaveFile(path, asynchronous=True)
+			except Exception:
+				log.error("Fasih: could not play the sample", exc_info=True)
 
 	def onInstall(self, evt):
 		i, bundle = self.selected()
@@ -403,6 +446,9 @@ class VoicesDialog(wx.Dialog):
 				_("Error"), style=wx.OK | wx.ICON_ERROR, parent=self)
 			return
 		try:
+			if bundle.isInstalled:
+				# an update: NVDA swaps the old version for the new one at restart
+				addonHandler.Addon(bundle.installPath).requestRemove()
 			addon = addonHandler.installAddonBundle(bundle)
 		except Exception:
 			log.error("Fasih: voice installation failed", exc_info=True)
