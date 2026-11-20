@@ -6,7 +6,7 @@ Developer: Riad Assoum ([github.com/riadassoum](https://github.com/riadassoum)).
 
 ## The voices
 
-The add-on comes with Riad and Aseel, the English voice Bdl and the French voice Elise. The other ten Arabic voices are voice packs: in NVDA's Tools menu, choose Fasih > Download voices, then "Arabic: Fasih voices", and install the ones you want (they become available after NVDA restarts). This keeps the add-on small.
+The add-on comes with Riad and Aseel, the English voice Bdl and the French voice Elise. The other twelve Arabic voices are voice packs: in NVDA's Tools menu, choose Fasih > Download voices, then "Arabic: Fasih voices", and install the ones you want (they become available after NVDA restarts). This keeps the add-on small.
 
 All the Arabic voices speak at the same pace and the same loudness, and voices of the same gender have been brought close in bass and tone, so you can switch between them without readjusting NVDA.
 
@@ -21,6 +21,8 @@ All the Arabic voices speak at the same pace and the same loudness, and voices o
 - **Zayd**: PlanetBlindTech's male voice. They asked me to adapt it for Fasih, so I retrained it with Fasih's recipe on their own corpus (10,023 clips, 12.5 hours) and matched its bass and loudness to the other voices.
 - **Riad**: my own voice. I gave a clip of my voice as the reference, generated about 3.5 hours of it with SILMA TTS (Apache-2.0) and trained it like the others. I left its timbre and range exactly as they came out.
 - **Reem**: a female voice trained by PlanetBlindTech with Fasih's recipe, on about 6.1 hours of synthetic speech from SILMA TTS.
+- **Amjad**: a male voice in Modern Standard Arabic, trained on about 6.4 hours of the Arabic MSA 25K Saudi Male corpus (moesaif, CC BY 4.0). That audio was produced by Microsoft Azure's ar-SA-HamedNeural voice.
+- **Shahrazad**: a female storyteller's voice, trained on about 2.4 hours of Aïda Boumaza's LibriVox reading of Alf Layla wa Layla, Volume 1 (public domain), matched to the Hindawi edition of the text. A real human reader; because the recordings are an audiobook made at home, she is softer and less crisp than the studio voices.
 - **Aseel**: a male voice trained by PlanetBlindTech with Fasih's recipe, on about 12 hours made from the voice of Mr. Aseel Bashir, with his consent.
 - **Elise** (French): a young female voice, the first French voice for RHVoice, trained on the SIWIS French Speech Synthesis Database (Honnet, Lazaridis, Garner and Yamagishi, CC BY 4.0), about 9.2 hours of studio recordings. She is a secondary voice for French text.
 
@@ -71,7 +73,7 @@ In NVDA's Tools menu, **Fasih > Pronunciation dictionary** lists the words you w
 - **RHVoice Voice Manager** by Alexander Linkov (kvark128, GPL): the voice catalogue and the packaging of its voices as NVDA add-ons, which Fasih's Download voices uses.
 - **RHVoice**: Olga Yakovleva and contributors (LGPL), and the English voice Bdl (CMU ARCTIC, CMU license). **WORLD**: Masanori Morise (BSD). **foma**: Mans Hulden. **ONNX Runtime**: Microsoft (MIT).
 - **PlanetBlindTech** also for **Zayd** (his corpus and their trust in letting me adapt him) and for **Reem** and **Aseel**, which their team trained with Fasih's recipe. Thanks to **Mr. Aseel Bashir** for allowing his voice to be used.
-- **Corpora and models**: ClArTTS (MBZUAI); the Arabic Speech Corpus (Nawar Halabi, CC BY 4.0); NeoBoy/arabic-tts-wav-24k (MIT); ArVoice (Toyin, Marew, Alblooshi, Magdy and Aldarmaki, MBZUAI, Interspeech 2025, CC BY 4.0); Nabra-82M (oddadmix, Apache-2.0, built on Kokoro-82M by hexgrad); SILMA TTS (SILMA AI, Apache-2.0); the SIWIS French Speech Synthesis Database (Honnet, Lazaridis, Garner and Yamagishi, Idiap, CC BY 4.0); ipa-dict (open-dict-data, MIT) for the French lexicon.
+- **Corpora and models**: ClArTTS (MBZUAI); the Arabic Speech Corpus (Nawar Halabi, CC BY 4.0); NeoBoy/arabic-tts-wav-24k (MIT); ArVoice (Toyin, Marew, Alblooshi, Magdy and Aldarmaki, MBZUAI, Interspeech 2025, CC BY 4.0); Nabra-82M (oddadmix, Apache-2.0, built on Kokoro-82M by hexgrad); SILMA TTS (SILMA AI, Apache-2.0); the SIWIS French Speech Synthesis Database (Honnet, Lazaridis, Garner and Yamagishi, Idiap, CC BY 4.0); ipa-dict (open-dict-data, MIT) for the French lexicon; Arabic MSA 25K Saudi Male (moesaif, CC BY 4.0); Aïda Boumaza's reading of Alf Layla wa Layla for LibriVox (public domain), with the text of the Hindawi Foundation's 2022 edition.
 
 ## What is in this repository
 

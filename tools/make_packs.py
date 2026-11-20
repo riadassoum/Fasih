@@ -20,11 +20,14 @@ INFO = {
     "Lamees": ("لميس", "female", "A young voice, trained on speech generated with Nabra-82M."),
     "Zayd": ("زيد", "male", "PlanetBlindTech's voice, retrained with Fasih's recipe on their corpus."),
     "Reem": ("ريم", "female", "Trained by PlanetBlindTech with Fasih's recipe."),
+    "Amjad": ("أمجد", "male", "Modern Standard Arabic, trained on the Arabic MSA 25K Saudi Male corpus (moesaif, CC BY 4.0)."),
+    "Shahrazad": ("شهرزاد", "female", "A storyteller's voice, trained on Aida Boumaza's LibriVox reading of Alf Layla wa Layla (public domain)."),
 }
+ONLY = os.environ.get("FASIH_ONLY", "").split()
 os.makedirs(OUT, exist_ok=True)
 voices = []
 for name in sorted(os.listdir(os.path.join(REPO, "voices"))):
-    if name in CORE:
+    if name in CORE or (ONLY and name not in ONLY):
         continue
     src = os.path.join(REPO, "voices", name)
     zpath = os.path.join(OUT, "Fasih-voice-%s.zip" % name)
