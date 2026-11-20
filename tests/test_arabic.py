@@ -308,5 +308,12 @@ for src, want in [("الصفحة 12 من 340", "الصفحة اثنا عشر م�
 check("no ellipsis name glued to a word", any(e.get("cp") == "..." and e.get("type") == "word" for e in
       _json.load(open(os.path.join(REPO, "addon_src", "pbt", "Dictionaries", "Default-dic.json"), encoding="utf-8"))), False)
 check("al- + wasl alif takes kasra", _tsn["_restore_hamza"]("الاستخدام", "ٱلَاسْتِخْدَامُ"), "ٱلِاسْتِخْدَامُ")
+# spelling: a letter is named with its marks; Persian letters and the lam-alef ligature are named
+_pk2 = types.ModuleType("fpbt2"); _pk2.__path__ = [os.path.join(REPO, "addon_src", "pbt")]; sys.modules["fpbt2"] = _pk2
+_ptn = importlib.import_module("fpbt2.pbt_textnorm")
+check("spell letter with fatha", _ptn.get_single_char_name("بَ"), "بَاء فَتْحَة")
+check("spell shadda before vowel", _ptn.get_single_char_name("بَّ"), "بَاء شَدَّة فَتْحَة")
+check("spell Persian pe", _ptn.get_single_char_name("\u067E"), "بَاءٌ فَارِسِيَّةٌ")
+check("spell lam-alef ligature", _ptn.get_single_char_name("\uFEFB"), "لَامْ أَلِف")
 print("\n%d failure(s)" % fails)
 sys.exit(1 if fails else 0)

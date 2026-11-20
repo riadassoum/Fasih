@@ -122,6 +122,16 @@ def name_lone_diacritics(marks):
         names.append(nm)
     return ' '.join(names)
 
+# Fasih: letters of other languages written in Arabic script, and the lam-alef ligature
+_EXTRA_LETTERS = {
+    '\u067E': 'بَاءٌ فَارِسِيَّةٌ', '\u0686': 'جِيمٌ فَارِسِيَّةٌ', '\u0698': 'زَايٌ فَارِسِيَّةٌ',
+    '\u06A4': 'فَاءٌ بِثَلَاثِ نُقَطٍ', '\u06AF': 'كَافٌ فَارِسِيَّةٌ', '\u06A9': 'كَافٌ فَارِسِيَّةٌ',
+    '\u06CC': 'يَاءٌ فَارِسِيَّةٌ', '\u06BE': 'هَاءٌ', '\u06C1': 'هَاءٌ',
+    '\uFEFB': 'لَامْ أَلِف', '\uFEFC': 'لَامْ أَلِف', '\uFEF5': 'لَامْ أَلِف مَدَّة', '\uFEF7': 'لَامْ أَلِف هَمْزَة',
+    '\uFEF9': 'لَامْ أَلِف هَمْزَة تَحْتَ', '\uFDF2': 'لَفْظُ ٱلْجَلَالَةِ',
+}
+
+
 def get_single_char_name(text):
     if not text:
         return None
@@ -140,6 +150,7 @@ def get_single_char_name(text):
     diac_names = dict_mgr.get_diacritic_names()
 
     if t in char_names: return char_names[t]
+    if t in _EXTRA_LETTERS: return _EXTRA_LETTERS[t]
     if t in symbols: return symbols[t]
     if t in diac_names: return diac_names[t]
 
@@ -154,8 +165,15 @@ def get_single_char_name(text):
     if from_emoji: return from_emoji
 
     bare_trimmed = re.sub(r'[\u064B-\u0652\u0670]', '', t)
-    if bare_trimmed and bare_trimmed in char_names:
-        return char_names[bare_trimmed]
+    if bare_trimmed and (bare_trimmed in char_names or bare_trimmed in _EXTRA_LETTERS):
+        # Fasih: a letter with its marks is named with them (بَّ -> باء شدة فتحة), as a
+        # teacher spells it; the shadda first, then the vowel or tanween
+        base = char_names.get(bare_trimmed) or _EXTRA_LETTERS[bare_trimmed]
+        marks = ''.join(sorted(re.findall(r'[\u064B-\u0652\u0670]', t), key=lambda c: c != '\u0651'))
+        if marks:
+            names = [diac_names.get(c) or name_lone_diacritics(c) for c in marks]
+            return ' '.join(re.sub('[\u064B-\u064D]$', '', x) for x in [base] + [x for x in names if x])
+        return base
 
     return None
 
