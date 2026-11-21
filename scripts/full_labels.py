@@ -6,6 +6,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from ar_prep import mark_wasl
 import re
 FR = os.environ.get("RHV_LANG") == "French"
+EN = os.environ.get("RHV_LANG") == "English"
+if EN:
+    mark_wasl = lambda t: re.sub(r"[.!?]+(?=.*\w)", ",", t)
 if FR:
     from fr_prep import prepare
     mark_wasl = lambda t: prepare(re.sub(r"[.!?]+(?=.*\w)", ",", t))
@@ -16,7 +19,7 @@ for line in open(os.path.join(ROOT, "corpus", "text.tsv"), encoding="utf-8"):
     uid, _d, t = line.rstrip("\n").split("\t"); text[uid] = t
 mono = sorted(n[:-4] for n in os.listdir(os.path.join(W, "mono")) if n.endswith(".lab"))
 with open(os.path.join(W, "mono.ssml"), "w", encoding="utf-8") as f:
-    f.write('<speak xml:lang="%s">\n' % ("fr" if FR else "ar") + "".join("<s>" + escape(mark_wasl(text[u])) + "</s>\n" for u in mono) + "</speak>\n")
+    f.write('<speak xml:lang="%s">\n' % ("en" if EN else "fr" if FR else "ar") + "".join("<s>" + escape(mark_wasl(text[u])) + "</s>\n" for u in mono) + "</speak>\n")
 os.makedirs(os.path.join(W, "full"), exist_ok=True)
 env = dict(os.environ, RHVOICE_DATA_PATH=os.path.join(ROOT, "data"), RHVOICE_CONFIG_PATH=os.environ.get("RHVOICE_LABEL_CONFIG", "/tmp/labt"))
 r = subprocess.run([os.environ.get("RHVOICE_LABELS", "/tmp/rhb2/src/utils/RHVoice-make-hts-labels"), "-l", os.path.join(W, "mono"),

@@ -20,7 +20,8 @@ NS = 5
 D_MGC, D_BAP = int(os.environ.get("RHV_MGC_DIM", "31")), 7
 MGC_DIR = os.environ.get("RHV_MGC_DIR", "feat")
 WINDOWS = [np.array([1.0]), np.array([-0.5, 0.0, 0.5]), np.array([1.0, -2.0, 1.0])]
-VOICELESS = ({"p", "t", "k", "f", "s", "sh"} if os.environ.get("RHV_LANG") == "French" else
+VOICELESS = ({"p", "t", "k", "f", "s", "sh", "th", "hh", "ch"} if os.environ.get("RHV_LANG") == "English" else
+             {"p", "t", "k", "f", "s", "sh"} if os.environ.get("RHV_LANG") == "French" else
              {"s", "S", "sh", "f", "th", "x", "H", "h", "t", "T", "k", "q", "Q", "p", "ch"})
 # ه and the hamza are often voiced (breathy or creaky) between vowels; forcing them voiceless
 # made them a burst of noise, heard as a dry cough. RHV_VOICED_OK="h,Q" leaves them to the pitch tracker.
