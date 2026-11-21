@@ -10,12 +10,28 @@ BLOCK = 48                 # 2 ms at 24 kHz: look-ahead and gain-update step
 CEIL = 0.97 * 32767        # highest sample value the limiter lets through
 RELEASE = 1.024            # gain may rise by this factor per block (about 6 dB in 60 ms)
 HP_POLE = 0.9965           # DC-blocking high-pass, same as PlanetBlindTech's filter
+TRIM_LEVEL = 200           # about -44 dBFS: below this, the start of an utterance counts as silence
+TRIM_KEEP = 120            # 5 ms at 24 kHz kept before the first sound, so its onset is not cut
 
 
 class Output:
     def __init__(self, gain_db=6.0):
         self.makeup = 10 ** (gain_db / 20.0)
+        self.trim_next = False     # set when an utterance starts: drop its leading silence
+        self.trim_enabled = True
+        self._trim_tail = []
         self.reset()
+
+    def _trim(self, a):
+        """Drop the silence before the first sound of an utterance (keeping 5 ms of it)."""
+        for i, v in enumerate(a):
+            if v > TRIM_LEVEL or v < -TRIM_LEVEL:
+                keep = (self._trim_tail + list(a[max(0, i - TRIM_KEEP):i]))[-TRIM_KEEP:]
+                self.trim_next = False
+                self._trim_tail = []
+                return array.array("h", keep) + a[i:]
+        self._trim_tail = (self._trim_tail + list(a[-TRIM_KEEP:]))[-TRIM_KEEP:]
+        return array.array("h")
 
     def reset(self):
         self._x1 = 0.0
@@ -59,6 +75,8 @@ class Output:
     def process(self, data):
         a = array.array("h")
         a.frombytes(data[:len(data) & ~1])
+        if self.trim_next and self.trim_enabled:
+            a = self._trim(a)
         if not a:
             return b""
         buf = self._carry + self._prep(a)

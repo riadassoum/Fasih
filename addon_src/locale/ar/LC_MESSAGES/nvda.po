@@ -521,3 +521,6 @@ msgstr "تضمين النسخ ال&تجريبية"
 
 msgid "Also offer test versions of Fasih"
 msgstr "عرض النسخ التجريبية من فصيح أيضًا"
+
+msgid "Start speaking without leading silence"
+msgstr "بدء النطق دون صمت في أوله"

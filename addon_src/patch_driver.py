@@ -66,6 +66,9 @@ rep('''    def speak(self, speechSequence):
         def job():
             # Streaming: each finished segment (one voice) is spoken at once, while the next
             # is still being prepared, and a cancel is noticed between every step.
+            if _post_filter is not None:
+                _post_filter.trim_next = True      # 1.3: no dead air before the first sound
+                _post_filter._trim_tail = []
             cancel = self.__cancel_flag
             state = {}         # last pitch/rate/volume/char-mode command, re-sent when the voice changes
             cur = [None, []]   # voice, items of the segment being built
@@ -638,7 +641,9 @@ rep('''    def do_play(self, data, index=None):
                 try:
                     data = _post_filter.process(data)
                 except Exception:
-                    pass''')
+                    pass
+            if not data and index is not None:
+                data = b"\0\0" * 24              # trimmed to nothing: keep NVDA's index callback''')
 rep('''    def on_new_message(self):
         self.__prev_data = None''', '''    def on_new_message(self):
         self.__prev_data = None
@@ -660,7 +665,8 @@ rep('''        BooleanDriverSetting("sharpening", "Sharpening (crisper sound)", 
         BooleanDriverSetting("pausalEnding", "Pausal ending (waqf) at end of sentences", defaultVal=True),
         BooleanDriverSetting("fullCaseEndings", "Full case endings (classical reading)", defaultVal=False, availableInSettingsRing=True),
         DriverSetting("mixedPriority", "Mixed Arabic and Latin text", defaultVal="auto", availableInSettingsRing=True),
-        DriverSetting("diacritizer", "Diacritizer", defaultVal="rawi", availableInSettingsRing=True),''')
+        DriverSetting("diacritizer", "Diacritizer", defaultVal="rawi", availableInSettingsRing=True),
+        BooleanDriverSetting("trimSilence", "Start speaking without leading silence", defaultVal=True),''')
 rep('''    def terminate(self):''', '''    def _get_readEmojis(self):
         return arabic_pipeline.options["read_emojis"]
 
@@ -688,6 +694,13 @@ rep('''    def terminate(self):''', '''    def _get_readEmojis(self):
     def _set_mixedPriority(self, v):
         if v in dict(_MIXED):
             arabic_pipeline.options["mixed_priority"] = v
+
+    def _get_trimSilence(self):
+        return _post_filter is not None and _post_filter.trim_enabled
+
+    def _set_trimSilence(self, v):
+        if _post_filter is not None:
+            _post_filter.trim_enabled = bool(v)
 
     def _get_availableDiacritizers(self):
         return OrderedDict((k, StringParameterInfo(k, n)) for k, n in _DIAC)
@@ -883,6 +896,7 @@ for _lit in ["&Secondary voice (for non-Arabic text)", "Clarity (postfilter)", "
              "Automatic: Latin text as written, by the secondary voice",
              "Arabic first: numbers, symbols and Roman numerals in Arabic",
              "Secondary voice first: numbers too",
+             "Start speaking without leading silence",
              "Diacritizer", "Rawi (most accurate)", "Shamsuddin (fastest, strong on classical text)",
              "Automatic (a voice in NVDA's language, else English)"]:
     _q = '"%s"' % _lit

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Faster response**: speech now starts about 40 ms sooner after each key press, because the silence the voices put before their first sound is trimmed to 5 ms. If you prefer the old behaviour, turn off "Start speaking without leading silence" in NVDA's voice settings.
 - **Diacritize text** in Tools > Fasih: add harakat to Arabic text of any length, typed, pasted or opened from a text or Word file, with Rawi or Shamsuddin's engine chosen in the window itself. Long texts show their progress and can be stopped, and the result can be copied or saved.
 - **Check for updates** in Tools > Fasih, and once a day automatically: shows what is new, then downloads, verifies and installs the new version, or skips it. It also finds newer versions of your downloaded voices. Beta versions are offered only if you ask for them.
 - **A second diacritizer to choose from**: Shamsuddin's tashkeel engine, retrained for Fasih on 8.9 million vowelled sentences. It is about thirty times faster than Rawi and makes fewer mistakes on classical text; Rawi stays the default because it is more accurate on modern text. Choose under Diacritizer in NVDA's voice settings or in the synth settings ring.
