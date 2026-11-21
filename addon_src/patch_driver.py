@@ -367,7 +367,7 @@ _MIXED = [("auto", "Automatic: Latin text as written, by the secondary voice"),
 # Diacritizer choices. The second engine's display name is only in this line, the translation
 # list below and the .po files, so a rename is quick; "shams" is just the internal id.
 _DIAC = [("rawi", "Rawi (most accurate)"),
-         ("shams", "Shamsuddin (fastest, strong on classical text)")]
+         ("shams", "Barq (fastest)")]
 _BREATH = [("b0", "Natural (recommended)"), ("b6", "Less"), ("b12", "Low"), ("b20", "Very low")]
 
 
@@ -897,7 +897,7 @@ for _lit in ["&Secondary voice (for non-Arabic text)", "Clarity (postfilter)", "
              "Arabic first: numbers, symbols and Roman numerals in Arabic",
              "Secondary voice first: numbers too",
              "Start speaking without leading silence",
-             "Diacritizer", "Rawi (most accurate)", "Shamsuddin (fastest, strong on classical text)",
+             "Diacritizer", "Rawi (most accurate)", "Barq (fastest)",
              "Automatic (a voice in NVDA's language, else English)"]:
     _q = '"%s"' % _lit
     assert _q in s, "string not found: " + _lit

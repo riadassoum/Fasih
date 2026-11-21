@@ -355,8 +355,8 @@ msgstr "المشكِّل"
 msgid "Rawi (most accurate)"
 msgstr "راوي (الأدق)"
 
-msgid "Shamsuddin (fastest, strong on classical text)"
-msgstr "شمس الدين (الأسرع، قوي في النصوص التراثية)"
+msgid "Barq (fastest)"
+msgstr "برق (الأسرع)"
 
 msgid "Diacritize Arabic text"
 msgstr "تشكيل نص عربي"

@@ -59,7 +59,7 @@ s = s.replace(old_fp, """    cands = [os.path.join(_VOWELIZERS, fname), os.path.
         data_paths = _import_data_paths()""", 1)
 compile(s, p, "exec")
 open(p, "w", encoding="utf-8").write(s)
-# 1.3: second diacritizer, Shamsuddin's tashkeel engine (C++, GPL, by Shamsuddin; trained further
+# 1.3: second diacritizer, Barq (برق), PlanetBlindTech's tashkeel engine (C++, GPL, by Shamseddin; fine-tuned
 # for Fasih). Loaded in process through ctypes: one DLL and one model file, no numpy.
 s = s.replace('BACKENDS = ("libtashkeel", "rawi",', 'BACKENDS = ("libtashkeel", "rawi", "shams",', 1)
 old_b = '    out = ["libtashkeel", "rawi"]\n'
@@ -70,7 +70,7 @@ assert old_l in s, "rawi loader not found"
 s = s.replace(old_l, '    if name == "shams":\n        r = _Shams()\n        r("نص")\n        return r\n\n' + old_l, 1)
 a = s.index("def _load(name):")
 s = s[:a] + '''class _Shams(object):
-    """Shamsuddin's tashkeel engine: lexicon + word bigrams + small trees, very fast."""
+    """Barq, PlanetBlindTech's tashkeel engine: lexicon + word bigrams + small trees, very fast."""
     DIR = os.path.join(_LIB, "tashkeel_engine")
     LIBNAME = "tashkeel_engine.dll" if os.name == "nt" else "libtashkeel.so"
     MODEL = "tashkeel_engine.tash"

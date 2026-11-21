@@ -674,7 +674,7 @@ def _set_setting(key, value):
 
 # --- Tools > Fasih > Diacritize text -------------------------------------------------------------
 # The diacritizers' display names (keep them in step with the Diacritizer setting in the driver).
-_DIACRITIZERS = [("rawi", _("Rawi (most accurate)")), ("shams", _("Shamsuddin (fastest, strong on classical text)"))]
+_DIACRITIZERS = [("rawi", _("Rawi (most accurate)")), ("shams", _("Barq (fastest)"))]
 _MARKS_RE = None
 
 

@@ -55,7 +55,7 @@ cp -r "$HERE/pbt" "$D/pbt"; touch "$D/pbt/__init__.py"
 
 # Rawi diacritizer: separate helper process + ONNX Runtime + model
 cp "$HERE/rawi_host/rawi_host.exe" "$D/arabic/lib/"
-# second diacritizer: Shamsuddin's tashkeel engine (in process, one DLL + one model)
+# second diacritizer: Barq, PlanetBlindTech's tashkeel engine (in process, one DLL + one model)
 mkdir -p "$D/arabic/lib/tashkeel_engine"
 cp "$T/tashkeel_engine/bin/tashkeel_engine.dll" "$T/tashkeel_engine/models/tashkeel_engine.tash" "$D/arabic/lib/tashkeel_engine/"
 cp "$T"/onnxruntime/* "$D/arabic/lib/onnxruntime/capi/"
@@ -67,7 +67,7 @@ VOICES=$(for v in "$D"/data/voices/*/; do if grep -q '^language=Arabic' "$v/voic
 cat > "$B/manifest.ini" <<EOF
 name = fasih
 summary = "Fasih (فصيح): Arabic RHVoice voices"
-description = """Fasih (فصيح): Arabic voices for the RHVoice engine ($VOICES), plus Elise, the first French RHVoice voice, as a secondary voice; thirteen more Arabic voices can be downloaded from Tools > Fasih > Download voices. Non-neural speech synthesis (HTS models, WORLD vocoder) with neural diacritization (Rawi), or the much faster tashkeel engine by Shamsuddin."""
+description = """Fasih (فصيح): Arabic voices for the RHVoice engine ($VOICES), plus Elise, the first French RHVoice voice, as a secondary voice; thirteen more Arabic voices can be downloaded from Tools > Fasih > Download voices. Non-neural speech synthesis (HTS models, WORLD vocoder) with neural diacritization (Rawi), or Barq, PlanetBlindTech's much faster diacritizer."""
 author = "Riad Assoum"
 url = https://github.com/riadassoum/Fasih
 version = $VER
