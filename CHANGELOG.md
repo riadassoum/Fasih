@@ -1,36 +1,76 @@
 # Changelog
 
-## Unreleased
+## 1.3
 
-- **Steadier speech in long passages**: each sentence is now spoken as its own utterance, and Nabil was retrained on recordings of two to four sentences at a time. Nabil no longer turns rough and shaky partway through a long paragraph or a very long sentence.
-- **English words read correctly**: the English voices (BDL, Evan and any other RHVoice English voice) know about 12,000 more words from the current CMU Pronouncing Dictionary, so words like "changer" no longer lose a sound, and "Nabil" keeps its l. About half of those words used to be guessed wrongly.
-- **Rawi reads modern Arabic better**: retrained with QCRI's diacritized Arabic Wikipedia, it makes about a quarter fewer mistakes on modern news (WikiNews: 12.9% of words with a wrong vowel, down from 17.1%), and slightly fewer on classical text.
-- **Evan, an English voice to download**: a male English voice trained on speech from OpenEVV's Adult Male 1, which you can choose as Fasih's English voice instead of BDL. Its voice data is IBM's, so it is for personal, non-commercial use only; the notice in the pack explains why.
-- **Faster response**: speech now starts about 40 ms sooner after each key press, because the silence the voices put before their first sound is trimmed to 5 ms. If you prefer the old behaviour, turn off "Start speaking without leading silence" in NVDA's voice settings.
-- **Diacritize text** in Tools > Fasih: add harakat to Arabic text of any length, typed, pasted or opened from a text or Word file, with Rawi or Barq chosen in the window itself. Long texts show their progress and can be stopped, and the result can be copied or saved.
-- **Check for updates** in Tools > Fasih, and once a day automatically: shows what is new, then downloads, verifies and installs the new version, or skips it. It also finds newer versions of your downloaded voices. Beta versions are offered only if you ask for them.
-- **A second diacritizer to choose from**: Barq (برق), PlanetBlindTech's tashkeel engine by Shamseddin, fine-tuned for Fasih on 9.5 million vowelled sentences, including QCRI's diacritized Arabic Wikipedia. It is about thirty times faster than Rawi, nearly as accurate on modern news and a little more accurate on classical text; Rawi stays the default. Choose under Diacritizer in NVDA's voice settings or in the synth settings ring.
-- **Three new voices to download**: Nabil (نبيل), a clear male voice and the easiest Fasih voice to understand so far (for non-commercial use); Amjad (أمجد), a male voice in Modern Standard Arabic; and Shahrazad (شهرزاد), a female storyteller's voice made from a real reader's audiobook, Aïda Boumaza's LibriVox recording of Alf Layla wa Layla. All three read الله with the heavy lam after a or u and the light lam after i. Find them in Tools > Fasih > Download voices > "Arabic: Fasih voices".
-- **Updating from 1.2.** If your voice was one of the ten that are now downloads, Fasih speaks with Aseel and tells you once where to get your voice back, with a button to open Download voices. A secondary voice that is no longer there is replaced by Bdl.
-- **Screen-reader text reads better.** Button, file, folder and check box (زر، ملف، مجلد، مربع) are vowelled correctly on their own; لديك is no longer read as feminine; "..." is a pause instead of being named in the middle of a sentence; durations are read as durations (رسالة صوتية، 0:45 is خمس وأربعون ثانية, a video's 12:34 is minutes and seconds); "1 - 20 من 350" is a range read with the right case; prices take the genitive (بدلا من أربعين دولار); version numbers (الإصدار 2026.3), units (كم/س، كغ، GB), list letters (أ) ب)), file names with underscores, "رقم #" and © next to "محفوظة" are read naturally, and digits in phone numbers are spoken cleanly.
-- **Spelling.** Moving by character over a letter with marks names the marks too (بَّ is باء شدة فتحة), and Persian letters (پ چ ڤ گ ی) and the lam-alef ligature have names.
+### Voices
+
+- **Smaller add-on, voices on demand.** The add-on now carries Aseel (the new default voice), Riad, the English voice Bdl and the French voice Elise. Every other Fasih voice is installed from Tools > Fasih > Download voices > "Arabic: Fasih voices", each as its own small add-on that NVDA keeps across Fasih updates and that follows Fasih's settings. Each one can be heard first with the Listen button, and an installed voice with a newer version shows "Update available".
+- **Updating from 1.2.** Jamal, Nour, Sami, Faris, Huda, Karim, Rima, Lamees, Zayd and Reem are now downloads. If you used one of them, Fasih speaks with Aseel and tells you once where to get your voice back, with a button that opens Download voices. A secondary voice that is no longer there is replaced by Bdl.
+- **Four new voices to download:**
+  - **Nabil (نبيل)**, a clear male voice in Modern Standard Arabic, for non-commercial use.
+  - **Amjad (أمجد)**, a male voice in Modern Standard Arabic.
+  - **Shahrazad (شهرزاد)**, a female storyteller's voice made from a real reader's audiobook, Aïda Boumaza's LibriVox recording of Alf Layla wa Layla.
+  - **Evan**, a male English voice you can choose as Fasih's English voice instead of Bdl. Evan was trained on speech from OpenEVV's Adult Male 1, so his voice data is IBM's, and he is for personal, non-commercial use only; the notice in his pack explains why.
+
+  Nabil, Amjad and Shahrazad read الله with the heavy lam after a or u and the light lam after i.
+- **A clearer English voice.** Bdl replaces SLT. In my tests with speech recognition at the same speaking rate, Bdl was understood with about half of SLT's errors at normal speed, and with fewer errors at fast rates. SLT can still be downloaded from Download voices.
 - **English as loud as Arabic.** Bdl is matched to Aseel's loudness, so switching between Arabic and English no longer jumps in volume.
-- **A better diacritizer.** Fasih now uses its own fine-tuned Rawi: Rawi v3, trained further on modern Arabic sentences and on fully vowelled books from Shamela. On modern sentences it never saw it puts about a fifth fewer wrong vowel marks than before (12% of words with a mistake instead of 15.5%), on a vowelled book it makes half the mistakes, and it is twice as fast. The training scripts and results are in tools/rawi_ft.
-- **Everyday reading by default.** In the middle of a phrase, case endings (tanween and a final damma or kasra) are no longer pronounced, as most people read; a comma is a pause like a full stop. Endings that carry meaning stay (قرأتُ، أنتِ، لكِ), as does the vowel that joins a word to a following ال. Turn on "Full case endings (classical reading)" in the voice settings for full i'rab.
-- **No more words glued to abbreviations.** A word ending in م or د before a full stop was read as an abbreviation (الرحيم. became الرحيمهندس, 632م. became …مهندس). Abbreviations now expand only as whole words, a one-letter title (د. م. أ.) only before a name, and a year followed by م or هـ is read ميلادي or هجري.
-- **No invented hamza.** The diacritizer sometimes put a hamza on a plain و or ي (البور read as البؤر, كاين as كائن, الوادي as الوادئ); the letters are now spoken as written. Impossible vowels on أ and إ, and a doubled ئ in مئة, are corrected.
-- **Numbers read the way Arabic says them**: the number agrees with the counted noun (ثلاث سيارات، خمس دقائق، إحدى وعشرون طالبة، ثلاثة كتب), takes the genitive after prepositions and words like عام (خلال عشرين دقيقة، عام ألفين وستة وعشرين), and و is joined to the next number. Also new: thousands separators (1,250,000), negative numbers (سالب خمس درجات), ranges (3-5 أيام), simple fractions (نصف كوب), version numbers (2.5.1), ordinals up to 99 (الدرس الـ5، القرن الـ21, feminine after a feminine noun), dates with month names (2 مايو، 15 كانون الثاني 1990), page and volume numbers (ص 45، ج 2), and times say صباحا or مساء once, with minutes counted properly.
-- **Arabic questions sound like questions.** ؟ and ؛ only got a comma's pause; they now end the sentence like ? and ;, with question intonation.
-- **Honorific signs** (ﷺ, (ص), (رض), (ع)) are read in full, and emoji no longer leave stray symbols behind.
-- **Pronunciation dictionary** in Tools > Fasih: add, edit, listen to and remove your own pronunciations, applied at once. Entries also match with و ف ب ل ك attached.
-- **A clearer English voice.** Bdl replaces SLT: in my tests with speech recognition at the same speaking rate, Bdl was understood with about half of SLT's errors at normal speed and fewer errors at fast rates. SLT can still be downloaded from Tools > Fasih > Download voices.
-- **Listen before you download, and pack updates.** Each Fasih voice in Download voices can be heard with the Listen button, and an installed voice with a newer version shows "Update available".
-- **Smaller add-on, voices on demand.** The add-on now carries Aseel and Riad (Aseel is now the default voice), the English voice Bdl and the French voice Elise. The ten other Arabic voices (Jamal, Nour, Sami, Faris, Huda, Karim, Rima, Lamees, Zayd and Reem) are installed from Tools > Fasih > Download voices > "Arabic: Fasih voices", each as its own small add-on that NVDA keeps across Fasih updates and that follows Fasih's settings. If you used one of them, install it again after updating; until then Fasih speaks with Aseel.
-- **Modulation postfilter** (on by default; a new setting turns it off): HMM voices change their sound too smoothly from moment to moment, which makes them a little muffled. Fasih now restores part of the natural movement measured in each voice's recordings (the time-invariant modulation spectrum postfilter of Takamichi et al., at half strength). Pitch, timing and loudness are unchanged; voices whose recordings are no longer available (Lamees, Riad, Reem, Aseel) use the average of the others.
+- **Modulation postfilter** (on by default; a new setting turns it off). HMM voices change their sound too smoothly from moment to moment, which makes them a little muffled. Fasih now restores part of the natural movement measured in each voice's recordings (the time-invariant modulation spectrum postfilter of Takamichi et al., at half strength). Pitch, timing and loudness are unchanged. Voices whose recordings are no longer available (Lamees, Riad, Reem, Aseel) use the average of the others.
 - **Riad** now has the same gentle tone correction as the other voices, with his pitch unchanged.
-- **Text in a marked language goes to a voice of that language.** When a web page or document marks a passage as French, English or another language (and NVDA's automatic language switching is on), that passage is read by an installed voice of that language; without such a mark, or without such a voice, the secondary voice reads it as before.
-- **French numbers read correctly in more cases**: the zeros after the decimal comma are read (3,05 is trois virgule zéro cinq, no longer trois virgule cinq), very long numbers and fractions are read digit by digit instead of being skipped, and une is used after numbers ending in un before a feminine noun (quatre-vingt-une heures).
+
+### Speech
+
+- **Faster response.** Speech starts about 40 ms sooner after each key press, because the silence the voices put before their first sound is trimmed to 5 ms. To get the old behaviour, turn off "Start speaking without leading silence" in NVDA's voice settings.
+- **Steadier speech in long passages.** Each sentence is spoken as its own utterance, so a voice no longer turns rough or shaky partway through a long paragraph.
+- **Everyday reading by default.** In the middle of a phrase, case endings (tanween and a final damma or kasra) are no longer pronounced, as most people read, and a comma is a pause like a full stop. Endings that carry meaning stay (قرأتُ، أنتِ، لكِ), as does the vowel that joins a word to a following ال. Turn on "Full case endings (classical reading)" in the voice settings for full i'rab.
+- **Arabic questions sound like questions.** ؟ and ؛ only got a comma's pause; they now end the sentence like ? and ;, with question intonation.
+- **Text in a marked language goes to a voice of that language.** When a web page or document marks a passage as French, English or another language (and NVDA's automatic language switching is on), an installed voice of that language reads it. Without such a mark, or without such a voice, the secondary voice reads it as before.
+
+### Diacritization
+
+- **Rawi is more accurate and twice as fast.** Fasih now uses its own fine-tuned Rawi: Rawi v3, trained further on modern Arabic sentences, fully vowelled books from Shamela and QCRI's diacritized Arabic Wikipedia. Against 1.2's Rawi, measured by the share of words with a wrong vowel:
+  - modern news (WikiNews): 12.9%, down from 17.3%
+  - other modern sentences: 16.6%, down from 20.4%
+  - classical book text: 19.7%, down from 22.2%
+
+  The training scripts and results are in tools/rawi_ft.
+- **A second diacritizer to choose from: Barq (برق)**, PlanetBlindTech's tashkeel engine by Shamseddin, fine-tuned for Fasih on 9.5 million vowelled sentences. It is about thirty times faster than Rawi, nearly as accurate on modern news and a little more accurate on classical text. Rawi stays the default. Choose under Diacritizer in NVDA's voice settings or in the synth settings ring.
+- **Diacritize text** in Tools > Fasih adds harakat to Arabic text of any length, typed, pasted or opened from a text or Word file. You choose Rawi or Barq in the window itself. Long texts show their progress and can be stopped, and the result can be copied or saved.
+- **No invented hamza.** The diacritizer sometimes put a hamza on a plain و or ي (البور read as البؤر, كاين as كائن, الوادي as الوادئ); the letters are now spoken as written. Impossible vowels on أ and إ, and a doubled ئ in مئة, are corrected.
+
+### Arabic text
+
+- **Screen-reader text reads better:**
+  - زر، ملف، مجلد and مربع (button, file, folder, check box) are vowelled correctly on their own.
+  - لديك is no longer read as feminine.
+  - "..." is a pause, instead of being named in the middle of a sentence.
+  - Durations are read as durations: in رسالة صوتية، 0:45 is خمس وأربعون ثانية, and a video's 12:34 is minutes and seconds.
+  - "1 - 20 من 350" is a range, read with the right case.
+  - Prices take the genitive (بدلا من أربعين دولار).
+  - Version numbers (الإصدار 2026.3), units (كم/س، كغ، GB), list letters (أ) ب)), file names with underscores, "رقم #" and © next to "محفوظة" are read naturally.
+  - Digits in phone numbers are spoken cleanly.
+- **Numbers read the way Arabic says them.** The number agrees with the counted noun (ثلاث سيارات، خمس دقائق، إحدى وعشرون طالبة، ثلاثة كتب), takes the genitive after prepositions and words like عام (خلال عشرين دقيقة، عام ألفين وستة وعشرين), and و is joined to the next number. Also new:
+  - thousands separators (1,250,000) and negative numbers (سالب خمس درجات)
+  - ranges (3-5 أيام) and simple fractions (نصف كوب)
+  - version numbers (2.5.1)
+  - ordinals up to 99 (الدرس الـ5، القرن الـ21), feminine after a feminine noun
+  - dates with month names (2 مايو، 15 كانون الثاني 1990)
+  - page and volume numbers (ص 45، ج 2)
+  - times, which say صباحا or مساء once, with minutes counted properly
+- **No more words glued to abbreviations.** A word ending in م or د before a full stop was read as an abbreviation (الرحيم. became الرحيمهندس, 632م. became …مهندس). Abbreviations now expand only as whole words, a one-letter title (د. م. أ.) only before a name, and a year followed by م or هـ is read ميلادي or هجري.
+- **Honorific signs** (ﷺ, (ص), (رض), (ع)) are read in full, and emoji no longer leave stray symbols behind.
+- **Spelling.** Moving by character over a letter with marks names the marks too (بَّ is باء شدة فتحة), and Persian letters (پ چ ڤ گ ی) and the lam-alef ligature have names.
+- **Pronunciation dictionary** in Tools > Fasih: add, edit, listen to and remove your own pronunciations, applied at once. Entries also match with و ف ب ل ك attached.
+
+### English and French
+
+- **English words read correctly.** Every English voice (Bdl, Evan and any other RHVoice English voice) knows about 12,000 more words from the current CMU Pronouncing Dictionary, about half of which used to be guessed wrongly. "changer" no longer loses a sound, and "Nabil" keeps its l.
+- **French numbers read correctly in more cases.** The zeros after the decimal comma are read (3,05 is trois virgule zéro cinq, no longer trois virgule cinq). Very long numbers and fractions are read digit by digit instead of being skipped. une is used after numbers ending in un before a feminine noun (quatre-vingt-une heures).
 - **French liaison** is no longer made before plural or feminine forms of words that refuse it (les handicaps, les hautes).
+
+### Add-on
+
+- **Check for updates** in Tools > Fasih, and once a day automatically. It shows what is new, then downloads, verifies and installs the new version, or skips it. It also finds newer versions of your downloaded voices. Beta versions are offered only if you ask for them.
 - **Cancelling a voice download** closes the window at once, even when the server has stopped answering, and a stalled download now gives up after a short time instead of waiting indefinitely.
 
 ## 1.2
