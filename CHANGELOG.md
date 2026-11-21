@@ -15,7 +15,7 @@
   Nabil, Amjad and Shahrazad read الله with the heavy lam after a or u and the light lam after i.
 - **A clearer English voice.** Bdl replaces SLT. In my tests with speech recognition at the same speaking rate, Bdl was understood with about half of SLT's errors at normal speed, and with fewer errors at fast rates. SLT can still be downloaded from Download voices.
 - **English as loud as Arabic.** Bdl is matched to Aseel's loudness, so switching between Arabic and English no longer jumps in volume.
-- **Modulation postfilter** (on by default; a new setting turns it off). HMM voices change their sound too smoothly from moment to moment, which makes them a little muffled. Fasih now restores part of the natural movement measured in each voice's recordings (the time-invariant modulation spectrum postfilter of Takamichi et al., at half strength). Pitch, timing and loudness are unchanged. Voices whose recordings are no longer available (Lamees, Riad, Reem, Aseel) use the average of the others.
+- **Modulation postfilter** (on by default; a new setting turns it off). HMM voices change their sound too smoothly from moment to moment, which makes them a little muffled. Fasih now restores part of the natural movement measured in each voice's recordings (the time-invariant modulation spectrum postfilter of Takamichi et al., at half strength). Pitch, timing and loudness are unchanged.
 - **Riad** now has the same gentle tone correction as the other voices, with his pitch unchanged.
 
 ### Speech
