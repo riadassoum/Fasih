@@ -39,7 +39,7 @@ In NVDA's Tools menu, **Fasih > Download voices** lists the RHVoice voices of ev
 
 ## Diacritization
 
-Text is diacritized with Rawi before it is spoken, and any harakat you typed yourself are kept. Rawi runs in its own small helper program (rawi_host.exe), so NVDA itself never loads numpy or onnxruntime. Many add-ons ship their own copies of those libraries, and loading two copies into NVDA can freeze it. If the helper gets stuck, NVDA waits for it at most three seconds the first time and one second after that; the helper is then restarted and the sentence is spoken without the added diacritics. Speech starts on the first finished part of an utterance while the rest is still being prepared, and pressing Control stops the preparation as well as the sound.
+Text is diacritized with Rawi before it is spoken, and any harakat you typed yourself are kept. Rawi runs in its own small helper program (rawi_host.exe), so NVDA itself never loads numpy or onnxruntime. Many add-ons ship their own copies of those libraries, and loading two copies into NVDA can freeze it. If the helper gets stuck, NVDA waits for it at most three seconds the first time and one second after that; the helper is then restarted and the sentence is spoken without the added diacritics. A second diacritizer, Shamsuddin's tashkeel engine, can be chosen instead under Diacritizer in NVDA's voice settings or in the synth settings ring. It runs inside NVDA as a small library with no numpy or onnxruntime, is about thirty times faster than Rawi and is stronger on classical text, while Rawi stays the default because it is more accurate on modern text. Speech starts on the first finished part of an utterance while the rest is still being prepared, and pressing Control stops the preparation as well as the sound.
 
 ## Settings
 
@@ -69,6 +69,7 @@ In NVDA's Tools menu, **Fasih > Pronunciation dictionary** lists the words you w
 ## Credits
 
 - **Rawi v3** by TigreGotico (Apache-2.0): the diacritizer, which I fine-tuned for Fasih on the ArVoice texts, Shamela books (ReligiousLLMs) and Rawi's own data; see tools/rawi_ft.
+- **Shamsuddin's tashkeel engine** (GPL-3.0), written by Shamsuddin and included with his agreement: the second diacritizer. I retrained it for Fasih on 8.9 million vowelled sentences from TigreGotico, ArVoice, Shamela, Abdou's Arabic tashkeel dataset (MIT) and Tashkeela; see third_party/tashkeel_engine.
 - **ClaritySynth 3.0** (my own add-on): Arabic text normalization for numbers, dates and currency, Rawi diacritization, and keeping the user's own harakat.
 - **PlanetBlindTech** (rhvoice-arabic, GPL-3.0), with their blessing: the default pronunciation dictionary, the user dictionary, emoji and symbol names, single-character names, presentation-form cleanup, post-diacritization fixes and the design of the audio post-filter (the DC/rumble high-pass Fasih still uses; its limiter is now a look-ahead gain limiter of mine). Their project also showed me the data-only language approach and the stock-RHVoice packaging that Fasih follows. Thank you.
 - **RHVoice Voice Manager** by Alexander Linkov (kvark128, GPL): the voice catalogue and the packaging of its voices as NVDA add-ons, which Fasih's Download voices uses.

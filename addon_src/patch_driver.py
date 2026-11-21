@@ -361,6 +361,10 @@ def _fasih_has_sharp():
 _MIXED = [("auto", "Automatic: Latin text as written, by the secondary voice"),
           ("arabic", "Arabic first: numbers, symbols and Roman numerals in Arabic"),
           ("secondary", "Secondary voice first: numbers too")]
+# Diacritizer choices. The second engine's display name is only in this line, the translation
+# list below and the .po files, so a rename is quick; "shams" is just the internal id.
+_DIAC = [("rawi", "Rawi (most accurate)"),
+         ("shams", "Shamsuddin (fastest, strong on classical text)")]
 _BREATH = [("b0", "Natural (recommended)"), ("b6", "Less"), ("b12", "Low"), ("b20", "Very low")]
 
 
@@ -655,7 +659,8 @@ rep('''        BooleanDriverSetting("sharpening", "Sharpening (crisper sound)", 
         BooleanDriverSetting("readEmojis", "Read emojis and symbols by name", defaultVal=True),
         BooleanDriverSetting("pausalEnding", "Pausal ending (waqf) at end of sentences", defaultVal=True),
         BooleanDriverSetting("fullCaseEndings", "Full case endings (classical reading)", defaultVal=False, availableInSettingsRing=True),
-        DriverSetting("mixedPriority", "Mixed Arabic and Latin text", defaultVal="auto", availableInSettingsRing=True),''')
+        DriverSetting("mixedPriority", "Mixed Arabic and Latin text", defaultVal="auto", availableInSettingsRing=True),
+        DriverSetting("diacritizer", "Diacritizer", defaultVal="rawi", availableInSettingsRing=True),''')
 rep('''    def terminate(self):''', '''    def _get_readEmojis(self):
         return arabic_pipeline.options["read_emojis"]
 
@@ -683,6 +688,16 @@ rep('''    def terminate(self):''', '''    def _get_readEmojis(self):
     def _set_mixedPriority(self, v):
         if v in dict(_MIXED):
             arabic_pipeline.options["mixed_priority"] = v
+
+    def _get_availableDiacritizers(self):
+        return OrderedDict((k, StringParameterInfo(k, n)) for k, n in _DIAC)
+
+    def _get_diacritizer(self):
+        return arabic_pipeline.options.get("diacritizer", "rawi")
+
+    def _set_diacritizer(self, v):
+        if v in dict(_DIAC):
+            arabic_pipeline.set_diacritizer(v)
 
     def terminate(self):''')
 rep('''        arabic_pipeline.preload()''', '''        arabic_pipeline.init_dictionaries(config_path)
@@ -868,6 +883,7 @@ for _lit in ["&Secondary voice (for non-Arabic text)", "Clarity (postfilter)", "
              "Automatic: Latin text as written, by the secondary voice",
              "Arabic first: numbers, symbols and Roman numerals in Arabic",
              "Secondary voice first: numbers too",
+             "Diacritizer", "Rawi (most accurate)", "Shamsuddin (fastest, strong on classical text)",
              "Automatic (a voice in NVDA's language, else English)"]:
     _q = '"%s"' % _lit
     assert _q in s, "string not found: " + _lit

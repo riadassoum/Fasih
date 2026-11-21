@@ -93,6 +93,9 @@ touch "$D/arabic/__init__.py"
 mkdir -p "$D/arabic/lib/onnxruntime/capi"
 cp "$CS/lib/onnxruntime/capi/onnxruntime.dll" "$CS/lib/onnxruntime/capi/onnxruntime_providers_shared.dll" "$CS/lib/onnxruntime/capi/msvcp140.dll" "$CS/lib/onnxruntime/LICENSE" "$D/arabic/lib/onnxruntime/capi/"
 cp "$HERE/rawi_host/rawi_host.exe" "$D/arabic/lib/"
+# second diacritizer: Shamsuddin's tashkeel engine (in process, one DLL + one model)
+mkdir -p "$D/arabic/lib/tashkeel_engine"
+cp "$HERE/../third_party/tashkeel_engine/bin/tashkeel_engine.dll" "$HERE/../third_party/tashkeel_engine/models/tashkeel_engine.tash" "$D/arabic/lib/tashkeel_engine/"
 cp "$HERE/../third_party/rawi/rawi_fasih.onnx" "$CS/lib/vowelizers/vocab.json" "$D/arabic/lib/vowelizers/"
 find "$B" -name "__pycache__" -prune -exec rm -rf {} +
 cat > "$B/manifest.ini" <<EOF

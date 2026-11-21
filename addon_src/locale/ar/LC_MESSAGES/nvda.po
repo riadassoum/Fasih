@@ -343,3 +343,12 @@ msgstr "تنزيل مزيد من أصوات فصيح وأصوات بلغات أ�
 
 msgid "{voice} is no longer part of the Fasih add-on, so Fasih is speaking with Aseel for now. {voice} and the other Arabic voices can be downloaded from Tools > Fasih > Download voices. Open it now?"
 msgstr "لم يعد الصوت {voice} جزءًا من إضافة فصيح، لذلك يتكلم فصيح الآن بصوت أصيل. يمكنك تنزيل {voice} والأصوات العربية الأخرى من «أدوات» ثم «فصيح» ثم «تنزيل أصوات». هل تريد فتحها الآن؟"
+
+msgid "Diacritizer"
+msgstr "المشكِّل"
+
+msgid "Rawi (most accurate)"
+msgstr "راوي (الأدق)"
+
+msgid "Shamsuddin (fastest, strong on classical text)"
+msgstr "شمس الدين (الأسرع، قوي في النصوص التراثية)"

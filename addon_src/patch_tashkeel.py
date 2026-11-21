@@ -59,3 +59,54 @@ s = s.replace(old_fp, """    cands = [os.path.join(_VOWELIZERS, fname), os.path.
         data_paths = _import_data_paths()""", 1)
 compile(s, p, "exec")
 open(p, "w", encoding="utf-8").write(s)
+# 1.3: second diacritizer, Shamsuddin's tashkeel engine (C++, GPL, by Shamsuddin; trained further
+# for Fasih). Loaded in process through ctypes: one DLL and one model file, no numpy.
+s = s.replace('BACKENDS = ("libtashkeel", "rawi",', 'BACKENDS = ("libtashkeel", "rawi", "shams",', 1)
+old_b = '    out = ["libtashkeel", "rawi"]\n'
+assert old_b in s, "backend list not found"
+s = s.replace(old_b, '    out = ["libtashkeel", "rawi"]\n    if _Shams.available():\n        out.append("shams")\n', 1)
+old_l = '    if name == "rawi":\n        path = _find_tashkeel_file("rawi_fasih.onnx")'
+assert old_l in s, "rawi loader not found"
+s = s.replace(old_l, '    if name == "shams":\n        r = _Shams()\n        r("نص")\n        return r\n\n' + old_l, 1)
+a = s.index("def _load(name):")
+s = s[:a] + '''class _Shams(object):
+    """Shamsuddin's tashkeel engine: lexicon + word bigrams + small trees, very fast."""
+    DIR = os.path.join(_LIB, "tashkeel_engine")
+    LIBNAME = "tashkeel_engine.dll" if os.name == "nt" else "libtashkeel.so"
+    MODEL = "tashkeel_engine.tash"
+
+    @classmethod
+    def available(cls):
+        return os.path.exists(os.path.join(cls.DIR, cls.LIBNAME)) and os.path.exists(os.path.join(cls.DIR, cls.MODEL))
+
+    def __init__(self):
+        import ctypes, threading
+        self._ct = ctypes
+        L = ctypes.CDLL(os.path.join(self.DIR, self.LIBNAME))
+        L.tashkeel_create.restype = ctypes.c_void_p
+        L.tashkeel_create.argtypes = [ctypes.c_char_p]
+        L.tashkeel_diacritize.restype = ctypes.c_void_p
+        L.tashkeel_diacritize.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_size_t, ctypes.POINTER(ctypes.c_size_t)]
+        L.tashkeel_free_str.argtypes = [ctypes.c_void_p]
+        L.tashkeel_set_restore_spelling.argtypes = [ctypes.c_void_p, ctypes.c_int]
+        h = L.tashkeel_create(os.path.join(self.DIR, self.MODEL).encode("utf-8"))
+        if not h:
+            raise RuntimeError("tashkeel engine: model did not load")
+        L.tashkeel_set_restore_spelling(h, 0)     # never change letters, only add marks
+        self._L, self._h, self._lock = L, h, threading.Lock()
+
+    def __call__(self, text):
+        b = text.encode("utf-8"); n = self._ct.c_size_t()
+        with self._lock:
+            p = self._L.tashkeel_diacritize(self._h, b, len(b), self._ct.byref(n))
+            if not p:
+                return text
+            try:
+                return self._ct.string_at(p, n.value).decode("utf-8", "replace")
+            finally:
+                self._L.tashkeel_free_str(p)
+
+
+''' + s[a:]
+compile(s, p, "exec")
+open(p, "w", encoding="utf-8").write(s)

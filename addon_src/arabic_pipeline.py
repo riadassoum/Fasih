@@ -40,7 +40,7 @@ def _boot():
             return _ready
         try:
             from .arabic import ar_tashkeel
-            ar_tashkeel.set_backend("rawi")
+            ar_tashkeel.set_backend(options.get("diacritizer", "rawi"))
             _ready = True
         except Exception:
             _log_error("Fasih: tashkeel unavailable")
@@ -63,7 +63,7 @@ def preload():
         if _boot():
             try:
                 from .arabic import ar_tashkeel
-                ar_tashkeel.diacritize_strict("بسم", backend="rawi")
+                ar_tashkeel.diacritize_strict("بسم", backend=ar_tashkeel.get_backend())
             except Exception:
                 pass
     threading.Thread(target=run, daemon=True).start()
@@ -282,7 +282,7 @@ def _arabic_core(out, diacritize, pt, ar_prep, is_cancelled=None):
             from .arabic import ar_tashkeel
             bare, had = _strip_lone_tanween(out)
             with _lock:
-                d = ar_tashkeel.diacritize_strict(bare, backend="rawi", is_cancelled=is_cancelled)
+                d = ar_tashkeel.diacritize_strict(bare, backend=ar_tashkeel.get_backend(), is_cancelled=is_cancelled)
             if d and d.strip():
                 out = _restore_tanween(d, had)
         except Exception:
@@ -355,3 +355,21 @@ def _latin_word(w):
 
 def latin_to_arabic(text):
     return re.sub(r"[A-Za-zÀ-ÿ]+", lambda m: _latin_word(m.group(0)), text)
+
+
+def set_diacritizer(name):
+    """Switch the diacritizer; falls back to Rawi if the other one cannot load."""
+    options["diacritizer"] = name
+    if _ready:
+        try:
+            from .arabic import ar_tashkeel
+            if name != "rawi" and not ar_tashkeel._get(name):
+                raise RuntimeError(name)
+            ar_tashkeel.set_backend(name)
+        except Exception:
+            _log_error("Fasih: diacritizer %s unavailable, using Rawi" % name)
+            options["diacritizer"] = "rawi"
+            try:
+                ar_tashkeel.set_backend("rawi")
+            except Exception:
+                pass

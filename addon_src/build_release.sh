@@ -55,6 +55,9 @@ cp -r "$HERE/pbt" "$D/pbt"; touch "$D/pbt/__init__.py"
 
 # Rawi diacritizer: separate helper process + ONNX Runtime + model
 cp "$HERE/rawi_host/rawi_host.exe" "$D/arabic/lib/"
+# second diacritizer: Shamsuddin's tashkeel engine (in process, one DLL + one model)
+mkdir -p "$D/arabic/lib/tashkeel_engine"
+cp "$T/tashkeel_engine/bin/tashkeel_engine.dll" "$T/tashkeel_engine/models/tashkeel_engine.tash" "$D/arabic/lib/tashkeel_engine/"
 cp "$T"/onnxruntime/* "$D/arabic/lib/onnxruntime/capi/"
 cp "$T/rawi/rawi_fasih.onnx" "$T/rawi/vocab.json" "$D/arabic/lib/vowelizers/"
 
