@@ -643,6 +643,554 @@ class DictionaryDialog(wx.Dialog):
 		self.EndModal(wx.ID_OK)
 
 
+
+# --- settings shared by the text window and the update checker (NVDA config, survives updates) ---
+def _settings_path():
+	import os
+	return os.path.join(_dic_path()[0], "settings.json")
+
+
+def _setting(key, default=None):
+	try:
+		with open(_settings_path(), encoding="utf-8") as f:
+			return json.load(f).get(key, default)
+	except Exception:
+		return default
+
+
+def _set_setting(key, value):
+	try:
+		with open(_settings_path(), encoding="utf-8") as f:
+			d = json.load(f)
+	except Exception:
+		d = {}
+	d[key] = value
+	try:
+		with open(_settings_path(), "w", encoding="utf-8") as f:
+			json.dump(d, f, ensure_ascii=False, indent=1)
+	except Exception:
+		log.error("Fasih: settings not saved", exc_info=True)
+
+
+# --- Tools > Fasih > Diacritize text -------------------------------------------------------------
+# The diacritizers' display names (keep them in step with the Diacritizer setting in the driver).
+_DIACRITIZERS = [("rawi", _("Rawi (most accurate)")), ("shams", _("Shamsuddin (fastest, strong on classical text)"))]
+_MARKS_RE = None
+
+
+def _tashkeel_module():
+	"""Fasih's diacritizer module, shared with the speech engine when Fasih is speaking."""
+	import importlib
+	return importlib.import_module("synthDrivers.fasih.arabic.ar_tashkeel")
+
+
+def _split_for_progress(text, limit=1500):
+	"""Paragraphs, and sentences within long paragraphs: pieces that keep whole sentences
+	together (the diacritizer needs the sentence around a word) but are small enough to show
+	progress and to stop quickly. Joining the pieces gives back the text exactly."""
+	import re
+	pieces = []
+	for para in re.split(r"(?<=\n)", text):
+		if len(para) <= limit:
+			pieces.append(para)
+			continue
+		cur = ""
+		for sent in re.split(r"(?<=[.!?؟؛:۔])(?=\s)", para):
+			if cur and len(cur) + len(sent) > limit:
+				pieces.append(cur)
+				cur = ""
+			cur += sent
+		if cur:
+			pieces.append(cur)
+	return [x for x in pieces if x]
+
+
+def _read_text_file(path):
+	"""Text from a .txt (UTF-8, UTF-16 or Windows Arabic) or .docx file."""
+	import re
+	if path.lower().endswith(".docx"):
+		with zipfile.ZipFile(path) as z:
+			xml = z.read("word/document.xml").decode("utf-8", "replace")
+		xml = re.sub(r"</w:p>", "\n", xml)
+		xml = re.sub(r"<w:tab/>", "\t", xml)
+		xml = re.sub(r"<[^>]+>", "", xml)
+		import html
+		return html.unescape(xml)
+	raw = open(path, "rb").read()
+	for enc in ("utf-8-sig", "utf-16", "cp1256"):
+		try:
+			t = raw.decode(enc)
+			if enc != "utf-16" or raw[:2] in (b"\xff\xfe", b"\xfe\xff"):
+				return t
+		except Exception:
+			continue
+	return raw.decode("utf-8", "replace")
+
+
+class DiacritizeDialog(wx.Dialog):
+	"""Diacritize Arabic text of any length with the diacritizer chosen here. Works whichever
+	synthesizer NVDA is using."""
+
+	def __init__(self, parent):
+		super().__init__(parent, title=_("Diacritize Arabic text"), style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER)
+		self._cancel = threading.Event()
+		self._busy = False
+		main = wx.BoxSizer(wx.VERTICAL)
+		main.Add(wx.StaticText(self, label=_("&Text to diacritize:")), 0, wx.LEFT | wx.TOP, 8)
+		self.input = wx.TextCtrl(self, style=wx.TE_MULTILINE | wx.TE_RICH2, size=(640, 180))
+		main.Add(self.input, 1, wx.EXPAND | wx.ALL, 8)
+		row = wx.BoxSizer(wx.HORIZONTAL)
+		b = wx.Button(self, label=_("&Paste"))
+		b.Bind(wx.EVT_BUTTON, self.onPaste)
+		row.Add(b, 0, wx.RIGHT, 6)
+		b = wx.Button(self, label=_("&Open file..."))
+		b.Bind(wx.EVT_BUTTON, self.onOpen)
+		row.Add(b, 0, wx.RIGHT, 6)
+		main.Add(row, 0, wx.LEFT | wx.RIGHT, 8)
+		row = wx.BoxSizer(wx.HORIZONTAL)
+		row.Add(wx.StaticText(self, label=_("Dia&critizer:")), 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 6)
+		self.choices = self._available()
+		self.lib = wx.Choice(self, choices=[n for _k, n in self.choices])
+		keys = [k for k, _n in self.choices]
+		want = _setting("windowDiacritizer", "rawi")
+		self.lib.SetSelection(keys.index(want) if want in keys else 0)
+		row.Add(self.lib, 1)
+		main.Add(row, 0, wx.EXPAND | wx.ALL, 8)
+		self.keep = wx.CheckBox(self, label=_("&Keep the harakat already in the text"))
+		self.keep.SetValue(bool(_setting("windowKeepMarks", True)))
+		main.Add(self.keep, 0, wx.LEFT | wx.RIGHT, 8)
+		row = wx.BoxSizer(wx.HORIZONTAL)
+		self.go = wx.Button(self, label=_("&Diacritize"))
+		self.go.Bind(wx.EVT_BUTTON, self.onGo)
+		row.Add(self.go, 0, wx.RIGHT, 6)
+		self.stop = wx.Button(self, label=_("&Stop"))
+		self.stop.Bind(wx.EVT_BUTTON, lambda e: self._cancel.set())
+		self.stop.Disable()
+		row.Add(self.stop, 0)
+		main.Add(row, 0, wx.ALL, 8)
+		self.gauge = wx.Gauge(self, range=100)
+		main.Add(self.gauge, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 8)
+		self.status = wx.StaticText(self, label="")
+		main.Add(self.status, 0, wx.ALL, 8)
+		main.Add(wx.StaticText(self, label=_("&Result:")), 0, wx.LEFT, 8)
+		self.output = wx.TextCtrl(self, style=wx.TE_MULTILINE | wx.TE_READONLY | wx.TE_RICH2, size=(640, 180))
+		main.Add(self.output, 1, wx.EXPAND | wx.ALL, 8)
+		row = wx.BoxSizer(wx.HORIZONTAL)
+		b = wx.Button(self, label=_("C&opy result"))
+		b.Bind(wx.EVT_BUTTON, self.onCopy)
+		row.Add(b, 0, wx.RIGHT, 6)
+		b = wx.Button(self, label=_("Sa&ve result..."))
+		b.Bind(wx.EVT_BUTTON, self.onSave)
+		row.Add(b, 0, wx.RIGHT, 6)
+		b = wx.Button(self, wx.ID_CLOSE, label=_("Close"))
+		b.Bind(wx.EVT_BUTTON, lambda e: self.Close())
+		row.Add(b, 0)
+		main.Add(row, 0, wx.ALL, 8)
+		self.SetEscapeId(wx.ID_CLOSE)
+		self.Bind(wx.EVT_CLOSE, self.onClose)
+		self.SetSizerAndFit(main)
+		self.input.SetFocus()
+
+	def _available(self):
+		try:
+			have = _tashkeel_module().available()
+		except Exception:
+			have = ["rawi"]
+		out = [(k, n) for k, n in _DIACRITIZERS if k in have]
+		return out or _DIACRITIZERS[:1]
+
+	def onPaste(self, evt):
+		data = wx.TextDataObject()
+		if wx.TheClipboard.Open():
+			try:
+				if wx.TheClipboard.GetData(data):
+					self.input.SetValue(data.GetText())
+			finally:
+				wx.TheClipboard.Close()
+		self.input.SetFocus()
+
+	def onOpen(self, evt):
+		with wx.FileDialog(self, _("Open a text file"), wildcard=_("Text and Word files") + " (*.txt;*.docx)|*.txt;*.docx", style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST) as fd:
+			if fd.ShowModal() != wx.ID_OK:
+				return
+			try:
+				self.input.SetValue(_read_text_file(fd.GetPath()))
+			except Exception:
+				log.error("Fasih: could not read file", exc_info=True)
+				messageBox(_("The file could not be read."), _("Error"), style=wx.OK | wx.ICON_ERROR, parent=self)
+		self.input.SetFocus()
+
+	def onGo(self, evt):
+		import re
+		text = self.input.GetValue()
+		if not text.strip() or self._busy:
+			return
+		key = self.choices[self.lib.GetSelection()][0]
+		_set_setting("windowDiacritizer", key)
+		_set_setting("windowKeepMarks", self.keep.GetValue())
+		if not self.keep.GetValue():
+			text = re.sub("[ً-ْٰ]", "", text)
+		pieces = _split_for_progress(text)
+		self._busy = True
+		self._cancel.clear()
+		self.go.Disable()
+		self.stop.Enable()
+		self.output.SetValue("")
+		self.gauge.SetValue(0)
+		self.status.SetLabel(_("Diacritizing..."))
+		total = sum(len(x) for x in pieces) or 1
+
+		def work():
+			out, done, last = [], 0, 0.0
+			t0 = time.time()
+			try:
+				T = _tashkeel_module()
+				for piece in pieces:
+					if self._cancel.is_set():
+						break
+					if re.search("[ء-ي]", piece):
+						try:
+							d = T.diacritize_strict(piece, backend=key, is_cancelled=self._cancel.is_set)
+						except TypeError:
+							d = T.diacritize_strict(piece, backend=key)
+						out.append(d if d and d.strip() else piece)
+					else:
+						out.append(piece)
+					done += len(piece)
+					if time.time() - last > 0.3:
+						last = time.time()
+						wx.CallAfter(self._progress, done * 100 // total)
+				err = None
+			except Exception as e:
+				log.error("Fasih: diacritization failed", exc_info=True)
+				err = str(e)
+			wx.CallAfter(self._finished, "".join(out), self._cancel.is_set(), err, time.time() - t0, len(pieces))
+
+		threading.Thread(target=work, daemon=True).start()
+
+	def _progress(self, pct):
+		if not self:
+			return
+		self.gauge.SetValue(min(pct, 100))
+		self.status.SetLabel(_("{pct}% done").format(pct=pct))
+
+	def _finished(self, result, cancelled, err, secs, n):
+		if not self:
+			return
+		self._busy = False
+		self.go.Enable()
+		self.stop.Disable()
+		self.output.SetValue(result)
+		if err:
+			msg = _("Diacritization failed: {err}").format(err=err)
+		elif cancelled:
+			msg = _("Stopped. The part done so far is in the result.")
+		else:
+			self.gauge.SetValue(100)
+			msg = _("Done in {secs:.1f} seconds.").format(secs=secs)
+		self.status.SetLabel(msg)
+		import ui
+		ui.message(msg)
+		self.output.SetFocus()
+		self.output.SetInsertionPoint(0)
+
+	def onCopy(self, evt):
+		text = self.output.GetValue()
+		if text and wx.TheClipboard.Open():
+			try:
+				wx.TheClipboard.SetData(wx.TextDataObject(text))
+			finally:
+				wx.TheClipboard.Close()
+			import ui
+			ui.message(_("Copied"))
+
+	def onSave(self, evt):
+		text = self.output.GetValue()
+		if not text:
+			return
+		with wx.FileDialog(self, _("Save the result"), wildcard=_("Text files") + " (*.txt)|*.txt", style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT) as fd:
+			if fd.ShowModal() != wx.ID_OK:
+				return
+			path = fd.GetPath()
+			if not path.lower().endswith(".txt"):
+				path += ".txt"
+			try:
+				with open(path, "w", encoding="utf-8-sig") as f:
+					f.write(text)
+			except Exception:
+				log.error("Fasih: could not save", exc_info=True)
+				messageBox(_("The file could not be saved."), _("Error"), style=wx.OK | wx.ICON_ERROR, parent=self)
+
+	def onClose(self, evt):
+		self._cancel.set()
+		self.Destroy()
+
+
+# --- Tools > Fasih > Check for updates -----------------------------------------------------------
+RELEASES_API = "https://api.github.com/repos/riadassoum/Fasih/releases?per_page=30"
+RELEASES_PAGE = "https://github.com/riadassoum/Fasih/releases"
+
+
+def _vkey(v):
+	"""Version sort key: 1.3 > 1.3-rc1 > 1.3-beta9 > 1.3-beta2 > 1.2.1; a "v" prefix is ignored."""
+	import re
+	m = re.match(r"\s*v?(\d+(?:\.\d+)*)(?:[-. _]?(alpha|beta|rc|a|b)[-. ]?(\d*))?", str(v).lower())
+	if not m:
+		return None
+	nums = [int(x) for x in m.group(1).split(".")] + [0, 0]
+	stage = {"alpha": 0, "a": 0, "beta": 1, "b": 1, "rc": 2}.get(m.group(2), 3)
+	return tuple(nums[:3]) + (stage, int(m.group(3) or 0))
+
+
+def _is_prerelease_version(v):
+	k = _vkey(v)
+	return bool(k) and k[3] < 3
+
+
+def _current_version():
+	try:
+		return addonHandler.getCodeAddon().version
+	except Exception:
+		return "0"
+
+
+def _latest_release(include_betas):
+	"""The newest Fasih release (or None): version, changelog, add-on asset (url, size, sha256)."""
+	r = requests.get(RELEASES_API, timeout=TIMEOUT, headers={"Accept": "application/vnd.github+json"})
+	r.raise_for_status()
+	best = None
+	for rel in r.json():
+		if rel.get("draft"):
+			continue
+		ver = (rel.get("tag_name") or "").strip()
+		key = _vkey(ver)
+		if key is None:          # the "voices" release and anything else that is not a version
+			continue
+		if (rel.get("prerelease") or key[3] < 3) and not include_betas:
+			continue
+		asset = next((a for a in rel.get("assets", []) if a.get("name", "").endswith(".nvda-addon")), None)
+		if not asset:
+			continue
+		if best is None or key > best["key"]:
+			digest = asset.get("digest") or ""
+			best = {"key": key, "version": ver.lstrip("vV"), "notes": rel.get("body") or "",
+			        "url": asset.get("browser_download_url"), "size": asset.get("size") or 0,
+			        "sha256": digest.split(":", 1)[1].lower() if digest.startswith("sha256:") else "",
+			        "page": rel.get("html_url") or RELEASES_PAGE, "name": rel.get("name") or ver}
+	return best
+
+
+def _pack_updates():
+	"""Installed Fasih voice packs that have a newer version in voices.json: [(name, old, new)]."""
+	import os
+	out = []
+	try:
+		fv = requests.get(FASIH_URL, timeout=TIMEOUT).json()
+	except Exception:
+		return out
+	base = os.path.join(globalVars.appArgs.configPath, "addons")
+	for v in fv.get("voices", []):
+		path = os.path.join(base, "RHVoice-voice-fasih-%s" % v.get("id", v.get("name")))
+		if not os.path.isdir(path):
+			continue
+		try:
+			old = addonHandler.Addon(path).version
+		except Exception:
+			continue
+		if _newer(v.get("version"), old):
+			out.append((v.get("name"), old, v.get("version")))
+	return out
+
+
+class UpdateDialog(wx.Dialog):
+	"""A new Fasih version: what changed, and what to do about it."""
+
+	def __init__(self, parent, rel, current, packs):
+		super().__init__(parent, title=_("Fasih update available"), style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER)
+		self.choice = None
+		main = wx.BoxSizer(wx.VERTICAL)
+		kind = _("beta version") if _is_prerelease_version(rel["version"]) else _("version")
+		head = _("A new Fasih {kind} is available: {new}. You have {cur}.").format(kind=kind, new=rel["version"], cur=current)
+		if packs:
+			head += " " + _("Updates are also available for these voices: {names}.").format(names=", ".join(n for n, _o, _v in packs))
+		main.Add(wx.StaticText(self, label=head), 0, wx.ALL, 8)
+		main.Add(wx.StaticText(self, label=_("&What's new:")), 0, wx.LEFT, 8)
+		notes = wx.TextCtrl(self, value=rel["notes"] or _("(no notes for this release)"), style=wx.TE_MULTILINE | wx.TE_READONLY | wx.TE_RICH2, size=(600, 260))
+		main.Add(notes, 1, wx.EXPAND | wx.ALL, 8)
+		row = wx.BoxSizer(wx.HORIZONTAL)
+		for label, code in ((_("&Download and install"), "install"), (_("&Skip this version"), "skip"), (_("Remind me &later"), "later")):
+			b = wx.Button(self, label=label)
+			b.Bind(wx.EVT_BUTTON, lambda e, c=code: self._done(c))
+			row.Add(b, 0, wx.RIGHT, 6)
+		main.Add(row, 0, wx.ALL, 8)
+		self.Bind(wx.EVT_CHAR_HOOK, lambda e: self._done("later") if e.GetKeyCode() == wx.WXK_ESCAPE else e.Skip())
+		self.SetSizerAndFit(main)
+		notes.SetFocus()
+
+	def _done(self, code):
+		self.choice = code
+		self.EndModal(wx.ID_OK)
+
+
+class _UpdateDownloader(threading.Thread):
+	"""Download the add-on, check its size and SHA-256 against GitHub's, then install it."""
+
+	def __init__(self, rel):
+		super().__init__(daemon=True)
+		self.rel = rel
+		self.cancelled = False
+		self.dlg = wx.ProgressDialog(_("Updating Fasih"), _("Downloading Fasih {v}...").format(v=rel["version"]), maximum=100, parent=gui.mainFrame, style=wx.PD_APP_MODAL | wx.PD_AUTO_HIDE | wx.PD_CAN_ABORT | wx.PD_ELAPSED_TIME | wx.PD_REMAINING_TIME)
+
+	def _tick(self, pct, got, total):
+		try:
+			cont, _skip = self.dlg.Update(min(pct, 99), _("Downloaded {got} of {total}").format(got=_size(got), total=_size(total)))
+			if not cont:
+				self.cancelled = True
+		except Exception:
+			pass
+
+	def run(self):
+		import os
+		path = os.path.join(tempfile.gettempdir(), "Fasih-%s.nvda-addon" % self.rel["version"])
+		err = None
+		try:
+			h = hashlib.sha256()
+			with requests.get(self.rel["url"], stream=True, timeout=TIMEOUT) as r:
+				r.raise_for_status()
+				total = int(r.headers.get("Content-Length") or self.rel["size"] or 0)
+				got, last = 0, 0
+				with open(path, "wb") as f:
+					for chunk in r.iter_content(1 << 16):
+						if self.cancelled:
+							break
+						f.write(chunk)
+						h.update(chunk)
+						got += len(chunk)
+						if total and time.time() - last > 0.25:
+							last = time.time()
+							wx.CallAfter(self._tick, got * 100 // total, got, total)
+			if self.cancelled:
+				err = "cancelled"
+			elif self.rel["size"] and got != self.rel["size"]:
+				err = _("the download is incomplete")
+			elif self.rel["sha256"] and h.hexdigest() != self.rel["sha256"]:
+				err = _("the downloaded file does not match the release (checksum mismatch)")
+		except Exception as e:
+			log.error("Fasih: update download failed", exc_info=True)
+			err = str(e)
+		wx.CallAfter(self._finish, path, err)
+
+	def _finish(self, path, err):
+		import os
+		try:
+			self.dlg.Destroy()
+		except Exception:
+			pass
+		if err:
+			try:
+				os.remove(path)
+			except Exception:
+				pass
+			if err != "cancelled":
+				if messageBox(_("Fasih could not be updated: {err}. Open the download page instead?").format(err=err), _("Fasih update"), style=wx.YES_NO | wx.ICON_ERROR) == wx.YES:
+					import webbrowser
+					webbrowser.open(self.rel["page"])
+			return
+		_install_addon_file(path)
+
+
+def _install_addon_file(path):
+	"""Hand the add-on to NVDA's installer (with its usual restart prompt); fall back to a
+	direct install with our own prompt, then to opening the file."""
+	import os
+	try:
+		from gui import addonGui
+		if hasattr(addonGui, "installAddon"):
+			addonGui.installAddon(gui.mainFrame, path)
+			return
+	except Exception:
+		log.debugWarning("Fasih: addonGui.installAddon failed", exc_info=True)
+	try:
+		addonHandler.installAddonBundle(addonHandler.AddonBundle(path))
+		promptUserForRestart()
+		return
+	except Exception:
+		log.debugWarning("Fasih: direct install failed", exc_info=True)
+	try:
+		os.startfile(path)
+	except Exception:
+		log.error("Fasih: could not open the update", exc_info=True)
+
+
+class _UpdateChecker(object):
+	"""Checks GitHub for a newer Fasih (and newer voice packs) on request, and once a day at
+	start-up when automatic checking is on."""
+
+	def __init__(self, plugin):
+		self.plugin = plugin
+		self.running = False
+
+	def check(self, manual):
+		if self.running:
+			return
+		self.running = True
+		include_betas = bool(_setting("updateBetas", False)) or _is_prerelease_version(_current_version())
+
+		def work():
+			res, err = None, None
+			try:
+				res = (_latest_release(include_betas), _pack_updates())
+			except Exception as e:
+				log.debugWarning("Fasih: update check failed", exc_info=True)
+				err = e
+			wx.CallAfter(self._result, res, err, manual)
+
+		threading.Thread(target=work, daemon=True).start()
+
+	def _result(self, res, err, manual):
+		self.running = False
+		_set_setting("lastUpdateCheck", time.time())
+		current = _current_version()
+		if err or res is None:
+			if manual:
+				messageBox(_("Could not check for updates. Check your internet connection."), _("Fasih update"), style=wx.OK | wx.ICON_WARNING)
+			return
+		rel, packs = res
+		newer = rel is not None and (_vkey(current) is None or rel["key"] > _vkey(current))
+		if newer and (manual or _setting("skippedVersion") != rel["version"]):
+			gui.mainFrame.prePopup()
+			try:
+				d = UpdateDialog(gui.mainFrame, rel, current, packs)
+				d.ShowModal()
+				choice = d.choice
+				d.Destroy()
+			finally:
+				gui.mainFrame.postPopup()
+			if choice == "install":
+				_UpdateDownloader(rel).start()
+			elif choice == "skip":
+				_set_setting("skippedVersion", rel["version"])
+			return
+		if packs:
+			names = ", ".join("%s %s" % (n, v) for n, _o, v in packs)
+			if messageBox(_("Fasih is up to date, but newer versions of these voices are available: {names}. Open Download voices to update them?").format(names=names), _("Fasih update"), style=wx.YES_NO | wx.ICON_INFORMATION) == wx.YES:
+				self.plugin.onVoices()
+			return
+		if manual:
+			if rel is not None and _vkey(current) and rel["key"] < _vkey(current):
+				msg = _("You have Fasih {cur}, newer than the latest published release ({new}).").format(cur=current, new=rel["version"])
+			else:
+				msg = _("Fasih {cur} is up to date, and so are your voices.").format(cur=current)
+			messageBox(msg, _("Fasih update"), style=wx.OK | wx.ICON_INFORMATION)
+
+	def maybe_auto(self):
+		if not _setting("autoUpdateCheck", True):
+			return
+		if time.time() - float(_setting("lastUpdateCheck", 0) or 0) < 20 * 3600:
+			return
+		self.check(manual=False)
+
+
 class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 
 	def __init__(self):
@@ -656,8 +1204,21 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		gui.mainFrame.sysTrayIcon.Bind(wx.EVT_MENU, self.onVoices, item)
 		item = self.menu.Append(wx.ID_ANY, _("&Pronunciation dictionary..."), _("Words Fasih should say differently"))
 		gui.mainFrame.sysTrayIcon.Bind(wx.EVT_MENU, self.onDictionary, item)
+		item = self.menu.Append(wx.ID_ANY, _("Dia&critize text..."), _("Add harakat to Arabic text of any length, with the diacritizer you choose"))
+		gui.mainFrame.sysTrayIcon.Bind(wx.EVT_MENU, self.onDiacritize, item)
+		self.menu.AppendSeparator()
+		item = self.menu.Append(wx.ID_ANY, _("Check for &updates..."), _("See whether a newer Fasih or newer voices are available"))
+		gui.mainFrame.sysTrayIcon.Bind(wx.EVT_MENU, lambda e: self.updater.check(manual=True), item)
+		self.autoItem = self.menu.AppendCheckItem(wx.ID_ANY, _("Check for updates &automatically"), _("Once a day, when NVDA starts"))
+		self.autoItem.Check(bool(_setting("autoUpdateCheck", True)))
+		gui.mainFrame.sysTrayIcon.Bind(wx.EVT_MENU, lambda e: _set_setting("autoUpdateCheck", self.autoItem.IsChecked()), self.autoItem)
+		self.betaItem = self.menu.AppendCheckItem(wx.ID_ANY, _("Include &beta versions"), _("Also offer test versions of Fasih"))
+		self.betaItem.Check(bool(_setting("updateBetas", False)))
+		gui.mainFrame.sysTrayIcon.Bind(wx.EVT_MENU, lambda e: _set_setting("updateBetas", self.betaItem.IsChecked()), self.betaItem)
 		self.menuItem = tools.AppendSubMenu(self.menu, _("&Fasih"))
+		self.updater = _UpdateChecker(self)
 		wx.CallLater(6000, self._movedVoiceNotice)
+		wx.CallLater(20000, self.updater.maybe_auto)
 
 	def _movedVoiceNotice(self):
 		"""Once after updating from 1.2: the chosen voice is now a download."""
@@ -681,6 +1242,12 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			gui.mainFrame.postPopup()
 		if answer == wx.YES:
 			self.onVoices()
+
+	def onDiacritize(self, evt=None):
+		gui.mainFrame.prePopup()
+		d = DiacritizeDialog(gui.mainFrame)
+		d.Show()
+		gui.mainFrame.postPopup()
 
 	def onDictionary(self, evt=None):
 		gui.mainFrame.prePopup()

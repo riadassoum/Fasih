@@ -60,6 +60,14 @@ These are in NVDA's voice settings. The secondary voice, Clarity, Breathiness, S
 
 In NVDA's Tools menu, **Fasih > Pronunciation dictionary** lists the words you want said differently. Add a word as it is written and how it should be said (diacritize it as much as you need), press Listen to hear it, and OK applies it at once. A word matches however it is diacritized and also with و ف ب ل ك attached (an entry for جبران also fixes لجبران), but never inside a longer word. The entries are kept in `%APPDATA%\nvda\Fasih-config\user-dic.json`.
 
+## Diacritizing text
+
+**Fasih > Diacritize text** adds harakat to Arabic text of any length, whichever synthesizer NVDA is using. Type or paste the text, or open a .txt or Word (.docx) file, choose Rawi or Shamsuddin's engine, and press Diacritize. You can keep the harakat already in the text or have it vowelled afresh. Long texts are done paragraph by paragraph with a progress bar, Stop keeps what is finished, and the result can be copied or saved as a text file. The window remembers its own choice of diacritizer, separate from the one Fasih speaks with.
+
+## Updates
+
+**Fasih > Check for updates** looks for a newer Fasih on GitHub and shows what changed. You can download and install it straight away, skip that version, or be reminded later. The download is checked against GitHub's size and SHA-256 checksum before NVDA installs it. The same check also looks for newer versions of the voices you downloaded. Fasih checks by itself once a day when NVDA starts; turn that off with **Check for updates automatically** in the same menu. **Include beta versions** offers test versions too, and anyone already running a beta is offered newer betas.
+
 ## How it is made
 
 - **Language**: I wrote a data-only Arabic language for RHVoice with foma rules. It covers shadda, sun and moon letters, hamzat al-wasl in connected speech, tanween, ta marbuta, long vowels including the hidden ones, Classical stress and word classes. The French language is built the same way, around a pronunciation lexicon of about 241,000 words with spelling rules for the words it lacks, elisions, numbers, syllables and stress.

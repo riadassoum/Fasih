@@ -67,7 +67,7 @@ VOICES=$(for v in "$D"/data/voices/*/; do if grep -q '^language=Arabic' "$v/voic
 cat > "$B/manifest.ini" <<EOF
 name = fasih
 summary = "Fasih (فصيح): Arabic RHVoice voices"
-description = """Fasih (فصيح): Arabic voices for the RHVoice engine ($VOICES), plus Elise, the first French RHVoice voice, as a secondary voice; ten more Arabic voices can be downloaded from Tools > Fasih > Download voices. Non-neural speech synthesis (HTS models, WORLD vocoder) with neural diacritization (Rawi)."""
+description = """Fasih (فصيح): Arabic voices for the RHVoice engine ($VOICES), plus Elise, the first French RHVoice voice, as a secondary voice; thirteen more Arabic voices can be downloaded from Tools > Fasih > Download voices. Non-neural speech synthesis (HTS models, WORLD vocoder) with neural diacritization (Rawi), or the much faster tashkeel engine by Shamsuddin."""
 author = "Riad Assoum"
 url = https://github.com/riadassoum/Fasih
 version = $VER

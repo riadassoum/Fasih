@@ -310,7 +310,6 @@ msgstr "إ&ضافة..."
 msgid "&Edit..."
 msgstr "&تعديل..."
 
-
 msgid "&Listen"
 msgstr "ا&ستماع"
 
@@ -341,8 +340,14 @@ msgstr "الإعراب الكامل (قراءة فصحى تامة)"
 msgid "Download more Fasih voices and voices in other languages"
 msgstr "تنزيل مزيد من أصوات فصيح وأصوات بلغات أخرى"
 
-msgid "{voice} is no longer part of the Fasih add-on, so Fasih is speaking with Aseel for now. {voice} and the other Arabic voices can be downloaded from Tools > Fasih > Download voices. Open it now?"
-msgstr "لم يعد الصوت {voice} جزءًا من إضافة فصيح، لذلك يتكلم فصيح الآن بصوت أصيل. يمكنك تنزيل {voice} والأصوات العربية الأخرى من «أدوات» ثم «فصيح» ثم «تنزيل أصوات». هل تريد فتحها الآن؟"
+msgid ""
+"{voice} is no longer part of the Fasih add-on, so Fasih is speaking with "
+"Aseel for now. {voice} and the other Arabic voices can be downloaded from "
+"Tools > Fasih > Download voices. Open it now?"
+msgstr ""
+"لم يعد الصوت {voice} جزءًا من إضافة فصيح، لذلك يتكلم فصيح الآن بصوت أصيل. "
+"يمكنك تنزيل {voice} والأصوات العربية الأخرى من «أدوات» ثم «فصيح» ثم «تنزيل "
+"أصوات». هل تريد فتحها الآن؟"
 
 msgid "Diacritizer"
 msgstr "المشكِّل"
@@ -352,3 +357,167 @@ msgstr "راوي (الأدق)"
 
 msgid "Shamsuddin (fastest, strong on classical text)"
 msgstr "شمس الدين (الأسرع، قوي في النصوص التراثية)"
+
+msgid "Diacritize Arabic text"
+msgstr "تشكيل نص عربي"
+
+msgid "&Text to diacritize:"
+msgstr "النص المراد &تشكيله:"
+
+msgid "&Paste"
+msgstr "&لصق"
+
+msgid "&Open file..."
+msgstr "&فتح ملف..."
+
+msgid "Dia&critizer:"
+msgstr "ال&مشكِّل:"
+
+msgid "&Keep the harakat already in the text"
+msgstr "الإ&بقاء على الحركات الموجودة في النص"
+
+msgid "&Diacritize"
+msgstr "&شكِّل"
+
+msgid "&Stop"
+msgstr "إي&قاف"
+
+msgid "&Result:"
+msgstr "ال&نتيجة:"
+
+msgid "C&opy result"
+msgstr "&نسخ النتيجة"
+
+msgid "Sa&ve result..."
+msgstr "&حفظ النتيجة..."
+
+msgid "Close"
+msgstr "إغلاق"
+
+msgid "Open a text file"
+msgstr "فتح ملف نصي"
+
+msgid "Text and Word files"
+msgstr "ملفات نصية وملفات وورد"
+
+msgid "The file could not be read."
+msgstr "تعذّرت قراءة الملف."
+
+msgid "Diacritizing..."
+msgstr "جارٍ التشكيل..."
+
+msgid "{pct}% done"
+msgstr "اكتمل {pct}%"
+
+msgid "Diacritization failed: {err}"
+msgstr "فشل التشكيل: {err}"
+
+msgid "Stopped. The part done so far is in the result."
+msgstr "توقّف التشكيل. الجزء المنجز حتى الآن موجود في النتيجة."
+
+msgid "Done in {secs:.1f} seconds."
+msgstr "تمّ في {secs:.1f} ثانية."
+
+msgid "Copied"
+msgstr "نُسِخ"
+
+msgid "Save the result"
+msgstr "حفظ النتيجة"
+
+msgid "Text files"
+msgstr "ملفات نصية"
+
+msgid "The file could not be saved."
+msgstr "تعذّر حفظ الملف."
+
+msgid "Fasih update available"
+msgstr "يتوفّر تحديث لفصيح"
+
+msgid "beta version"
+msgstr "نسخة تجريبية"
+
+msgid "version"
+msgstr "نسخة"
+
+msgid "A new Fasih {kind} is available: {new}. You have {cur}."
+msgstr "تتوفّر {kind} جديدة من فصيح: {new}. لديك النسخة {cur}."
+
+msgid "Updates are also available for these voices: {names}."
+msgstr "وتتوفّر أيضًا تحديثات لهذه الأصوات: {names}."
+
+msgid "&What's new:"
+msgstr "ما ال&جديد:"
+
+msgid "(no notes for this release)"
+msgstr "(لا توجد ملاحظات لهذا الإصدار)"
+
+msgid "&Download and install"
+msgstr "&تنزيل وتثبيت"
+
+msgid "&Skip this version"
+msgstr "ت&خطّي هذه النسخة"
+
+msgid "Remind me &later"
+msgstr "ذكّرني لا&حقًا"
+
+msgid "Updating Fasih"
+msgstr "تحديث فصيح"
+
+msgid "Downloading Fasih {v}..."
+msgstr "جارٍ تنزيل فصيح {v}..."
+
+msgid "Downloaded {got} of {total}"
+msgstr "نُزِّل {got} من {total}"
+
+msgid "the download is incomplete"
+msgstr "التنزيل غير مكتمل"
+
+msgid "the downloaded file does not match the release (checksum mismatch)"
+msgstr "الملف المنزَّل لا يطابق الإصدار (اختلاف في المجموع الاختباري)"
+
+msgid "Fasih could not be updated: {err}. Open the download page instead?"
+msgstr "تعذّر تحديث فصيح: {err}. هل تريد فتح صفحة التنزيل بدلًا من ذلك؟"
+
+msgid "Fasih update"
+msgstr "تحديث فصيح"
+
+msgid "Could not check for updates. Check your internet connection."
+msgstr "تعذّر البحث عن تحديثات. تحقّق من اتصالك بالإنترنت."
+
+msgid ""
+"Fasih is up to date, but newer versions of these voices are available: "
+"{names}. Open Download voices to update them?"
+msgstr ""
+"فصيح محدَّث، لكن تتوفّر نسخ أحدث من هذه الأصوات: {names}. هل تريد فتح «تنزيل"
+" الأصوات» لتحديثها؟"
+
+msgid "You have Fasih {cur}, newer than the latest published release ({new})."
+msgstr "لديك فصيح {cur}، وهي أحدث من آخر إصدار منشور ({new})."
+
+msgid "Fasih {cur} is up to date, and so are your voices."
+msgstr "فصيح {cur} محدَّث، وكذلك أصواتك."
+
+msgid "Dia&critize text..."
+msgstr "&تشكيل نص..."
+
+msgid ""
+"Add harakat to Arabic text of any length, with the diacritizer you choose"
+msgstr "إضافة الحركات إلى نص عربي بأي طول، بالمشكِّل الذي تختاره"
+
+msgid "Check for &updates..."
+msgstr "البحث عن ت&حديثات..."
+
+msgid "See whether a newer Fasih or newer voices are available"
+msgstr "معرفة ما إذا كانت تتوفّر نسخة أحدث من فصيح أو من الأصوات"
+
+msgid "Check for updates &automatically"
+msgstr "البحث عن التحديثات ت&لقائيًا"
+
+msgid "Once a day, when NVDA starts"
+msgstr "مرة في اليوم، عند تشغيل NVDA"
+
+msgid "Include &beta versions"
+msgstr "تضمين النسخ ال&تجريبية"
+
+msgid "Also offer test versions of Fasih"
+msgstr "عرض النسخ التجريبية من فصيح أيضًا"

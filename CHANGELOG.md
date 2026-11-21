@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Diacritize text** in Tools > Fasih: add harakat to Arabic text of any length, typed, pasted or opened from a text or Word file, with Rawi or Shamsuddin's engine chosen in the window itself. Long texts show their progress and can be stopped, and the result can be copied or saved.
+- **Check for updates** in Tools > Fasih, and once a day automatically: shows what is new, then downloads, verifies and installs the new version, or skips it. It also finds newer versions of your downloaded voices. Beta versions are offered only if you ask for them.
 - **A second diacritizer to choose from**: Shamsuddin's tashkeel engine, retrained for Fasih on 8.9 million vowelled sentences. It is about thirty times faster than Rawi and makes fewer mistakes on classical text; Rawi stays the default because it is more accurate on modern text. Choose under Diacritizer in NVDA's voice settings or in the synth settings ring.
 - **Three new voices to download**: Nabil (نبيل), a clear male voice and the easiest Fasih voice to understand so far (for non-commercial use); Amjad (أمجد), a male voice in Modern Standard Arabic; and Shahrazad (شهرزاد), a female storyteller's voice made from a real reader's audiobook, Aïda Boumaza's LibriVox recording of Alf Layla wa Layla. All three read الله with the heavy lam after a or u and the light lam after i. Find them in Tools > Fasih > Download voices > "Arabic: Fasih voices".
 - **Updating from 1.2.** If your voice was one of the ten that are now downloads, Fasih speaks with Aseel and tells you once where to get your voice back, with a button to open Download voices. A secondary voice that is no longer there is replaced by Bdl.
