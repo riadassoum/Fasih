@@ -643,7 +643,7 @@ rep('''    def do_play(self, data, index=None):
                 except Exception:
                     pass
             if not data and index is not None:
-                data = b"\0\0" * 24              # trimmed to nothing: keep NVDA's index callback''')
+                data = bytes(48)              # trimmed to nothing: keep NVDA's index callback''')
 rep('''    def on_new_message(self):
         self.__prev_data = None''', '''    def on_new_message(self):
         self.__prev_data = None
