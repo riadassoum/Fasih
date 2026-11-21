@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Steadier speech in long passages**: each sentence is now spoken as its own utterance, and Nabil was retrained on recordings of two to four sentences at a time. Nabil no longer turns rough and shaky partway through a long paragraph or a very long sentence.
 - **English words read correctly**: the English voices (BDL, Evan and any other RHVoice English voice) know about 12,000 more words from the current CMU Pronouncing Dictionary, so words like "changer" no longer lose a sound, and "Nabil" keeps its l. About half of those words used to be guessed wrongly.
 - **Rawi reads modern Arabic better**: retrained with QCRI's diacritized Arabic Wikipedia, it makes about a quarter fewer mistakes on modern news (WikiNews: 12.9% of words with a wrong vowel, down from 17.1%), and slightly fewer on classical text.
 - **Evan, an English voice to download**: a male English voice trained on speech from OpenEVV's Adult Male 1, which you can choose as Fasih's English voice instead of BDL. Its voice data is IBM's, so it is for personal, non-commercial use only; the notice in the pack explains why.

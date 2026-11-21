@@ -21,7 +21,7 @@ INFO = {
     "Zayd": ("زيد", "male", "PlanetBlindTech's voice, retrained with Fasih's recipe on their corpus."),
     "Reem": ("ريم", "female", "Trained by PlanetBlindTech with Fasih's recipe."),
     "Amjad": ("أمجد", "male", "Modern Standard Arabic, trained on the Arabic MSA 25K Saudi Male corpus (moesaif, CC BY 4.0)."),
-    "Nabil": ("نبيل", "male", "Clear Modern Standard Arabic, trained on about 7 hours read for Fasih by the Piper voice Kareem (rhasspy, MIT). Non-commercial use only."),
+    "Nabil": ("نبيل", "male", "Clear Modern Standard Arabic, trained on about 7.7 hours read for Fasih by the Piper voice Kareem (rhasspy, MIT), mostly two to four sentences at a time so long passages stay steady. Non-commercial use only."),
     "Evan": ("إيفان", "male", "English voice for reading English text (choose it as Fasih's English voice instead of BDL), trained on speech from OpenEVV's Adult Male 1. Its voice data is IBM's (Embedded ViaVoice), not covered by Fasih's licence: personal, non-commercial use only; see the NOTICE in the pack."),
     "Shahrazad": ("شهرزاد", "female", "A storyteller's voice, trained on Aida Boumaza's LibriVox reading of Alf Layla wa Layla (public domain)."),
 }
