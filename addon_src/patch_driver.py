@@ -121,11 +121,11 @@ rep('''    def speak(self, speechSequence):
                     # otherwise, and for Arabic, the script decides as before
                     latin[0] = self._voice_for_language(item.lang) or secondary
                     continue
-                if isinstance(item, str) and not char_mode and len(item) > 300:
+                if isinstance(item, str) and not char_mode and (len(item) > 300 or len(_sentences(item)) > 1):
                     # a long text (say all, a whole page) is prepared and spoken sentence
                     # group by sentence group: speech starts after the first one, and a
                     # cancel stops the work at the next sentence instead of after the page
-                    for piece in _sentence_groups(item):
+                    for piece in _sentences(item):
                         if cancel.is_set():
                             return
                         try:
@@ -201,6 +201,7 @@ def _is_ar(ch):
 
 _SENT_END = re.compile("[.!?\\u061f\\u06d4]+[\\"'\\u00bb\\u201d)\\\\]]*(?:\\\\s+|$)|\\n\\\\s*")
 _SOFT_CUT = re.compile("[,;:\\u060c\\u061b]\\\\s+|\\\\s+")
+_SENT_END_RUN = re.compile("[.!?\\u061f\\u06d4](?:\\\\s*[.!?\\u061f\\u06d4])*[\\"'\\u00bb\\u201d)\\\\]]*(?:\\\\s+|$)|\\n\\\\s*")
 
 
 def _sentence_groups(text, size=200, most=400):
@@ -221,6 +222,27 @@ def _sentence_groups(text, size=200, most=400):
         start = cut
     out.append(text[start:])
     return [p for p in out if p]
+
+
+def _sentences(text, shortest=25):
+    """1.3: one sentence per piece, so every sentence is its own utterance. The voices were
+    trained one sentence per recording; deep into a long utterance some (Nabil) lose their
+    pitch and voicing. A piece shorter than `shortest` characters joins the next one, and a
+    sentence longer than 400 characters is cut further. Joined back, the pieces are the text."""
+    out, start = [], 0
+    for m in _SENT_END_RUN.finditer(text):
+        if m.end() - start >= shortest:
+            out.append(text[start:m.end()])
+            start = m.end()
+    if start < len(text):
+        if out and len(text) - start < shortest:
+            out[-1] += text[start:]
+        else:
+            out.append(text[start:])
+    res = []
+    for piece in out:
+        res.extend(_sentence_groups(piece) if len(piece) > 400 else [piece])
+    return [x for x in res if x]
 
 
 def _fr(text):

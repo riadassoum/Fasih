@@ -17,3 +17,25 @@ Results (diacritic error rate / word error rate):
 | Rawi's own test set | 2.42% / 8.1% | 2.45% / 8.2% | 2.63% / 8.9% |
 
 It is also about twice as fast as the ensemble.
+
+## Second fine-tune (1.3): QCRI's modern Wikipedia
+
+Continued from the first fine-tune (`INIT=ftA.pth ft.py train.txt ftQ.pth 2.5 1.5e-4`) on a new mix:
+
+- 150,000 sentences of QCRI's diacritized Arabic Wikipedia (Mohamed and Mubarak, "Advancing Arabic Diacritization", EMNLP 2025, github.com/qcri/advancing-arabic-diacritization), vowelled by QCRI's best model.
+- 150,000 lines of Rawi's own training text.
+- 75,000 Shamela lines.
+- The ArVoice text, repeated 8 times.
+
+Hamzat al-wasl is written without a vowel throughout, and every test sentence was left out, including the WikiNews 2014 benchmark.
+
+The checkpoint from about halfway through (75 minutes) was best on WikiNews. The shipped model averages its weights 70/30 with the first fine-tune, which kept most of the WikiNews gain while costing little on the rest.
+
+Diacritic error rate / word error rate, case endings counted:
+
+| Test set | First fine-tune (1.2/1.3 betas) | Halfway checkpoint | Shipped average (70/30) |
+|---|---|---|---|
+| WikiNews 2014, hand-vowelled modern news | 4.71% / 17.1% | 3.08% / 11.9% | 3.36% / 12.9% |
+| Modern Arabic (ArVoice), 400 held-out sentences | 4.07% / 15.6% | 4.68% / 17.7% | 4.42% / 16.6% |
+| ClArTTS book text | 6.49% / 20.5% | 6.49% / 20.1% | 6.34% / 19.7% |
+| Rawi's own test set | 2.57% / 8.4% | 2.77% / 8.8% | 2.60% / 8.4% |
