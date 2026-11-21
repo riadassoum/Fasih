@@ -78,6 +78,7 @@ In NVDA's Tools menu, **Fasih > Pronunciation dictionary** lists the words you w
 ## Credits
 
 - **Rawi v3** by TigreGotico (Apache-2.0): the diacritizer, which I fine-tuned for Fasih on the ArVoice texts, Shamela books (ReligiousLLMs), Rawi's own data and QCRI's diacritized Arabic Wikipedia (Mohamed and Mubarak, Advancing Arabic Diacritization, EMNLP 2025); see tools/rawi_ft.
+- **The CMU Pronouncing Dictionary** (Carnegie Mellon University, BSD licence): about 12,000 words added to RHVoice's English lexicon, so every English voice in Fasih says them correctly (tools/english_lexicon).
 - **Evan's voice data** is IBM's: it was learned from speech made with OpenEVV (github.com/Mudb0y/openevv), whose language data is transcribed from IBM's Embedded ViaVoice. OpenEVV's engine code is MIT; IBM's data is licensed by no one here. See voices/Evan/NOTICE.md.
 - **Barq (برق)** (GPL-3.0), PlanetBlindTech's tashkeel engine, written by Shamseddin of PlanetBlindTech and included with his agreement: the second diacritizer. I fine-tuned it for Fasih, retraining it on 9.5 million vowelled sentences from QCRI's diacritized Arabic Wikipedia (Mohamed and Mubarak, Advancing Arabic Diacritization, EMNLP 2025), TigreGotico, ArVoice, Shamela, Abdou's Arabic tashkeel dataset (MIT) and Tashkeela; see third_party/tashkeel_engine.
 - **ClaritySynth 3.0** (my own add-on): Arabic text normalization for numbers, dates and currency, Rawi diacritization, and keeping the user's own harakat.
