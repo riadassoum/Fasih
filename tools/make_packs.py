@@ -21,6 +21,7 @@ INFO = {
     "Zayd": ("زيد", "male", "PlanetBlindTech's voice, retrained with Fasih's recipe on their corpus."),
     "Reem": ("ريم", "female", "Trained by PlanetBlindTech with Fasih's recipe."),
     "Amjad": ("أمجد", "male", "Modern Standard Arabic, trained on the Arabic MSA 25K Saudi Male corpus (moesaif, CC BY 4.0)."),
+    "Nabil": ("نبيل", "male", "Clear Modern Standard Arabic, trained on about 7 hours read for Fasih by the Piper voice Kareem (rhasspy, MIT). Non-commercial use only."),
     "Shahrazad": ("شهرزاد", "female", "A storyteller's voice, trained on Aida Boumaza's LibriVox reading of Alf Layla wa Layla (public domain)."),
 }
 ONLY = os.environ.get("FASIH_ONLY", "").split()
