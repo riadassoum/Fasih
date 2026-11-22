@@ -24,6 +24,7 @@ INFO = {
     "Nabil": ("نبيل", "male", "Clear Modern Standard Arabic, trained on about 7.7 hours read for Fasih by the Piper voice Kareem (rhasspy, MIT), mostly two to four sentences at a time so long passages stay steady. Non-commercial use only."),
     "Evan": ("إيفان", "male", "English voice for reading English text (choose it as Fasih's English voice instead of BDL), trained on speech from OpenEVV's Adult Male 1. Its voice data is IBM's (Embedded ViaVoice), not covered by Fasih's licence: personal, non-commercial use only; see the NOTICE in the pack."),
     "Aisha": ("عائشة", "female", "Trained by PlanetBlindTech with Fasih's recipe."),
+    "Hadi": ("هادي", "male", "Trained on speech cloned with OmniVoice (k2-fsa, Apache-2.0) from Yahya Alnwsany's Arabic professional voice dataset (NightPrince, CC0)."),
     "Shahrazad": ("شهرزاد", "female", "A storyteller's voice, trained on Aida Boumaza's LibriVox reading of Alf Layla wa Layla (public domain)."),
 }
 ONLY = os.environ.get("FASIH_ONLY", "").split()

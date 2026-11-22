@@ -6,7 +6,7 @@ Developer: Riad Assoum ([github.com/riadassoum](https://github.com/riadassoum)).
 
 ## The voices
 
-The add-on comes with Riad and Aseel, the English voice Bdl and the French voice Elise. The other fourteen Arabic voices are voice packs: in NVDA's Tools menu, choose Fasih > Download voices, then "Arabic: Fasih voices", and install the ones you want (they become available after NVDA restarts). This keeps the add-on small.
+The add-on comes with Riad and Aseel, the English voice Bdl and the French voice Elise. The other fifteen Arabic voices are voice packs: in NVDA's Tools menu, choose Fasih > Download voices, then "Arabic: Fasih voices", and install the ones you want (they become available after NVDA restarts). This keeps the add-on small.
 
 All the Arabic voices speak at the same pace and the same loudness, and voices of the same gender have been brought close in bass and tone, so you can switch between them without readjusting NVDA.
 
@@ -25,6 +25,7 @@ All the Arabic voices speak at the same pace and the same loudness, and voices o
 - **Evan** (English): a male English voice you can choose as Fasih's English voice instead of BDL, trained on 5.3 hours of speech from OpenEVV's Adult Male 1 (IBM's Embedded ViaVoice, the engine known as Eloquence). **Its voice data is IBM's, not covered by Fasih's licence**: it is a separate download for personal, non-commercial use, and voices/Evan/NOTICE.md explains why. It is less clear than BDL in my tests (8% of words misheard by speech recognition, against 3% for BDL).
 - **Nabil**: a male voice, the clearest so far, trained on about 7.7 hours of sentences chosen for Fasih, read by the Piper voice Kareem mostly two to four at a time so that he stays steady through long passages, (ar_JO, by Michael Hansen for rhasspy, MIT), whose own training recordings come from github.com/AliMokhammad/arabicttstrain (Kamel Kilani's stories) with no stated license. For that reason Nabil is for non-commercial use only.
 - **Aisha**: a female voice trained by PlanetBlindTech with Fasih's recipe and added at their request.
+- **Hadi**: a male voice trained on speech cloned with OmniVoice (k2-fsa) from Yahya Alnwsany's Arabic professional voice dataset (NightPrince/Arabic-professional-voice, CC0).
 - **Shahrazad**: a female storyteller's voice, trained on about 2.4 hours of Aïda Boumaza's LibriVox reading of Alf Layla wa Layla, Volume 1 (public domain), matched to the Hindawi edition of the text. A real human reader; because the recordings are an audiobook made at home, she is softer and less crisp than the studio voices.
 - **Aseel**: a male voice trained by PlanetBlindTech with Fasih's recipe, on about 12 hours made from the voice of Mr. Aseel Bashir, with his consent.
 - **Elise** (French): a young female voice, the first French voice for RHVoice, trained on the SIWIS French Speech Synthesis Database (Honnet, Lazaridis, Garner and Yamagishi, CC BY 4.0), about 9.2 hours of studio recordings. She is a secondary voice for French text.
