@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Aisha (عائشة), a new voice to download**: a female voice trained by PlanetBlindTech with Fasih's recipe, matched to the other voices' pace and loudness. Find her in Tools > Fasih > Download voices > "Arabic: Fasih voices".
+
 ## 1.3
 
 ### Voices
