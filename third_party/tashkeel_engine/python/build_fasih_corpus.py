@@ -10,7 +10,7 @@ usage: build_fasih_corpus.py QCRI_WIKIPEDIA.jsonl OUT.txt [--arvoice TEXT.tsv] [
 
 The Hugging Face datasets are downloaded one parquet file at a time and deleted after use:
 TigreGotico/arabic_diacritized_text, ReligiousLLMs/shamela_all_diacritized_fully,
-Abdou/arabic-tashkeel-dataset and arbml/tashkeela. Needs curl and pyarrow.
+and Abdou/arabic-tashkeel-dataset. Needs curl and pyarrow.
 
 Every sentence is cleaned the same way: hamzat al-wasl written without a vowel (QCRI's text
 writes اَلْ, the others ال), lines without punctuation cut into 15-word pieces, and a line kept
@@ -19,7 +19,8 @@ vowelled, no Latin letters, and is not a duplicate or a test sentence. The rando
 fixed seeds, so the same datasets give the same file.
 
 Mix (about 9.5 million lines): QCRI Wikipedia x4, TigreGotico x2, about 1 million Shamela
-lines, about 1.2 million Abdou lines, about 0.6 million Tashkeela lines, ArVoice x8.
+lines, about 1.2 million Abdou lines, ArVoice x8. (Fasih 1.3 also had about 0.6 million lines of
+arbml/tashkeela; it was dropped in 1.3.1 because that copy has lost its shaddas.)
 Then train with:
   python3 train_pipeline.py --corpus OUT.txt --output barq.tash --max-vocab 600000 \\
     --max-bigrams 1200000 --max-tree-lines 600000 --max-tree-samples 1000000 \\
@@ -127,7 +128,8 @@ def main():
     hf("ReligiousLLMs/shamela_all_diacritized_fully", "text", 0.183)
     feed = real_feed
     hf("Abdou/arabic-tashkeel-dataset", "vocalized", 0.137)
-    hf("arbml/tashkeela", "diacratized", 0.15)
+    # arbml/tashkeela is left out since 1.3.1: that copy has lost almost all its shaddas (2 in
+    # 18,692 marks, against about 7% of marks in every other source), which taught Barq to drop them.
     if a.arvoice:
         for l in open(a.arvoice, encoding="utf-8"):
             t = l.rstrip("\n").split("\t")[-1]
