@@ -2,7 +2,7 @@
 
 ## 1.3.1
 
-- **Barq is more accurate**: Fasih now uses Barq 2, the new version of PlanetBlindTech's engine by Shamseddin, with grammar rules and wider word context. In my tests it makes about a third fewer mistakes than 1.3's Barq on modern sentences, and fewer on news and classical text, where it now does better than Rawi; it is about six times faster than Rawi. Choose it under Diacritizer in NVDA's voice settings.
+- **Barq is more accurate and faster**: Fasih now uses the newest version of Barq, PlanetBlindTech's engine by Shamseddin, with tighter grammar rules and wider word context. In my tests it makes about a third fewer mistakes than 1.3's Barq on modern sentences and news, and fewer on classical text, where it now does better than Rawi; it is also several times faster than 1.3's Barq. Choose it under Diacritizer in NVDA's voice settings.
 - **Aisha (عائشة), a new voice to download**: a female voice trained by PlanetBlindTech with Fasih's recipe, matched to the other voices' pace and loudness. Find her in Tools > Fasih > Download voices > "Arabic: Fasih voices".
 
 ## 1.3

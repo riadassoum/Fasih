@@ -4,7 +4,7 @@ import java.io.Closeable;
 
 public final class TashkeelEngine implements Closeable {
     static {
-        System.loadLibrary("tashkeel");
+        System.loadLibrary("barq");
     }
 
     private long handle;
@@ -12,7 +12,7 @@ public final class TashkeelEngine implements Closeable {
     public TashkeelEngine(String modelPath) {
         this.handle = nativeCreate(modelPath);
         if (this.handle == 0) {
-            throw new IllegalStateException("Failed to load .tash model: " + modelPath);
+            throw new IllegalStateException("Failed to load barq.tash model: " + modelPath);
         }
     }
 

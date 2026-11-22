@@ -14,7 +14,7 @@ namespace tashkeel {
 inline uint32_t portable_popcnt64(uint64_t x) {
 #if defined(_MSC_VER) && defined(_M_X64)
     return static_cast<uint32_t>(__popcnt64(x));
-#elif defined(__GNUC__) || defined(__clang__)
+#elif (defined(__GNUC__) || defined(__clang__)) && (defined(__POPCNT__) || defined(__aarch64__) || defined(__arm__))
     return static_cast<uint32_t>(__builtin_popcountll(x));
 #else
     x = x - ((x >> 1) & 0x5555555555555555ULL);
@@ -26,12 +26,26 @@ inline uint32_t portable_popcnt64(uint64_t x) {
 inline uint32_t portable_popcnt32(uint32_t x) {
 #if defined(_MSC_VER) && (defined(_M_X64) || defined(_M_IX86))
     return static_cast<uint32_t>(__popcnt(x));
-#elif defined(__GNUC__) || defined(__clang__)
+#elif (defined(__GNUC__) || defined(__clang__)) && (defined(__POPCNT__) || defined(__aarch64__) || defined(__arm__))
     return static_cast<uint32_t>(__builtin_popcount(x));
 #else
     x = x - ((x >> 1) & 0x55555555u);
     x = (x & 0x33333333u) + ((x >> 2) & 0x33333333u);
     return (((x + (x >> 4)) & 0x0F0F0F0Fu) * 0x01010101u) >> 24;
+#endif
+}
+
+inline uint32_t portable_ctz32(uint32_t x) {
+#if defined(_MSC_VER)
+    unsigned long idx = 0;
+    _BitScanForward(&idx, x);
+    return static_cast<uint32_t>(idx);
+#elif defined(__GNUC__) || defined(__clang__)
+    return static_cast<uint32_t>(__builtin_ctz(x));
+#else
+    uint32_t n = 0;
+    while ((x & 1u) == 0u) { x >>= 1; ++n; }
+    return n;
 #endif
 }
 
@@ -145,8 +159,16 @@ private:
         constexpr uint64_t MASK38 = (1ULL << 38) - 1ULL;
         uint32_t idx = 0;
         for (size_t i = 0; i < len; ++i) {
-            if (idx >= v5_num_nodes_ || !get_bit(v5_has_child_bits_, idx)) return UINT32_MAX;
-            uint32_t int_idx = rank1(v5_has_child_bits_, v5_has_child_super_, idx);
+            if (idx >= v5_num_nodes_) return UINT32_MAX;
+            const uint32_t w_end = idx >> 6;
+            const uint32_t rem = idx & 63u;
+            const uint64_t wcur = v5_has_child_bits_[w_end];
+            if (((wcur >> rem) & 1ULL) == 0ULL) return UINT32_MAX;
+            const uint32_t sb = idx >> 8;
+            uint32_t int_idx = v5_has_child_super_[sb];
+            const uint32_t w_start = sb << 2;
+            for (uint32_t w = w_start; w < w_end; ++w) int_idx += portable_popcnt64(v5_has_child_bits_[w]);
+            int_idx += portable_popcnt64(wcur & ((1ULL << rem) - 1ULL));
             if (int_idx >= v5_num_internal_) return UINT32_MAX;
             uint64_t node = v5_internal_[int_idx];
             uint64_t mask = node & MASK38;
@@ -167,8 +189,17 @@ private:
             uint32_t first_child = static_cast<uint32_t>(node >> 38);
             idx = first_child + offset;
         }
-        if (idx >= v5_num_nodes_ || !get_bit(v5_is_term_bits_, idx)) return UINT32_MAX;
-        return rank1(v5_is_term_bits_, v5_is_term_super_, idx);
+        if (idx >= v5_num_nodes_) return UINT32_MAX;
+        const uint32_t w_end = idx >> 6;
+        const uint32_t rem = idx & 63u;
+        const uint64_t wcur = v5_is_term_bits_[w_end];
+        if (((wcur >> rem) & 1ULL) == 0ULL) return UINT32_MAX;
+        const uint32_t sb = idx >> 8;
+        uint32_t r = v5_is_term_super_[sb];
+        const uint32_t w_start = sb << 2;
+        for (uint32_t w = w_start; w < w_end; ++w) r += portable_popcnt64(v5_is_term_bits_[w]);
+        r += portable_popcnt64(wcur & ((1ULL << rem) - 1ULL));
+        return r;
     }
 
     inline uint32_t lookup_v3(const uint8_t* syms, size_t len) const {
@@ -367,6 +398,65 @@ public:
         return vals_v4_ ? static_cast<int16_t>(static_cast<int32_t>(vals_v4_[idx]) * 32) : vals_v3_[idx];
     }
 
+    inline void prefetch_row(uint32_t prev_id) const {
+#if defined(__GNUC__) || defined(__clang__)
+        if (row_off_ && prev_id + 1 < row_off_count_) {
+            __builtin_prefetch(row_off_ + prev_id, 0, 1);
+        }
+#else
+        (void)prev_id;
+#endif
+    }
+
+    inline void prefetch_row_mid(uint32_t prev_id) const {
+#if defined(__GNUC__) || defined(__clang__)
+        if (row_off_ && entries_v5_ && prev_id + 1 < row_off_count_) {
+            const uint32_t lo = row_off_[prev_id];
+            uint32_t hi = row_off_[prev_id + 1];
+            if (hi > entry_count_) hi = entry_count_;
+            if (lo < hi) {
+                __builtin_prefetch(entries_v5_ + lo + ((hi - lo) >> 1), 0, 1);
+            }
+        }
+#else
+        (void)prev_id;
+#endif
+    }
+
+    inline void best_bonus_v5(int32_t entry_idx, uint16_t end_mask, int8_t& out_be, int16_t& out_bv) const {
+        out_be = -1;
+        out_bv = 0;
+        if (entry_idx < 0) return;
+        const uint32_t eidx = static_cast<uint32_t>(entry_idx);
+        const uint32_t blk = eidx >> BG_BLOCK_SHIFT_V5;
+        if (blk >= block_base_count_) return;
+        const uint32_t base_idx = block_base_v5_[blk] + entries_v5_[eidx].local_val_off;
+        uint32_t m = end_mask & ((1u << NUM_DIACRITICS) - 1u);
+        uint32_t off = 0;
+        int16_t bv = 0;
+        int8_t be = -1;
+        if (vals_v4_) {
+            while (m) {
+                const uint32_t d = portable_ctz32(m);
+                m &= (m - 1u);
+                const uint32_t idx = base_idx + off++;
+                if (idx >= val_count_) break;
+                const int16_t v = static_cast<int16_t>(static_cast<int32_t>(vals_v4_[idx]) * 32);
+                if (v > bv) { bv = v; be = static_cast<int8_t>(d); }
+            }
+        } else {
+            while (m) {
+                const uint32_t d = portable_ctz32(m);
+                m &= (m - 1u);
+                const uint32_t idx = base_idx + off++;
+                if (idx >= val_count_) break;
+                const int16_t v = vals_v3_[idx];
+                if (v > bv) { bv = v; be = static_cast<int8_t>(d); }
+            }
+        }
+        if (bv > 0) { out_be = be; out_bv = bv; }
+    }
+
 private:
     static inline uint64_t splitmix64(uint64_t x) {
         x += 0x9e3779b97f4a7c15ULL;
@@ -464,59 +554,94 @@ public:
         return nullptr;
     }
 
+    inline bool is_compact() const { return compact_entries_ != nullptr; }
+
+    inline void prefetch_bucket(uint64_t key) const {
+#if defined(__GNUC__) || defined(__clang__)
+        if (compact_buckets_) {
+            __builtin_prefetch(compact_buckets_ + static_cast<uint32_t>(key >> 48), 0, 1);
+        }
+#else
+        (void)key;
+#endif
+    }
+
+    inline void prefetch_entry_range(uint64_t key) const {
+#if defined(__GNUC__) || defined(__clang__)
+        if (compact_entries_) {
+            const uint32_t b = static_cast<uint32_t>(key >> 48);
+            const uint32_t lo = compact_buckets_[b];
+            uint32_t hi = compact_buckets_[b + 1u];
+            if (hi > compact_num_entries_) hi = compact_num_entries_;
+            if (lo < hi) {
+                __builtin_prefetch(compact_entries_ + lo, 0, 1);
+                if (hi - lo > 5u) {
+                    __builtin_prefetch(compact_entries_ + lo + ((hi - lo) >> 1), 0, 1);
+                }
+            }
+        }
+#else
+        (void)key;
+#endif
+    }
+
+    inline bool find_val_compact_key(uint64_t key, uint8_t order, NgramLookupResult& out) const {
+        const uint32_t b = static_cast<uint32_t>(key >> 48);
+        const uint64_t klo = key & 0xFFFFFFFFFFFFULL;
+        uint32_t lo = compact_buckets_[b];
+        uint32_t hi = compact_buckets_[b + 1u];
+        if (hi > compact_num_entries_) hi = compact_num_entries_;
+        if (lo >= hi) return false;
+        if (hi - lo <= 8u) {
+            for (uint32_t i = lo; i < hi; ++i) {
+                const uint64_t ek = read_u48(compact_entries_[i].key_lo);
+                if (ek == klo) {
+                    uint64_t p = 0;
+                    std::memcpy(&p, compact_entries_[i].payload, 5);
+                    uint8_t ord = decode_compact_ngram_order(static_cast<uint8_t>((p >> 34) & 7u));
+                    if (ord == order) {
+                        out.best_bonus = static_cast<int16_t>(static_cast<int32_t>(p & 0x1FFFu) - 4096);
+                        out.alt_bonus = static_cast<int16_t>(static_cast<int32_t>((p >> 13) & 0x1FFFu) - 4096);
+                        out.best_ending_id = static_cast<uint8_t>((p >> 26) & 0xFu);
+                        out.alt_ending_id = static_cast<uint8_t>((p >> 30) & 0xFu);
+                        out.order = ord;
+                        return true;
+                    }
+                } else if (ek > klo) {
+                    return false;
+                }
+            }
+            return false;
+        }
+        uint32_t l = lo, r = hi;
+        while (l < r) {
+            uint32_t mid = l + ((r - l) >> 1);
+            if (read_u48(compact_entries_[mid].key_lo) < klo) l = mid + 1u;
+            else r = mid;
+        }
+        for (uint32_t i = l; i < hi; ++i) {
+            const uint64_t ek = read_u48(compact_entries_[i].key_lo);
+            if (ek != klo) break;
+            uint64_t p = 0;
+            std::memcpy(&p, compact_entries_[i].payload, 5);
+            uint8_t ord = decode_compact_ngram_order(static_cast<uint8_t>((p >> 34) & 7u));
+            if (ord == order) {
+                out.best_bonus = static_cast<int16_t>(static_cast<int32_t>(p & 0x1FFFu) - 4096);
+                out.alt_bonus = static_cast<int16_t>(static_cast<int32_t>((p >> 13) & 0x1FFFu) - 4096);
+                out.best_ending_id = static_cast<uint8_t>((p >> 26) & 0xFu);
+                out.alt_ending_id = static_cast<uint8_t>((p >> 30) & 0xFu);
+                out.order = ord;
+                return true;
+            }
+        }
+        return false;
+    }
+
     inline bool find_val(const uint32_t* wids, uint8_t order, NgramLookupResult& out, uint8_t n_wids = 0) const {
         if (compact_entries_) {
             const uint8_t cnt = (n_wids == 0) ? order : n_wids;
             const uint64_t key = fnv1a_key_tagged(wids, cnt, order);
-            const uint32_t b = static_cast<uint32_t>(key >> 48);
-            const uint64_t klo = key & 0xFFFFFFFFFFFFULL;
-            uint32_t lo = compact_buckets_[b];
-            uint32_t hi = compact_buckets_[b + 1u];
-            if (hi > compact_num_entries_) hi = compact_num_entries_;
-            if (lo >= hi) return false;
-            if (hi - lo <= 8u) {
-                for (uint32_t i = lo; i < hi; ++i) {
-                    const uint64_t ek = read_u48(compact_entries_[i].key_lo);
-                    if (ek == klo) {
-                        uint64_t p = 0;
-                        std::memcpy(&p, compact_entries_[i].payload, 5);
-                        uint8_t ord = decode_compact_ngram_order(static_cast<uint8_t>((p >> 34) & 7u));
-                        if (ord == order) {
-                            out.best_bonus = static_cast<int16_t>(static_cast<int32_t>(p & 0x1FFFu) - 4096);
-                            out.alt_bonus = static_cast<int16_t>(static_cast<int32_t>((p >> 13) & 0x1FFFu) - 4096);
-                            out.best_ending_id = static_cast<uint8_t>((p >> 26) & 0xFu);
-                            out.alt_ending_id = static_cast<uint8_t>((p >> 30) & 0xFu);
-                            out.order = ord;
-                            return true;
-                        }
-                    } else if (ek > klo) {
-                        return false;
-                    }
-                }
-                return false;
-            }
-            uint32_t l = lo, r = hi;
-            while (l < r) {
-                uint32_t mid = l + ((r - l) >> 1);
-                if (read_u48(compact_entries_[mid].key_lo) < klo) l = mid + 1u;
-                else r = mid;
-            }
-            for (uint32_t i = l; i < hi; ++i) {
-                const uint64_t ek = read_u48(compact_entries_[i].key_lo);
-                if (ek != klo) break;
-                uint64_t p = 0;
-                std::memcpy(&p, compact_entries_[i].payload, 5);
-                uint8_t ord = decode_compact_ngram_order(static_cast<uint8_t>((p >> 34) & 7u));
-                if (ord == order) {
-                    out.best_bonus = static_cast<int16_t>(static_cast<int32_t>(p & 0x1FFFu) - 4096);
-                    out.alt_bonus = static_cast<int16_t>(static_cast<int32_t>((p >> 13) & 0x1FFFu) - 4096);
-                    out.best_ending_id = static_cast<uint8_t>((p >> 26) & 0xFu);
-                    out.alt_ending_id = static_cast<uint8_t>((p >> 30) & 0xFu);
-                    out.order = ord;
-                    return true;
-                }
-            }
-            return false;
+            return find_val_compact_key(key, order, out);
         }
         const NgramEntryV6* e = find(wids, order, n_wids);
         if (!e) return false;
@@ -533,11 +658,11 @@ public:
         h ^= static_cast<uint64_t>(tag);
         h *= 0x100000001b3ULL;
         for (uint8_t k = 0; k < cnt; ++k) {
-            uint32_t w = wids[k];
-            for (int b = 0; b < 4; ++b) {
-                h ^= static_cast<uint64_t>((w >> (b * 8)) & 0xFFu);
-                h *= 0x100000001b3ULL;
-            }
+            const uint32_t w = wids[k];
+            h ^= static_cast<uint64_t>(w & 0xFFu);        h *= 0x100000001b3ULL;
+            h ^= static_cast<uint64_t>((w >> 8) & 0xFFu); h *= 0x100000001b3ULL;
+            h ^= static_cast<uint64_t>((w >> 16) & 0xFFu);h *= 0x100000001b3ULL;
+            h ^= static_cast<uint64_t>(w >> 24);          h *= 0x100000001b3ULL;
         }
         return (h == 0 || h == UINT64_MAX) ? (h ^ 0x9e3779b97f4a7c15ULL) : h;
     }
@@ -596,6 +721,73 @@ public:
     bool empty() const {
         return (entries_ == nullptr || mask_ == 0) && (compact_entries_ == nullptr || compact_num_entries_ == 0);
     }
+    inline bool is_compact() const { return compact_entries_ != nullptr; }
+
+    inline void prefetch_bucket(uint64_t key) const {
+#if defined(__GNUC__) || defined(__clang__)
+        if (compact_buckets_) {
+            __builtin_prefetch(compact_buckets_ + static_cast<uint32_t>(key >> 48), 0, 1);
+        }
+#else
+        (void)key;
+#endif
+    }
+
+    inline void prefetch_entry_range(uint64_t key) const {
+#if defined(__GNUC__) || defined(__clang__)
+        if (compact_entries_) {
+            const uint32_t b = static_cast<uint32_t>(key >> 48);
+            const uint32_t lo = compact_buckets_[b];
+            uint32_t hi = compact_buckets_[b + 1u];
+            if (hi > compact_num_entries_) hi = compact_num_entries_;
+            if (lo < hi) {
+                __builtin_prefetch(compact_entries_ + lo, 0, 1);
+                if (hi - lo > 5u) {
+                    __builtin_prefetch(compact_entries_ + lo + ((hi - lo) >> 1), 0, 1);
+                }
+            }
+        }
+#else
+        (void)key;
+#endif
+    }
+
+    inline bool find_val_compact_key(uint64_t key, CoreBgLookupResult& out) const {
+        const uint32_t b = static_cast<uint32_t>(key >> 48);
+        const uint64_t klo = key & 0xFFFFFFFFFFFFULL;
+        uint32_t lo = compact_buckets_[b];
+        uint32_t hi = compact_buckets_[b + 1u];
+        if (hi > compact_num_entries_) hi = compact_num_entries_;
+        if (lo >= hi) return false;
+        if (hi - lo <= 8u) {
+            for (uint32_t i = lo; i < hi; ++i) {
+                const uint64_t ek = read_u48(compact_entries_[i].key_lo);
+                if (ek == klo) {
+                    out.best_core_h = compact_entries_[i].best_core_h;
+                    out.alt_core_h = compact_entries_[i].alt_core_h;
+                    out.best_bonus = compact_entries_[i].best_bonus;
+                    out.alt_bonus = compact_entries_[i].alt_bonus;
+                    return true;
+                }
+                if (ek > klo) return false;
+            }
+            return false;
+        }
+        while (lo < hi) {
+            uint32_t mid = lo + ((hi - lo) >> 1);
+            const uint64_t ek = read_u48(compact_entries_[mid].key_lo);
+            if (ek < klo) lo = mid + 1u;
+            else if (ek > klo) hi = mid;
+            else {
+                out.best_core_h = compact_entries_[mid].best_core_h;
+                out.alt_core_h = compact_entries_[mid].alt_core_h;
+                out.best_bonus = compact_entries_[mid].best_bonus;
+                out.alt_bonus = compact_entries_[mid].alt_bonus;
+                return true;
+            }
+        }
+        return false;
+    }
 
     inline const CoreBgEntryV7* find(uint8_t dir, const uint32_t* wids, uint8_t cnt) const {
         if (!entries_ || mask_ == 0) return nullptr;
@@ -612,40 +804,7 @@ public:
     inline bool find_val(uint8_t dir, const uint32_t* wids, uint8_t cnt, CoreBgLookupResult& out) const {
         if (compact_entries_) {
             const uint64_t key = NgramTableV6::fnv1a_key_tagged(wids, cnt, static_cast<uint8_t>(0x80u | dir));
-            const uint32_t b = static_cast<uint32_t>(key >> 48);
-            const uint64_t klo = key & 0xFFFFFFFFFFFFULL;
-            uint32_t lo = compact_buckets_[b];
-            uint32_t hi = compact_buckets_[b + 1u];
-            if (hi > compact_num_entries_) hi = compact_num_entries_;
-            if (lo >= hi) return false;
-            if (hi - lo <= 8u) {
-                for (uint32_t i = lo; i < hi; ++i) {
-                    const uint64_t ek = read_u48(compact_entries_[i].key_lo);
-                    if (ek == klo) {
-                        out.best_core_h = compact_entries_[i].best_core_h;
-                        out.alt_core_h = compact_entries_[i].alt_core_h;
-                        out.best_bonus = compact_entries_[i].best_bonus;
-                        out.alt_bonus = compact_entries_[i].alt_bonus;
-                        return true;
-                    }
-                    if (ek > klo) return false;
-                }
-                return false;
-            }
-            while (lo < hi) {
-                uint32_t mid = lo + ((hi - lo) >> 1);
-                const uint64_t ek = read_u48(compact_entries_[mid].key_lo);
-                if (ek < klo) lo = mid + 1u;
-                else if (ek > klo) hi = mid;
-                else {
-                    out.best_core_h = compact_entries_[mid].best_core_h;
-                    out.alt_core_h = compact_entries_[mid].alt_core_h;
-                    out.best_bonus = compact_entries_[mid].best_bonus;
-                    out.alt_bonus = compact_entries_[mid].alt_bonus;
-                    return true;
-                }
-            }
-            return false;
+            return find_val_compact_key(key, out);
         }
         const CoreBgEntryV7* e = find(dir, wids, cnt);
         if (!e) return false;
@@ -740,14 +899,15 @@ public:
         if (wid >= count_) return 0u;
         if (raw_) return raw_[wid];
         if (!bits_) return 0u;
-        if (((bits_[wid >> 6] >> (wid & 63u)) & 1ULL) == 0ULL) return 0u;
-        uint32_t sb = wid >> 8;
+        const uint32_t w_end = wid >> 6;
+        const uint32_t rem = wid & 63u;
+        const uint64_t wcur = bits_[w_end];
+        if (((wcur >> rem) & 1ULL) == 0ULL) return 0u;
+        const uint32_t sb = wid >> 8;
         uint32_t r = super_[sb];
-        uint32_t w_start = sb << 2;
-        uint32_t w_end = wid >> 6;
+        const uint32_t w_start = sb << 2;
         for (uint32_t w = w_start; w < w_end; ++w) r += portable_popcnt64(bits_[w]);
-        uint32_t rem = wid & 63u;
-        if (rem) r += portable_popcnt64(bits_[w_end] & ((1ULL << rem) - 1ULL));
+        r += portable_popcnt64(wcur & ((1ULL << rem) - 1ULL));
         return (r < num_nonzero_) ? vals_[r] : 0u;
     }
 
@@ -763,6 +923,92 @@ private:
     const uint32_t* super_ = nullptr;
     const uint32_t* vals_ = nullptr;
     uint32_t num_nonzero_ = 0;
+};
+
+class ExtraCoreTableV8 {
+public:
+    bool init(const uint8_t* blob, uint32_t byte_size) {
+        vocab_count_ = 0;
+        num_words_extra_ = 0;
+        num_entries_ = 0;
+        core_pool_bytes_ = 0;
+        bits_ = nullptr;
+        super_ = nullptr;
+        entry_off_ = nullptr;
+        cands_ = nullptr;
+        core_pool_ = nullptr;
+        if (!blob || byte_size < sizeof(ExtraCoreHeader)) return false;
+        const auto* h = reinterpret_cast<const ExtraCoreHeader*>(blob);
+        size_t off = (sizeof(ExtraCoreHeader) + 7u) & ~7u;
+        size_t bw_bytes = static_cast<size_t>(h->bitmap_words) * sizeof(uint64_t);
+        size_t sb_bytes = ((static_cast<size_t>(h->super_blocks) * sizeof(uint32_t)) + 7u) & ~7u;
+        size_t eo_bytes = ((static_cast<size_t>(h->num_words_extra + 1u) * sizeof(uint32_t)) + 7u) & ~7u;
+        size_t cd_bytes = ((static_cast<size_t>(h->num_entries) * sizeof(WordCandidateV5)) + 7u) & ~7u;
+        size_t cp_bytes = h->core_pool_bytes;
+        if (off + bw_bytes + sb_bytes + eo_bytes + cd_bytes + cp_bytes > byte_size) return false;
+        if (static_cast<uint64_t>(h->bitmap_words) * 64u < h->vocab_count) return false;
+        if (static_cast<uint64_t>(h->super_blocks) * 256u < h->vocab_count) return false;
+        bits_ = reinterpret_cast<const uint64_t*>(blob + off); off += bw_bytes;
+        super_ = reinterpret_cast<const uint32_t*>(blob + off); off += sb_bytes;
+        entry_off_ = reinterpret_cast<const uint32_t*>(blob + off); off += eo_bytes;
+        cands_ = reinterpret_cast<const WordCandidateV5*>(blob + off); off += cd_bytes;
+        core_pool_ = blob + off;
+        vocab_count_ = h->vocab_count;
+        num_words_extra_ = h->num_words_extra;
+        num_entries_ = h->num_entries;
+        core_pool_bytes_ = h->core_pool_bytes;
+        return true;
+    }
+
+    bool valid() const { return bits_ != nullptr && num_entries_ > 0; }
+
+    inline bool get_range(uint32_t wid, uint32_t& out_start, uint32_t& out_end) const {
+        if (!bits_ || wid >= vocab_count_) return false;
+        const uint32_t w_end = wid >> 6;
+        const uint32_t rem = wid & 63u;
+        const uint64_t wcur = bits_[w_end];
+        if (((wcur >> rem) & 1ULL) == 0ULL) return false;
+        const uint32_t sb = wid >> 8;
+        uint32_t r = super_[sb];
+        const uint32_t w_start = sb << 2;
+        for (uint32_t w = w_start; w < w_end; ++w) r += portable_popcnt64(bits_[w]);
+        r += portable_popcnt64(wcur & ((1ULL << rem) - 1ULL));
+        if (r >= num_words_extra_) return false;
+        out_start = entry_off_[r];
+        out_end = entry_off_[r + 1u];
+        if (out_end > num_entries_) out_end = num_entries_;
+        return out_start < out_end;
+    }
+
+    inline WordCandidate read_cand(uint32_t idx) const {
+        uint64_t v = 0;
+        std::memcpy(&v, cands_[idx].packed, 5);
+        uint32_t co = static_cast<uint32_t>(v & 0xFFFFFu);
+        uint8_t eid = static_cast<uint8_t>((v >> 20) & 0xFu);
+        uint8_t fl = static_cast<uint8_t>((v >> 24) & 0xFu);
+        uint32_t lpq = static_cast<uint32_t>((v >> 28) & 0xFFFu);
+        int16_t lp = static_cast<int16_t>(-static_cast<int32_t>(lpq) * 3);
+        return {co, lp, eid, fl};
+    }
+
+    inline uint8_t read_core_diac(uint32_t core_off, size_t k) const {
+        uint32_t nib = core_off + static_cast<uint32_t>(k);
+        uint32_t byte_idx = nib >> 1;
+        if (byte_idx >= core_pool_bytes_) return 0;
+        uint8_t b = core_pool_[byte_idx];
+        return (nib & 1u) ? static_cast<uint8_t>(b >> 4) : static_cast<uint8_t>(b & 0x0Fu);
+    }
+
+private:
+    uint32_t vocab_count_ = 0;
+    uint32_t num_words_extra_ = 0;
+    uint32_t num_entries_ = 0;
+    uint32_t core_pool_bytes_ = 0;
+    const uint64_t* bits_ = nullptr;
+    const uint32_t* super_ = nullptr;
+    const uint32_t* entry_off_ = nullptr;
+    const WordCandidateV5* cands_ = nullptr;
+    const uint8_t* core_pool_ = nullptr;
 };
 
 inline uint32_t pack_valency(const ValencyInfo& o) {

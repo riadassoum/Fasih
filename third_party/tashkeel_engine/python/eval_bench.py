@@ -9,7 +9,7 @@ def main():
     parser = argparse.ArgumentParser(description="Evaluate & benchmark a .tash diacritizer model")
     parser.add_argument("--model", required=True, help="Path to .tash model")
     parser.add_argument("--test", required=True, help="Path to diacritized test file")
-    parser.add_argument("--lib", default=None, help="Path to libtashkeel.so")
+    parser.add_argument("--lib", default=None, help="Path to libbarq.so / barq.dll")
     parser.add_argument("--max-lines", type=int, default=50000, help="Max lines to evaluate")
     args = parser.parse_args()
 

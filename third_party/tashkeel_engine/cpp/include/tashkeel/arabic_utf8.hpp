@@ -35,20 +35,31 @@ inline uint32_t utf8_next(const char* s, size_t len, size_t& pos) {
 }
 
 inline void utf8_append(std::string& out, uint32_t cp) {
-    if (cp < 0x80) {
-        out.push_back(static_cast<char>(cp));
-    } else if (cp < 0x800) {
-        out.push_back(static_cast<char>(0xC0 | (cp >> 6)));
-        out.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+    if (cp < 0x800) {
+        if (cp < 0x80) {
+            out.push_back(static_cast<char>(cp));
+        } else {
+            char buf[2] = {
+                static_cast<char>(0xC0 | (cp >> 6)),
+                static_cast<char>(0x80 | (cp & 0x3F))
+            };
+            out.append(buf, 2);
+        }
     } else if (cp < 0x10000) {
-        out.push_back(static_cast<char>(0xE0 | (cp >> 12)));
-        out.push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
-        out.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+        char buf[3] = {
+            static_cast<char>(0xE0 | (cp >> 12)),
+            static_cast<char>(0x80 | ((cp >> 6) & 0x3F)),
+            static_cast<char>(0x80 | (cp & 0x3F))
+        };
+        out.append(buf, 3);
     } else {
-        out.push_back(static_cast<char>(0xF0 | (cp >> 18)));
-        out.push_back(static_cast<char>(0x80 | ((cp >> 12) & 0x3F)));
-        out.push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
-        out.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+        char buf[4] = {
+            static_cast<char>(0xF0 | (cp >> 18)),
+            static_cast<char>(0x80 | ((cp >> 12) & 0x3F)),
+            static_cast<char>(0x80 | ((cp >> 6) & 0x3F)),
+            static_cast<char>(0x80 | (cp & 0x3F))
+        };
+        out.append(buf, 4);
     }
 }
 
@@ -81,30 +92,30 @@ inline uint8_t char_to_sym(uint32_t cp) {
 }
 
 inline void append_diacritic(std::string& out, uint8_t diac_id) {
-    switch (diac_id) {
-        case DIAC_NONE: break;
-        case DIAC_FATHA: utf8_append(out, 0x064E); break;
-        case DIAC_DAMMA: utf8_append(out, 0x064F); break;
-        case DIAC_KASRA: utf8_append(out, 0x0650); break;
-        case DIAC_SUKUN: utf8_append(out, 0x0652); break;
-        case DIAC_FATHATAN: utf8_append(out, 0x064B); break;
-        case DIAC_DAMMATAN: utf8_append(out, 0x064C); break;
-        case DIAC_KASRATAN: utf8_append(out, 0x064D); break;
-        case DIAC_SHADDA: utf8_append(out, 0x0651); break;
-        case DIAC_SHADDA_FATHA:
-            utf8_append(out, 0x0651); utf8_append(out, 0x064E); break;
-        case DIAC_SHADDA_DAMMA:
-            utf8_append(out, 0x0651); utf8_append(out, 0x064F); break;
-        case DIAC_SHADDA_KASRA:
-            utf8_append(out, 0x0651); utf8_append(out, 0x0650); break;
-        case DIAC_SHADDA_FATHATAN:
-            utf8_append(out, 0x0651); utf8_append(out, 0x064B); break;
-        case DIAC_SHADDA_DAMMATAN:
-            utf8_append(out, 0x0651); utf8_append(out, 0x064C); break;
-        case DIAC_SHADDA_KASRATAN:
-            utf8_append(out, 0x0651); utf8_append(out, 0x064D); break;
-        default: break;
-    }
+    if (diac_id == DIAC_NONE || diac_id >= NUM_DIACRITICS) return;
+    struct DiacUtf8 {
+        uint8_t len;
+        char bytes[4];
+    };
+    static constexpr DiacUtf8 LUT[NUM_DIACRITICS] = {
+        {0, {0, 0, 0, 0}},                                                         // 0: NONE
+        {2, {'\xD9', '\x8E', 0, 0}},                                               // 1: FATHA 064E
+        {2, {'\xD9', '\x8F', 0, 0}},                                               // 2: DAMMA 064F
+        {2, {'\xD9', '\x90', 0, 0}},                                               // 3: KASRA 0650
+        {2, {'\xD9', '\x92', 0, 0}},                                               // 4: SUKUN 0652
+        {2, {'\xD9', '\x8B', 0, 0}},                                               // 5: FATHATAN 064B
+        {2, {'\xD9', '\x8C', 0, 0}},                                               // 6: DAMMATAN 064C
+        {2, {'\xD9', '\x8D', 0, 0}},                                               // 7: KASRATAN 064D
+        {2, {'\xD9', '\x91', 0, 0}},                                               // 8: SHADDA 0651
+        {4, {'\xD9', '\x91', '\xD9', '\x8E'}},                                     // 9: SHADDA+FATHA
+        {4, {'\xD9', '\x91', '\xD9', '\x8F'}},                                     // 10: SHADDA+DAMMA
+        {4, {'\xD9', '\x91', '\xD9', '\x90'}},                                     // 11: SHADDA+KASRA
+        {4, {'\xD9', '\x91', '\xD9', '\x8B'}},                                     // 12: SHADDA+FATHATAN
+        {4, {'\xD9', '\x91', '\xD9', '\x8C'}},                                     // 13: SHADDA+DAMMATAN
+        {4, {'\xD9', '\x91', '\xD9', '\x8D'}},                                     // 14: SHADDA+KASRATAN
+    };
+    const DiacUtf8& e = LUT[diac_id];
+    out.append(e.bytes, e.len);
 }
 
 } // namespace tashkeel

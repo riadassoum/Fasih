@@ -1,18 +1,20 @@
 CXX = g++
-CXXFLAGS = -std=c++17 -O3 -Wall -Wextra -fPIC -Icpp/include
+UNAME_M := $(shell uname -m)
+ARCH_FLAGS := $(if $(filter x86_64 amd64,$(UNAME_M)),-mpopcnt,)
+CXXFLAGS = -std=c++17 -O3 $(ARCH_FLAGS) -Wall -Wextra -fPIC -fvisibility=hidden -Icpp/include
 
-all: build/libtashkeel.so build/tashkeel_cli
+all: linux/libbarq.so linux/barq
 
-build:
-	mkdir -p build
+linux:
+	mkdir -p linux
 
-build/libtashkeel.so: cpp/src/diacritizer.cpp cpp/src/c_api.cpp | build
+linux/libbarq.so: cpp/src/diacritizer.cpp cpp/src/c_api.cpp | linux
 	$(CXX) $(CXXFLAGS) -shared -o $@ cpp/src/diacritizer.cpp cpp/src/c_api.cpp
 
-build/tashkeel_cli: cpp/src/diacritizer.cpp cpp/src/cli.cpp | build
+linux/barq: cpp/src/diacritizer.cpp cpp/src/cli.cpp | linux
 	$(CXX) $(CXXFLAGS) -o $@ cpp/src/diacritizer.cpp cpp/src/cli.cpp
 
 clean:
-	rm -rf build
+	rm -rf linux/libbarq.so linux/barq build
 
 .PHONY: all clean

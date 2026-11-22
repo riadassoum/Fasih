@@ -14,13 +14,17 @@ constexpr uint16_t TASH_VERSION_4 = 4;
 constexpr uint16_t TASH_VERSION_5 = 5;
 constexpr uint16_t TASH_VERSION_6 = 6;
 constexpr uint16_t TASH_VERSION_7 = 7;
-constexpr uint16_t TASH_VERSION = TASH_VERSION_7;
+constexpr uint16_t TASH_VERSION_8 = 8;
+constexpr uint16_t TASH_VERSION = TASH_VERSION_8;
 
 constexpr uint32_t V7F_IRAB2_V5_4B = 1u << 0;
 constexpr uint32_t V7F_IRAB2_V3_8B = 1u << 1;
 constexpr uint32_t V7F_COMPACT_NGRAM = 1u << 2;
 constexpr uint32_t V7F_COMPACT_CORE_BG = 1u << 3;
 constexpr uint32_t V7F_COMPACT_VALENCY = 1u << 4;
+
+constexpr uint32_t V8F_CORE2_V5_4B = 1u << 0;
+constexpr uint32_t V8F_OOV_V8_38F = 1u << 1;
 
 enum DiacriticId : uint8_t {
     DIAC_NONE = 0,
@@ -76,11 +80,13 @@ constexpr int32_t DEFAULT_WEIGHTS[NUM_WEIGHTS] = {
 
 constexpr size_t MAX_WORD_LEN = 48;
 constexpr size_t OOV_NUM_FEATURES = 22;
+constexpr size_t OOV_V8_FEATURES = 38;
 constexpr size_t OOV_LEGACY_FEATURES = 16;
 constexpr size_t IRAB_NUM_FEATURES = 56;
 constexpr size_t IRAB_V5_BASE_FEATURES = 44;
 constexpr size_t IRAB_LEGACY_FEATURES = 40;
 constexpr size_t IRAB2_NUM_FEATURES = 96;
+constexpr size_t CORE2_NUM_FEATURES = 72;
 constexpr size_t MORPH_NUM_FEATURES = 32;
 constexpr size_t NUM_MORPH_CLASSES = 12;
 constexpr size_t NUM_TRANS_ROLES_V5 = 24;
@@ -108,6 +114,17 @@ enum V7WeightId : uint32_t {
 
 constexpr int32_t DEFAULT_V7_WEIGHTS[NUM_V7_WEIGHTS] = {
     700, 600, 800, 350, 750, 850, 950, 450, 450, 900, 1000, 1000
+};
+
+enum V8WeightId : uint32_t {
+    V8W_CORE2 = 0,
+    V8W_CORE2_MARGIN = 1,
+    V8W_EXTRA_CORE_PEN = 2,
+    NUM_V8_WEIGHTS = 3
+};
+
+constexpr int32_t DEFAULT_V8_WEIGHTS[NUM_V8_WEIGHTS] = {
+    1000, 0, 0
 };
 
 constexpr uint8_t NG_ORDER_RBG = 12;
@@ -299,6 +316,15 @@ struct CoreBgEntryV7 {
     int16_t alt_bonus;
 };
 
+struct ExtraCoreHeader {
+    uint32_t vocab_count;
+    uint32_t num_words_extra;
+    uint32_t num_entries;
+    uint32_t bitmap_words;
+    uint32_t super_blocks;
+    uint32_t core_pool_bytes;
+};
+
 struct FileHeaderV7 {
     FileHeaderV6 base;
     uint64_t valency_offset;
@@ -316,6 +342,19 @@ struct FileHeaderV7 {
     uint64_t v7_weights_offset;
     uint32_t v7_weights_count;
     uint32_t reserved2;
+};
+
+struct FileHeaderV8 {
+    FileHeaderV7 base;
+    uint64_t extra_core_offset;
+    uint32_t extra_core_size;
+    uint32_t extra_core_count;
+    uint64_t core2_trees_offset;
+    uint32_t core2_trees_size;
+    uint32_t core2_feat_count;
+    uint32_t v8_flags;
+    uint32_t v8_weights_count;
+    uint64_t v8_weights_offset;
 };
 
 struct FstV5Header {

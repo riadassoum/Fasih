@@ -7,12 +7,16 @@ cmake -B build_win -DCMAKE_BUILD_TYPE=Release
 if errorlevel 1 goto :mingw
 cmake --build build_win --config Release
 if errorlevel 1 goto :mingw
-echo Built Windows DLL in build_win\Release\tashkeel.dll
+if not exist windows mkdir windows
+copy /Y build_win\Release\barq.dll windows\barq.dll >nul
+copy /Y build_win\Release\barq.lib windows\barq.lib >nul
+copy /Y build_win\Release\barq.exe windows\barq.exe >nul
+echo Built Windows: windows\barq.dll, windows\barq.lib, windows\barq.exe
 exit /b 0
 
 :mingw
 echo Trying MinGW g++...
-if not exist build mkdir build
-g++ -std=c++17 -O3 -Icpp/include -shared -o build\tashkeel.dll cpp\src\diacritizer.cpp cpp\src\c_api.cpp
-g++ -std=c++17 -O3 -Icpp/include -o build\tashkeel_cli.exe cpp\src\diacritizer.cpp cpp\src\cli.cpp
-echo Built Windows: build\tashkeel.dll and build\tashkeel_cli.exe
+if not exist windows mkdir windows
+g++ -std=c++17 -O3 -DBARQ_EXPORTS -DTASHKEEL_EXPORTS -Icpp/include -shared -o windows\barq.dll cpp\src\diacritizer.cpp cpp\src\c_api.cpp
+g++ -std=c++17 -O3 -Icpp/include -o windows\barq.exe cpp\src\diacritizer.cpp cpp\src\cli.cpp
+echo Built Windows: windows\barq.dll and windows\barq.exe

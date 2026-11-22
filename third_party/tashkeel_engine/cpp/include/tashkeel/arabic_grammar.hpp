@@ -43,65 +43,75 @@ inline bool is_alef_or_wasla(uint8_t s) {
 }
 
 inline bool is_sun_letter(uint8_t s) {
-    switch (s) {
-        case S_TEH: case S_THEH: case S_DAL: case S_THAL: case S_REH: case S_ZAIN:
-        case S_SEEN: case S_SHEEN: case S_SAD: case S_DAD: case S_TAH: case S_ZAH:
-        case S_LAM: case S_NOON:
-            return true;
-        default:
-            return false;
-    }
+    constexpr uint64_t SUN_MASK =
+        (1ULL << S_TEH) | (1ULL << S_THEH) | (1ULL << S_DAL) | (1ULL << S_THAL) |
+        (1ULL << S_REH) | (1ULL << S_ZAIN) | (1ULL << S_SEEN) | (1ULL << S_SHEEN) |
+        (1ULL << S_SAD) | (1ULL << S_DAD) | (1ULL << S_TAH) | (1ULL << S_ZAH) |
+        (1ULL << S_LAM) | (1ULL << S_NOON);
+    return s < 64u && ((SUN_MASK >> s) & 1ULL) != 0ULL;
 }
 
 inline uint8_t diac_family(uint8_t d) {
-    switch (d) {
-        case DIAC_DAMMA: case DIAC_DAMMATAN: case DIAC_SHADDA_DAMMA: case DIAC_SHADDA_DAMMATAN: return FAM_DAMMA;
-        case DIAC_FATHA: case DIAC_FATHATAN: case DIAC_SHADDA_FATHA: case DIAC_SHADDA_FATHATAN: return FAM_FATHA;
-        case DIAC_KASRA: case DIAC_KASRATAN: case DIAC_SHADDA_KASRA: case DIAC_SHADDA_KASRATAN: return FAM_KASRA;
-        case DIAC_SUKUN: return FAM_SUKUN;
-        default: return FAM_NONE;
-    }
+    static constexpr uint8_t LUT[16] = {
+        FAM_NONE,  // 0: DIAC_NONE
+        FAM_FATHA, // 1: DIAC_FATHA
+        FAM_DAMMA, // 2: DIAC_DAMMA
+        FAM_KASRA, // 3: DIAC_KASRA
+        FAM_SUKUN, // 4: DIAC_SUKUN
+        FAM_FATHA, // 5: DIAC_FATHATAN
+        FAM_DAMMA, // 6: DIAC_DAMMATAN
+        FAM_KASRA, // 7: DIAC_KASRATAN
+        FAM_NONE,  // 8: DIAC_SHADDA
+        FAM_FATHA, // 9: DIAC_SHADDA_FATHA
+        FAM_DAMMA, // 10: DIAC_SHADDA_DAMMA
+        FAM_KASRA, // 11: DIAC_SHADDA_KASRA
+        FAM_FATHA, // 12: DIAC_SHADDA_FATHATAN
+        FAM_DAMMA, // 13: DIAC_SHADDA_DAMMATAN
+        FAM_KASRA, // 14: DIAC_SHADDA_KASRATAN
+        FAM_NONE
+    };
+    return (d < 16u) ? LUT[d] : static_cast<uint8_t>(FAM_NONE);
 }
 
 inline bool diac_is_tanween(uint8_t d) {
-    return d == DIAC_FATHATAN || d == DIAC_DAMMATAN || d == DIAC_KASRATAN ||
-           d == DIAC_SHADDA_FATHATAN || d == DIAC_SHADDA_DAMMATAN || d == DIAC_SHADDA_KASRATAN;
+    constexpr uint16_t TAN_MASK =
+        (1u << DIAC_FATHATAN) | (1u << DIAC_DAMMATAN) | (1u << DIAC_KASRATAN) |
+        (1u << DIAC_SHADDA_FATHATAN) | (1u << DIAC_SHADDA_DAMMATAN) | (1u << DIAC_SHADDA_KASRATAN);
+    return d < 16u && ((TAN_MASK >> d) & 1u) != 0u;
 }
 
 inline bool diac_has_shadda(uint8_t d) { return d >= DIAC_SHADDA; }
 
 inline uint8_t make_diac(uint8_t fam, bool tanween, bool shadda) {
-    uint8_t base = DIAC_NONE;
-    switch (fam) {
-        case FAM_FATHA: base = tanween ? DIAC_FATHATAN : DIAC_FATHA; break;
-        case FAM_DAMMA: base = tanween ? DIAC_DAMMATAN : DIAC_DAMMA; break;
-        case FAM_KASRA: base = tanween ? DIAC_KASRATAN : DIAC_KASRA; break;
-        case FAM_SUKUN: return shadda ? DIAC_SHADDA : DIAC_SUKUN;
-        default: return shadda ? DIAC_SHADDA : DIAC_NONE;
-    }
-    if (shadda) {
-        switch (base) {
-            case DIAC_FATHA: return DIAC_SHADDA_FATHA;
-            case DIAC_DAMMA: return DIAC_SHADDA_DAMMA;
-            case DIAC_KASRA: return DIAC_SHADDA_KASRA;
-            case DIAC_FATHATAN: return DIAC_SHADDA_FATHATAN;
-            case DIAC_DAMMATAN: return DIAC_SHADDA_DAMMATAN;
-            case DIAC_KASRATAN: return DIAC_SHADDA_KASRATAN;
-            default: return base;
-        }
-    }
-    return base;
+    static constexpr uint8_t LUT[5][4] = {
+        {DIAC_NONE,  DIAC_SHADDA,       DIAC_NONE,     DIAC_SHADDA},          // FAM_NONE
+        {DIAC_DAMMA, DIAC_SHADDA_DAMMA, DIAC_DAMMATAN, DIAC_SHADDA_DAMMATAN}, // FAM_DAMMA
+        {DIAC_FATHA, DIAC_SHADDA_FATHA, DIAC_FATHATAN, DIAC_SHADDA_FATHATAN}, // FAM_FATHA
+        {DIAC_KASRA, DIAC_SHADDA_KASRA, DIAC_KASRATAN, DIAC_SHADDA_KASRATAN}, // FAM_KASRA
+        {DIAC_SUKUN, DIAC_SHADDA,       DIAC_SUKUN,    DIAC_SHADDA},          // FAM_SUKUN
+    };
+    if (fam < 5u) return LUT[fam][(static_cast<uint8_t>(tanween) << 1) | static_cast<uint8_t>(shadda)];
+    return shadda ? DIAC_SHADDA : DIAC_NONE;
 }
 
 inline uint8_t strip_tanween(uint8_t d) {
-    if (!diac_is_tanween(d)) return d;
-    return make_diac(diac_family(d), false, diac_has_shadda(d));
+    static constexpr uint8_t LUT[16] = {
+        DIAC_NONE, DIAC_FATHA, DIAC_DAMMA, DIAC_KASRA, DIAC_SUKUN,
+        DIAC_FATHA, DIAC_DAMMA, DIAC_KASRA,
+        DIAC_SHADDA, DIAC_SHADDA_FATHA, DIAC_SHADDA_DAMMA, DIAC_SHADDA_KASRA,
+        DIAC_SHADDA_FATHA, DIAC_SHADDA_DAMMA, DIAC_SHADDA_KASRA, DIAC_NONE
+    };
+    return (d < 16u) ? LUT[d] : d;
 }
 
 inline uint8_t add_shadda(uint8_t d) {
-    if (diac_has_shadda(d)) return d;
-    if (d == DIAC_NONE || d == DIAC_SUKUN) return DIAC_SHADDA;
-    return make_diac(diac_family(d), diac_is_tanween(d), true);
+    static constexpr uint8_t LUT[16] = {
+        DIAC_SHADDA, DIAC_SHADDA_FATHA, DIAC_SHADDA_DAMMA, DIAC_SHADDA_KASRA, DIAC_SHADDA,
+        DIAC_SHADDA_FATHATAN, DIAC_SHADDA_DAMMATAN, DIAC_SHADDA_KASRATAN,
+        DIAC_SHADDA, DIAC_SHADDA_FATHA, DIAC_SHADDA_DAMMA, DIAC_SHADDA_KASRA,
+        DIAC_SHADDA_FATHATAN, DIAC_SHADDA_DAMMATAN, DIAC_SHADDA_KASRATAN, DIAC_SHADDA
+    };
+    return (d < 16u) ? LUT[d] : d;
 }
 
 struct ParticleEntry {
