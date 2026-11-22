@@ -35,11 +35,14 @@ from fst_builder import (
     HEADER_V3_STRUCT,
     HEADER_V4_STRUCT,
     HEADER_V5_STRUCT,
+    HEADER_V6_STRUCT,
+    NGRAM_ENTRY_V6_STRUCT,
     NODE_CAT,
     TASH_MAGIC,
     TASH_VERSION_3,
     TASH_VERSION_4,
     TASH_VERSION_5,
+    TASH_VERSION_6,
     TREE_HDR_STRUCT,
     UINT32_MAX,
     UINT64_MAX,
@@ -120,6 +123,50 @@ def convert_tree_blob(blob: bytes) -> Tuple[bytes, bool]:
     return bytes(out), True
 
 
+def fnv1a_ngram_key(wids: Tuple[int, ...]) -> int:
+    order = len(wids)
+    h = (0xCBF29CE484222325 ^ order) * 0x100000001B3 & 0xFFFFFFFFFFFFFFFF
+    for w in wids:
+        for b in range(4):
+            h ^= (w >> (b * 8)) & 0xFF
+            h = (h * 0x100000001B3) & 0xFFFFFFFFFFFFFFFF
+    if h == 0 or h == 0xFFFFFFFFFFFFFFFF:
+        h ^= 0x9E3779B97F4A7C15
+    return h
+
+
+def build_ngram_table_v6(ngrams: Dict[Tuple[int, ...], Tuple[int, int, int, int]]) -> Tuple[bytes, int, int]:
+    if not ngrams:
+        return b"", 0, 0
+    cap = 1024
+    while cap < len(ngrams) * 2:
+        cap <<= 1
+    mask = cap - 1
+    buf = bytearray(cap * NGRAM_ENTRY_V6_STRUCT.size)
+    placed = 0
+    for wids, (best_eid, best_bon, alt_eid, alt_bon) in ngrams.items():
+        order = len(wids)
+        key = fnv1a_ngram_key(wids)
+        idx = ((key ^ (key >> 32)) & 0xFFFFFFFF) & mask
+        for step in range(32):
+            slot = (idx + step) & mask
+            off = slot * NGRAM_ENTRY_V6_STRUCT.size
+            if struct.unpack_from("<Q", buf, off)[0] == 0:
+                NGRAM_ENTRY_V6_STRUCT.pack_into(
+                    buf, off,
+                    key,
+                    max(-32000, min(32000, int(best_bon))),
+                    best_eid & 0xFF,
+                    order & 0xFF,
+                    max(-32000, min(32000, int(alt_bon))),
+                    alt_eid & 0xFF,
+                    0,
+                )
+                placed += 1
+                break
+    return bytes(buf), cap, placed
+
+
 def write_v5_model(
     dst_path: str,
     fst_blob: bytes,
@@ -137,6 +184,7 @@ def write_v5_model(
     min_bigram_lift: int = 128,
     has_24_roles: bool = True,
     irab_56f: bool = False,
+    ngrams: Dict[Tuple[int, ...], Tuple[int, int, int, int]] = None,
 ) -> int:
     meta_cnt = len(word_meta_list)
     cand_cnt = len(cand_records)
@@ -266,10 +314,13 @@ def write_v5_model(
     )
     weights_bytes = struct.pack(f"<{len(weights)}i", *[int(w) for w in weights])
 
+    ng_bytes, ng_cap, ng_cnt = build_ngram_table_v6(ngrams) if ngrams else (b"", 0, 0)
+    use_v6 = ng_cap > 0
+
     def align8(x: int) -> int:
         return (x + 7) & ~7
 
-    off = align8(HEADER_V5_STRUCT.size)
+    off = align8(HEADER_V6_STRUCT.size if use_v6 else HEADER_V5_STRUCT.size)
     o_fst = off; off = align8(off + len(fst_blob))
     o_meta = off; off = align8(off + len(meta_v3))
     o_cand = off; off = align8(off + len(cands_bytes))
@@ -282,11 +333,12 @@ def write_v5_model(
     o_oov = off; off = align8(off + len(oov_v5))
     o_irab = off; off = align8(off + len(irab_v5))
     o_morph = off; off = align8(off + len(morph_v5))
-    o_weights = off
-    total_size = align8(off + len(weights_bytes))
+    o_weights = off; off = align8(off + len(weights_bytes))
+    o_ng = off if use_v6 else 0
+    total_size = align8(off + len(ng_bytes)) if use_v6 else align8(o_weights + len(weights_bytes))
 
-    hdr_bytes = HEADER_V5_STRUCT.pack(
-        TASH_MAGIC, TASH_VERSION_5, flags_v5,
+    hdr_vals = (
+        TASH_MAGIC, TASH_VERSION_6 if use_v6 else TASH_VERSION_5, flags_v5,
         o_fst, len(fst_blob),
         o_meta, meta_cnt,
         o_cand, cand_cnt,
@@ -301,21 +353,31 @@ def write_v5_model(
         o_morph, len(morph_v5),
         o_weights, len(weights),
     )
+    if use_v6:
+        hdr_bytes = HEADER_V6_STRUCT.pack(*hdr_vals, o_ng, ng_cap, ng_cnt)
+    else:
+        hdr_bytes = HEADER_V5_STRUCT.pack(*hdr_vals)
+
+    sections = [
+        (0, hdr_bytes), (o_fst, fst_blob), (o_meta, meta_v3), (o_cand, cands_bytes),
+        (o_pool, nib_bytes), (o_bg_row, bg_row_off), (o_bg_blk, bg_block_base),
+        (o_bg_ent, bg_entries), (o_bg_val, bg_vals), (o_trans, trans_bytes),
+        (o_oov, oov_v5), (o_irab, irab_v5), (o_morph, morph_v5), (o_weights, weights_bytes),
+    ]
+    if use_v6:
+        sections.append((o_ng, ng_bytes))
 
     with open(dst_path, "wb") as f:
         f.write(b"\x00" * total_size)
-        for sec_off, blob in [
-            (0, hdr_bytes), (o_fst, fst_blob), (o_meta, meta_v3), (o_cand, cands_bytes),
-            (o_pool, nib_bytes), (o_bg_row, bg_row_off), (o_bg_blk, bg_block_base),
-            (o_bg_ent, bg_entries), (o_bg_val, bg_vals), (o_trans, trans_bytes),
-            (o_oov, oov_v5), (o_irab, irab_v5), (o_morph, morph_v5), (o_weights, weights_bytes),
-        ]:
+        for sec_off, blob in sections:
             f.seek(sec_off)
             f.write(blob)
 
-    print(f"Wrote model ({total_size/1e6:.2f} MB):")
+    print(f"Wrote {'v6' if use_v6 else 'v5'} model ({total_size/1e6:.2f} MB):")
     print(f"  FST: {len(fst_blob)/1e6:.2f} MB | Meta: {len(meta_v3)/1e6:.2f} MB | Cands: {len(cands_bytes)/1e6:.2f} MB | Core: {len(nib_bytes)/1e6:.2f} MB")
     print(f"  Bigrams CSR5: {(len(bg_row_off)+len(bg_block_base)+len(bg_entries)+len(bg_vals))/1e6:.2f} MB ({entry_count:,} pairs) | Trans: {len(trans_bytes)/1e6:.2f} MB")
+    if use_v6:
+        print(f"  Ngrams V6: {len(ng_bytes)/1e6:.2f} MB ({ng_cnt:,}/{ng_cap:,} slots)")
     print(f"  Trees (4B/node={all_trees_v5}): OOV={len(oov_v5)/1e6:.2f} MB | Irab={len(irab_v5)/1e6:.2f} MB | Morph={len(morph_v5)/1e6:.2f} MB")
     return total_size
 

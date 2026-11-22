@@ -15,6 +15,7 @@ from arabic_utils import (
     DIAC_KASRA,
     DIAC_NONE,
     DIAC_SHADDA,
+    DIAC_SHADDA_DAMMA,
     DIAC_SHADDA_FATHA,
     DIAC_SUKUN,
     NUM_DIACRITICS,
@@ -280,7 +281,7 @@ def _is_verb_cand_py(undiac: str, syms: bytes, diacs: List[int], cpos: int, si: 
         return 0
     if si["verb_like"] == 2:
         return 1
-    if len(syms) >= 3 and undiac[0] in ("ي", "ت", "ن") and diacs[cpos] in (DIAC_DAMMA, DIAC_FATHA, DIAC_SUKUN):
+    if len(syms) >= 3 and undiac[0] in ("ي", "ت", "ن") and diacs[cpos] in (DIAC_DAMMA, DIAC_FATHA, DIAC_SUKUN, DIAC_SHADDA_DAMMA, DIAC_SHADDA_FATHA):
         return 1
     return 0
 
@@ -749,9 +750,11 @@ def _pass2_worker(task: Tuple[str, int, int]):
     fmt = _P2_STATE["format"]
     num_roles = _P2_STATE["num_roles"]
     max_bg_track = _P2_STATE["max_bg_track"]
+    max_ng_track = _P2_STATE.get("max_ng_track", 0)
 
     tc = np.zeros((num_roles, NUM_DIACRITICS, num_roles, NUM_DIACRITICS), dtype=np.int64)
     bg: Dict[Tuple[int, int], List[int]] = {}
+    ng: Dict[Tuple[int, ...], Dict[int, int]] = {}
     si_cache: Dict[bytes, dict] = {}
     p2_cache: Dict[Tuple[str, bytes], Tuple[int, int]] = {}
 
@@ -768,11 +771,13 @@ def _pass2_worker(task: Tuple[str, int, int]):
             prev_wid = None
             prev_role = 0
             prev_end = DIAC_NONE
+            wid_hist: List[int] = []
             for undiac, syms, diacs in words:
                 if len(syms) > 48:
                     prev_wid = None
                     prev_role = 0
                     prev_end = DIAC_NONE
+                    wid_hist.clear()
                     continue
                 diacs_b = bytes(diacs)
                 ckey = (undiac, diacs_b)
@@ -787,7 +792,7 @@ def _pass2_worker(task: Tuple[str, int, int]):
                             si_cache[syms] = si
                     cpos, _ = resolve_case_pos(undiac, syms, diacs, vocab_set, si)
                     c_end = diacs[cpos]
-                    if fmt == "v5":
+                    if fmt in ("v5", "v6"):
                         _, tp, mc = _analyze_pos_mc_py(undiac, syms, diacs, cpos, si)
                         role = _cand_role_v5_py(si["particle"], tp, mc)
                     else:
@@ -809,8 +814,24 @@ def _pass2_worker(task: Tuple[str, int, int]):
                         bg[pair] = arr
                     if arr is not None:
                         arr[c_end] += 1
+                if wid is not None:
+                    wid_hist.append(wid)
+                    if len(wid_hist) > 5:
+                        wid_hist.pop(0)
+                    if max_ng_track > 0 and len(wid_hist) >= 3:
+                        for order in (3, 4, 5):
+                            if len(wid_hist) >= order:
+                                nkey = tuple(wid_hist[-order:])
+                                dmap = ng.get(nkey)
+                                if dmap is None and len(ng) < max_ng_track:
+                                    dmap = {}
+                                    ng[nkey] = dmap
+                                if dmap is not None:
+                                    dmap[c_end] = dmap.get(c_end, 0) + 1
+                else:
+                    wid_hist.clear()
                 prev_wid = wid
-    return tc, bg
+    return tc, bg, ng
 
 
 def main():
@@ -823,6 +844,8 @@ def main():
     parser.add_argument("--max-bigrams", type=int, default=550000, help="Max syntactic word bigrams")
     parser.add_argument("--min-bigram-freq", type=int, default=2, help="Min frequency for word bigrams")
     parser.add_argument("--min-bigram-lift", type=int, default=128, help="Min absolute bigram lift to keep")
+    parser.add_argument("--max-ngrams", type=int, default=300000, help="Max 3/4/5-gram word context entries for v6")
+    parser.add_argument("--min-ngram-freq", type=int, default=3, help="Min frequency for 3/4/5-gram entries")
     parser.add_argument("--max-tree-lines", type=int, default=300000, help="Reservoir sample lines for tree training")
     parser.add_argument("--max-tree-samples", type=int, default=650000, help="Max samples for each tree model")
     parser.add_argument("--tree-backend", choices=["lgb", "rf", "none"], default="lgb", help="Tree model backend")
@@ -831,7 +854,7 @@ def main():
     parser.add_argument("--morph-trees", type=int, default=20, help="Boosting rounds / trees for Morph/POS model")
     parser.add_argument("--max-depth", type=int, default=6, help="Max depth of trees")
     parser.add_argument("--prune-proclitic-freq", type=int, default=3, help="Prune redundant prefixed words <= freq if stem reproduces top form")
-    parser.add_argument("--format", choices=["v5", "v4", "v2"], default="v5", help="Output model format")
+    parser.add_argument("--format", choices=["v6", "v5", "v4", "v2"], default="v6", help="Output model format")
     args = parser.parse_args()
 
     t_start = time.time()
@@ -894,7 +917,7 @@ def main():
     print(f"  Pruned {pruned_redundant:,} redundant low-freq proclitic surface words; kept {len(kept_words):,}")
 
     words_syms = [word_syms_map[w] for w in kept_words]
-    if args.format == "v5":
+    if args.format in ("v5", "v6"):
         fst_bytes, bfs_order = build_bitmapped_fst_v5(words_syms)
         kept_words = [kept_words[idx] for idx in bfs_order]
         words_syms = [word_syms_map[w] for w in kept_words]
@@ -977,22 +1000,25 @@ def main():
 
     del word_cands, word_total
 
-    print(f"[3/5] Parallel pass 2 ({len(chunks)} workers) for 24-role transitions & syntactic bigrams ...")
-    num_roles = 24 if args.format == "v5" else 16
+    print(f"[3/5] Parallel pass 2 ({len(chunks)} workers) for 24-role transitions, bigrams & 3/4/5-grams ...")
+    num_roles = 24 if args.format in ("v5", "v6") else 16
     trans_counts = np.zeros((num_roles, NUM_DIACRITICS, num_roles, NUM_DIACRITICS), dtype=np.int64)
     bigram_counts: Dict[Tuple[int, int], List[int]] = {}
     bigram_totals: Counter = Counter()
+    ngram_counts: Dict[Tuple[int, ...], Dict[int, int]] = {}
+    ngram_totals: Counter = Counter()
 
     _P2_STATE["vocab_set"] = vocab_set
     _P2_STATE["word_to_id"] = word_to_id
     _P2_STATE["format"] = args.format
     _P2_STATE["num_roles"] = num_roles
     _P2_STATE["max_bg_track"] = max(200000, (args.max_bigrams * 3) // max(1, len(chunks)))
+    _P2_STATE["max_ng_track"] = max(100000, (args.max_ngrams * 3) // max(1, len(chunks))) if (args.format == "v6" and args.max_ngrams > 0) else 0
 
     if len(chunks) > 1:
         ctx = mp.get_context("fork")
         with ctx.Pool(len(chunks)) as pool:
-            for tc, bg in pool.imap_unordered(_pass2_worker, [(args.corpus, s, e) for s, e in chunks]):
+            for tc, bg, ng in pool.imap_unordered(_pass2_worker, [(args.corpus, s, e) for s, e in chunks]):
                 trans_counts += tc
                 for pair, arr in bg.items():
                     cur = bigram_counts.get(pair)
@@ -1003,14 +1029,26 @@ def main():
                         for d in range(NUM_DIACRITICS):
                             cur[d] += arr[d]
                         bigram_totals[pair] += sum(arr)
+                for nkey, dmap in ng.items():
+                    cur_d = ngram_counts.get(nkey)
+                    if cur_d is None:
+                        ngram_counts[nkey] = dmap
+                        ngram_totals[nkey] = sum(dmap.values())
+                    else:
+                        for d, cnt in dmap.items():
+                            cur_d[d] = cur_d.get(d, 0) + cnt
+                        ngram_totals[nkey] += sum(dmap.values())
     else:
-        tc, bg = _pass2_worker((args.corpus, chunks[0][0], chunks[0][1]))
+        tc, bg, ng = _pass2_worker((args.corpus, chunks[0][0], chunks[0][1]))
         trans_counts = tc
         bigram_counts = bg
         for pair, arr in bg.items():
             bigram_totals[pair] = sum(arr)
+        ngram_counts = ng
+        for nkey, dmap in ng.items():
+            ngram_totals[nkey] = sum(dmap.values())
     _P2_STATE.clear()
-    print(f"  pass 2 done ({time.time()-t_start:.1f}s) | tracked pairs: {len(bigram_counts):,}")
+    print(f"  pass 2 done ({time.time()-t_start:.1f}s) | tracked pairs: {len(bigram_counts):,} | ngrams: {len(ngram_counts):,}")
 
     top_pairs = [
         p for p, tot in bigram_totals.most_common(args.max_bigrams) if tot >= args.min_bigram_freq
@@ -1028,10 +1066,33 @@ def main():
             lift = (math.log(p_bg) - float(base_logp[d])) * 800.0
             bonuses.append(int(round(max(-4000.0, min(4000.0, lift)))))
         bigrams_v5[pair] = bonuses
-        if args.format != "v5":
+        if args.format not in ("v5", "v6"):
             bigrams_compiled[pair] = (bonuses, 0)
 
-    print(f"  Kept bigrams: {len(top_pairs):,}")
+    ngrams_v6: Dict[Tuple[int, ...], Tuple[int, int, int, int]] = {}
+    if args.format == "v6" and args.max_ngrams > 0:
+        for nkey, tot in ngram_totals.most_common(args.max_ngrams * 2):
+            if tot < args.min_ngram_freq:
+                break
+            dmap = ngram_counts[nkey]
+            curr_wid = nkey[-1]
+            base_logp = word_case_logp[curr_wid]
+            ranked = sorted(dmap.items(), key=lambda x: -x[1])
+            b_eid, b_cnt = ranked[0]
+            b_lift = int(round((math.log((b_cnt + 0.5) / (tot + 0.5 * NUM_DIACRITICS)) - float(base_logp[b_eid])) * 900.0))
+            b_lift = max(-4000, min(4000, b_lift))
+            a_eid, a_lift = 0, 0
+            if len(ranked) > 1:
+                a_eid, a_cnt = ranked[1]
+                a_lift = int(round((math.log((a_cnt + 0.5) / (tot + 0.5 * NUM_DIACRITICS)) - float(base_logp[a_eid])) * 900.0))
+                a_lift = max(-4000, min(4000, a_lift))
+            if abs(b_lift) >= args.min_bigram_lift or abs(a_lift) >= args.min_bigram_lift:
+                ngrams_v6[nkey] = (b_eid, b_lift, a_eid, a_lift)
+                if len(ngrams_v6) >= args.max_ngrams:
+                    break
+        print(f"  Kept bigrams: {len(top_pairs):,} | Kept 3/4/5-grams: {len(ngrams_v6):,}")
+    else:
+        print(f"  Kept bigrams: {len(top_pairs):,}")
     trans_bytes = compute_trans_matrix(trans_counts)
     trans_size = len(trans_bytes) // 2
 
@@ -1056,7 +1117,7 @@ def main():
         print("[4/5] Skipping tree models (--tree-backend none).")
 
     print(f"[5/5] Writing {args.format} binary model to {args.output} ...")
-    if args.format == "v5":
+    if args.format in ("v5", "v6"):
         total_bytes = write_v5_model(
             dst_path=args.output,
             fst_blob=fst_bytes,
@@ -1074,6 +1135,7 @@ def main():
             min_bigram_lift=args.min_bigram_lift,
             has_24_roles=True,
             irab_56f=True,
+            ngrams=ngrams_v6 if args.format == "v6" else None,
         )
     else:
         meta_buf = bytearray(len(meta_list) * WORD_META_STRUCT.size)

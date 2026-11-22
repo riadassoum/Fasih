@@ -109,7 +109,7 @@ public:
 
     bool load(const std::string& model_path, std::string* err_msg = nullptr);
     void unload();
-    bool is_loaded() const { return mapped_ptr_ != nullptr; }
+    bool is_loaded() const { return mapped_ptr_ != nullptr || !owned_buf_.empty(); }
 
     std::string diacritize(const char* utf8_text, size_t len) const;
     std::string diacritize(const std::string& text) const { return diacritize(text.data(), text.size()); }
@@ -118,15 +118,47 @@ public:
     uint32_t fst_nodes_count() const { return fst_nodes_count_; }
     bool has_oov_trees() const { return oov_trees_.valid(); }
     bool has_irab_trees() const { return irab_trees_.valid(); }
+    bool has_irab2_trees() const { return irab2_trees_.valid(); }
     bool has_morph_trees() const { return morph_trees_.valid(); }
+    bool has_v7_valency() const { return valency_.valid(); }
+    bool has_v7_trans3() const { return trans3_ != nullptr && trans3_size_ == TRANS3_TABLE_SIZE; }
+    bool has_v7_core_bg() const { return !core_bg_.empty(); }
 
-    int32_t weight(uint32_t id) const { return id < NUM_WEIGHTS ? weights_[id] : 0; }
-    bool set_weight(uint32_t id, int32_t v) {
-        if (id >= NUM_WEIGHTS) return false;
-        weights_[id] = v;
-        return true;
+    int32_t weight(uint32_t id) const {
+        if (id < NUM_WEIGHTS) return weights_[id];
+        if (id >= 100 && id < 100 + NUM_V7_WEIGHTS) return v7_weights_[id - 100];
+        return 0;
     }
-    void set_restore_spelling(bool v) { restore_spelling_ = v; }
+    bool set_weight(uint32_t id, int32_t v) {
+        if (id < NUM_WEIGHTS) {
+            weights_[id] = v;
+            ++cache_epoch_;
+            return true;
+        }
+        if (id >= 100 && id < 100 + NUM_V7_WEIGHTS) {
+            v7_weights_[id - 100] = v;
+            ++cache_epoch_;
+            return true;
+        }
+        return false;
+    }
+    void set_restore_spelling(bool v) { restore_spelling_ = v; ++cache_epoch_; }
+
+    // Fast C++ helper for training Pass-2 Stacked Irab2 GBDT with 100% zero train/inference skew
+    struct Irab2DumpSample {
+        int32_t feat[IRAB2_NUM_FEATURES];
+        uint8_t gold_end;
+        uint8_t p1_end;
+        uint8_t multi_end;
+    };
+    void dump_irab2_sentence(const char* gold_utf8, size_t len, std::vector<Irab2DumpSample>& out) const;
+    // Fast FST/lexicon read helpers for external C++ V7 table extractor
+    uint32_t lookup_word_id(const uint8_t* syms, size_t len) const { return fst_.lookup(syms, len); }
+    bool word_has_multi_core(uint32_t wid, const uint8_t* syms, size_t len) const;
+    void extract_word_top_info(uint32_t wid, const uint8_t* syms, size_t len,
+                               uint8_t& out_case_pos, uint8_t& out_top_end, uint8_t& out_top_verb) const;
+    void extract_word_core_priors(uint32_t wid, const uint8_t* syms, size_t len,
+                                  uint16_t out_hashes[4], float out_probs[4], int& out_cnt) const;
 
 private:
     struct Cand {
@@ -143,12 +175,22 @@ private:
         uint8_t morph_class;
     };
 
+    enum BoundaryMask : uint8_t {
+        BK_NONE = 0,
+        BK_HARD = 1 << 0,
+        BK_COMMA = 1 << 1,
+        BK_OPEN = 1 << 2,
+        BK_CLOSE = 1 << 3,
+        BK_OTHER = 1 << 4
+    };
+
     struct Token {
         uint32_t off = 0;
         uint8_t n = 0;
         uint32_t word_id = UINT32_MAX;
         uint8_t role = 0;
         uint8_t boundary_before = 1;
+        uint8_t bkind_mask = BK_HARD;
         uint8_t lex_top_end = 255;
         uint8_t top_verb = 0;
         uint8_t has_noun_lex = 0;
@@ -157,6 +199,7 @@ private:
         uint8_t is_ibn = 0;
         uint8_t is_adj_like = 0;
         uint8_t digit_after = 0;
+        uint8_t num_after_class = 0;
         uint8_t top_pos = POS_UNK;
         uint16_t surf_flags = 0;
         SurfaceInfo si;
@@ -173,6 +216,9 @@ private:
     };
 
     uint32_t lookup_relaxed(const uint8_t* syms, size_t n, int& repl_pos, uint8_t& repl_sym) const;
+    std::string diacritize_internal(const char* utf8_text, size_t len,
+                                    std::vector<Irab2DumpSample>* dump_out,
+                                    const std::vector<std::array<uint8_t, MAX_WORD_LEN>>* gold_diacs) const;
     bool has_stem_in_fst(const uint8_t* s, size_t stem_len) const;
     void emit_stem(Ctx& ctx, Token& tok, uint32_t stem_id, size_t pre_len, const uint8_t* pre_diac,
                    bool has_al, size_t suf_idx, int32_t penalty, uint8_t extra_flags,
@@ -187,7 +233,19 @@ private:
     int32_t binary_rules(const Ctx& ctx, const Token* p3, const Token* p2, const Token& pt, const Cand& pc,
                          const Token& ct, const Cand& cc, const Token* nx) const;
     uint8_t cand_role_v5(const Token& tok, const Cand& c) const;
+    uint8_t cand_state3_v7(const Token& tok, const Cand& c, const uint8_t* ts) const;
     int32_t trans_score(uint8_t prev_role, uint8_t prev_end, uint8_t curr_role, uint8_t curr_end) const;
+    inline int32_t trans3_score(uint8_t s2, uint8_t s1, uint8_t s0) const {
+        if (!trans3_ || trans3_size_ != TRANS3_TABLE_SIZE ||
+            s2 >= NUM_TRANS3_STATES || s1 >= NUM_TRANS3_STATES || s0 >= NUM_TRANS3_STATES) {
+            return 0;
+        }
+        return static_cast<int32_t>(
+            trans3_[(static_cast<size_t>(s2) * NUM_TRANS3_STATES + s1) * NUM_TRANS3_STATES + s0]) * 16;
+    }
+    inline ValencyInfo get_valency(uint32_t wid) const {
+        return valency_.get(wid);
+    }
 
     inline uint8_t meta_word_len(uint32_t wid) const {
         return (is_v3_ || is_v5_) ? word_meta_v3_[wid].word_len : word_meta_[wid].word_len;
@@ -232,13 +290,16 @@ private:
 
     void* mapped_ptr_ = nullptr;
     size_t mapped_size_ = 0;
+    std::vector<uint8_t> owned_buf_;
 #ifdef _WIN32
     void* win_file_ = nullptr;
     void* win_map_ = nullptr;
 #endif
     bool is_v3_ = false;
     bool is_v5_ = false;
+    bool is_v7_ = false;
     bool has_v5_24roles_ = false;
+    uint64_t cache_epoch_ = 1;
     uint32_t vocab_count_ = 0;
     uint32_t fst_nodes_count_ = 0;
     BitmappedFST fst_;
@@ -249,14 +310,22 @@ private:
     const WordCandidateV5* candidates_v5_ = nullptr;
     const uint8_t* core_pool_ = nullptr;
     BigramTable bigrams_;
+    NgramTableV6 ngrams_;
+    CoreBgTableV7 core_bg_;
+    ValencyTableV7 valency_;
+    const int8_t* trans3_ = nullptr;
+    uint32_t trans3_size_ = 0;
     const int16_t* trans_matrix_ = nullptr;
     uint32_t trans_matrix_size_ = 0;
     FlatTreeEnsemble oov_trees_;
     FlatTreeEnsemble irab_trees_;
+    FlatTreeEnsemble irab2_trees_;
     FlatTreeEnsemble morph_trees_;
     uint8_t oov_feat_count_ = 16;
     uint8_t irab_feat_count_ = 40;
+    uint8_t irab2_feat_count_ = IRAB2_NUM_FEATURES;
     int32_t weights_[NUM_WEIGHTS];
+    int32_t v7_weights_[NUM_V7_WEIGHTS];
     bool restore_spelling_ = true;
 };
 

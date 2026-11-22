@@ -5,7 +5,46 @@
 #include <cstdint>
 #include <cstring>
 
+#ifdef _MSC_VER
+#include <intrin.h>
+#endif
+
 namespace tashkeel {
+
+inline uint32_t portable_popcnt64(uint64_t x) {
+#if defined(_MSC_VER) && defined(_M_X64)
+    return static_cast<uint32_t>(__popcnt64(x));
+#elif defined(__GNUC__) || defined(__clang__)
+    return static_cast<uint32_t>(__builtin_popcountll(x));
+#else
+    x = x - ((x >> 1) & 0x5555555555555555ULL);
+    x = (x & 0x3333333333333333ULL) + ((x >> 2) & 0x3333333333333333ULL);
+    return static_cast<uint32_t>((((x + (x >> 4)) & 0x0F0F0F0F0F0F0F0FULL) * 0x0101010101010101ULL) >> 56);
+#endif
+}
+
+inline uint32_t portable_popcnt32(uint32_t x) {
+#if defined(_MSC_VER) && (defined(_M_X64) || defined(_M_IX86))
+    return static_cast<uint32_t>(__popcnt(x));
+#elif defined(__GNUC__) || defined(__clang__)
+    return static_cast<uint32_t>(__builtin_popcount(x));
+#else
+    x = x - ((x >> 1) & 0x55555555u);
+    x = (x & 0x33333333u) + ((x >> 2) & 0x33333333u);
+    return (((x + (x >> 4)) & 0x0F0F0F0Fu) * 0x01010101u) >> 24;
+#endif
+}
+
+inline uint64_t read_u48(const uint8_t* p) {
+    uint64_t v = 0;
+    std::memcpy(&v, p, 6);
+    return v;
+}
+
+inline uint8_t decode_compact_ngram_order(uint8_t code) {
+    static constexpr uint8_t MAP[8] = {3, 4, 5, NG_ORDER_RBG, NG_ORDER_CTR3, NG_ORDER_SKIP1, 0, 0};
+    return MAP[code & 7u];
+}
 
 class BitmappedFST {
 public:
@@ -75,7 +114,7 @@ public:
             uint64_t bit = 1ULL << s;
             if ((node.child_mask & bit) == 0) return UINT32_MAX;
             uint64_t below = node.child_mask & (bit - 1ULL);
-            uint32_t offset = static_cast<uint32_t>(__builtin_popcountll(below));
+            uint32_t offset = portable_popcnt64(below);
             idx = node.first_child + offset;
         }
         if (idx >= count_) return UINT32_MAX;
@@ -93,11 +132,11 @@ private:
         uint32_t w_start = sb << 2;
         uint32_t w_end = idx >> 6;
         for (uint32_t w = w_start; w < w_end; ++w) {
-            r += static_cast<uint32_t>(__builtin_popcountll(bits[w]));
+            r += portable_popcnt64(bits[w]);
         }
         uint32_t rem = idx & 63u;
         if (rem) {
-            r += static_cast<uint32_t>(__builtin_popcountll(bits[w_end] & ((1ULL << rem) - 1ULL)));
+            r += portable_popcnt64(bits[w_end] & ((1ULL << rem) - 1ULL));
         }
         return r;
     }
@@ -124,7 +163,7 @@ private:
             if (s >= 38) return UINT32_MAX;
             uint64_t bit = 1ULL << s;
             if ((mask & bit) == 0) return UINT32_MAX;
-            uint32_t offset = static_cast<uint32_t>(__builtin_popcountll(mask & (bit - 1ULL)));
+            uint32_t offset = portable_popcnt64(mask & (bit - 1ULL));
             uint32_t first_child = static_cast<uint32_t>(node >> 38);
             idx = first_child + offset;
         }
@@ -144,7 +183,7 @@ private:
             const uint64_t bit = 1ULL << s;
             if ((mask & bit) == 0) return UINT32_MAX;
             const uint64_t below = mask & (bit - 1ULL);
-            const uint32_t offset = static_cast<uint32_t>(__builtin_popcountll(below));
+            const uint32_t offset = portable_popcnt64(below);
             const uint32_t first_child = static_cast<uint32_t>((lo >> 38) & NON_TERM);
             idx = first_child + offset;
         }
@@ -309,7 +348,7 @@ public:
         if (!e || ce >= NUM_DIACRITICS) return 0;
         const uint16_t bit = static_cast<uint16_t>(1u << ce);
         if ((end_mask & bit) == 0) return 0;
-        const uint32_t offset = static_cast<uint32_t>(__builtin_popcount(end_mask & (bit - 1u)));
+        const uint32_t offset = portable_popcnt32(end_mask & (bit - 1u));
         const uint32_t idx = e->val_offset + offset;
         if (idx >= val_count_) return 0;
         return vals_v4_ ? static_cast<int16_t>(static_cast<int32_t>(vals_v4_[idx]) * 32) : vals_v3_[idx];
@@ -322,7 +361,7 @@ public:
         const uint32_t eidx = static_cast<uint32_t>(entry_idx);
         const uint32_t blk = eidx >> BG_BLOCK_SHIFT_V5;
         if (blk >= block_base_count_) return 0;
-        const uint32_t offset = static_cast<uint32_t>(__builtin_popcount(end_mask & (bit - 1u)));
+        const uint32_t offset = portable_popcnt32(end_mask & (bit - 1u));
         const uint32_t idx = block_base_v5_[blk] + entries_v5_[eidx].local_val_off + offset;
         if (idx >= val_count_) return 0;
         return vals_v4_ ? static_cast<int16_t>(static_cast<int32_t>(vals_v4_[idx]) * 32) : vals_v3_[idx];
@@ -351,5 +390,410 @@ private:
     const int8_t* vals_v4_ = nullptr;
     uint32_t val_count_ = 0;
 };
+
+struct NgramLookupResult {
+    int16_t best_bonus = 0;
+    int16_t alt_bonus = 0;
+    uint8_t best_ending_id = 0;
+    uint8_t alt_ending_id = 0;
+    uint8_t order = 0;
+};
+
+class NgramTableV6 {
+public:
+    void init(const NgramEntryV6* entries, uint32_t capacity) {
+        entries_ = entries;
+        capacity_ = capacity;
+        mask_ = (capacity > 0 && (capacity & (capacity - 1u)) == 0) ? (capacity - 1u) : 0u;
+        compact_buckets_ = nullptr;
+        compact_entries_ = nullptr;
+        compact_num_buckets_ = 0;
+        compact_num_entries_ = 0;
+    }
+
+    bool init_compact(const uint8_t* blob, uint32_t byte_size) {
+        entries_ = nullptr;
+        capacity_ = 0;
+        mask_ = 0;
+        compact_buckets_ = nullptr;
+        compact_entries_ = nullptr;
+        compact_num_buckets_ = 0;
+        compact_num_entries_ = 0;
+        if (!blob || byte_size < sizeof(CompactBucketHeader)) return false;
+        const auto* h = reinterpret_cast<const CompactBucketHeader*>(blob);
+        if (h->num_buckets != 65536u) return false;
+        size_t off = sizeof(CompactBucketHeader);
+        size_t b_bytes = static_cast<size_t>(h->num_buckets + 1u) * sizeof(uint32_t);
+        size_t e_bytes = static_cast<size_t>(h->num_entries) * sizeof(CompactNgramEntry);
+        if (off + b_bytes + e_bytes > byte_size) return false;
+        compact_buckets_ = reinterpret_cast<const uint32_t*>(blob + off);
+        compact_entries_ = reinterpret_cast<const CompactNgramEntry*>(blob + off + b_bytes);
+        compact_num_buckets_ = h->num_buckets;
+        compact_num_entries_ = h->num_entries;
+        return true;
+    }
+
+    bool empty() const {
+        return (entries_ == nullptr || mask_ == 0) && (compact_entries_ == nullptr || compact_num_entries_ == 0);
+    }
+
+    static inline uint64_t fnv1a_key(const uint32_t* wids, uint8_t order) {
+        uint64_t h = 0xcbf29ce484222325ULL;
+        h ^= static_cast<uint64_t>(order);
+        h *= 0x100000001b3ULL;
+        for (uint8_t k = 0; k < order; ++k) {
+            uint32_t w = wids[k];
+            for (int b = 0; b < 4; ++b) {
+                h ^= static_cast<uint64_t>((w >> (b * 8)) & 0xFFu);
+                h *= 0x100000001b3ULL;
+            }
+        }
+        return (h == 0 || h == UINT64_MAX) ? (h ^ 0x9e3779b97f4a7c15ULL) : h;
+    }
+
+    inline const NgramEntryV6* find(const uint32_t* wids, uint8_t order, uint8_t n_wids = 0) const {
+        if (!entries_ || mask_ == 0) return nullptr;
+        const uint8_t cnt = (n_wids == 0) ? order : n_wids;
+        uint64_t key = fnv1a_key_tagged(wids, cnt, order);
+        uint32_t idx = static_cast<uint32_t>(key ^ (key >> 32)) & mask_;
+        for (uint32_t step = 0; step < 32; ++step) {
+            const NgramEntryV6& e = entries_[(idx + step) & mask_];
+            if (e.key_hash == key && e.order == order) return &e;
+            if (e.key_hash == 0) return nullptr;
+        }
+        return nullptr;
+    }
+
+    inline bool find_val(const uint32_t* wids, uint8_t order, NgramLookupResult& out, uint8_t n_wids = 0) const {
+        if (compact_entries_) {
+            const uint8_t cnt = (n_wids == 0) ? order : n_wids;
+            const uint64_t key = fnv1a_key_tagged(wids, cnt, order);
+            const uint32_t b = static_cast<uint32_t>(key >> 48);
+            const uint64_t klo = key & 0xFFFFFFFFFFFFULL;
+            uint32_t lo = compact_buckets_[b];
+            uint32_t hi = compact_buckets_[b + 1u];
+            if (hi > compact_num_entries_) hi = compact_num_entries_;
+            if (lo >= hi) return false;
+            if (hi - lo <= 8u) {
+                for (uint32_t i = lo; i < hi; ++i) {
+                    const uint64_t ek = read_u48(compact_entries_[i].key_lo);
+                    if (ek == klo) {
+                        uint64_t p = 0;
+                        std::memcpy(&p, compact_entries_[i].payload, 5);
+                        uint8_t ord = decode_compact_ngram_order(static_cast<uint8_t>((p >> 34) & 7u));
+                        if (ord == order) {
+                            out.best_bonus = static_cast<int16_t>(static_cast<int32_t>(p & 0x1FFFu) - 4096);
+                            out.alt_bonus = static_cast<int16_t>(static_cast<int32_t>((p >> 13) & 0x1FFFu) - 4096);
+                            out.best_ending_id = static_cast<uint8_t>((p >> 26) & 0xFu);
+                            out.alt_ending_id = static_cast<uint8_t>((p >> 30) & 0xFu);
+                            out.order = ord;
+                            return true;
+                        }
+                    } else if (ek > klo) {
+                        return false;
+                    }
+                }
+                return false;
+            }
+            uint32_t l = lo, r = hi;
+            while (l < r) {
+                uint32_t mid = l + ((r - l) >> 1);
+                if (read_u48(compact_entries_[mid].key_lo) < klo) l = mid + 1u;
+                else r = mid;
+            }
+            for (uint32_t i = l; i < hi; ++i) {
+                const uint64_t ek = read_u48(compact_entries_[i].key_lo);
+                if (ek != klo) break;
+                uint64_t p = 0;
+                std::memcpy(&p, compact_entries_[i].payload, 5);
+                uint8_t ord = decode_compact_ngram_order(static_cast<uint8_t>((p >> 34) & 7u));
+                if (ord == order) {
+                    out.best_bonus = static_cast<int16_t>(static_cast<int32_t>(p & 0x1FFFu) - 4096);
+                    out.alt_bonus = static_cast<int16_t>(static_cast<int32_t>((p >> 13) & 0x1FFFu) - 4096);
+                    out.best_ending_id = static_cast<uint8_t>((p >> 26) & 0xFu);
+                    out.alt_ending_id = static_cast<uint8_t>((p >> 30) & 0xFu);
+                    out.order = ord;
+                    return true;
+                }
+            }
+            return false;
+        }
+        const NgramEntryV6* e = find(wids, order, n_wids);
+        if (!e) return false;
+        out.best_bonus = e->best_bonus;
+        out.alt_bonus = e->alt_bonus;
+        out.best_ending_id = e->best_ending_id;
+        out.alt_ending_id = e->alt_ending_id;
+        out.order = e->order;
+        return true;
+    }
+
+    static inline uint64_t fnv1a_key_tagged(const uint32_t* wids, uint8_t cnt, uint8_t tag) {
+        uint64_t h = 0xcbf29ce484222325ULL;
+        h ^= static_cast<uint64_t>(tag);
+        h *= 0x100000001b3ULL;
+        for (uint8_t k = 0; k < cnt; ++k) {
+            uint32_t w = wids[k];
+            for (int b = 0; b < 4; ++b) {
+                h ^= static_cast<uint64_t>((w >> (b * 8)) & 0xFFu);
+                h *= 0x100000001b3ULL;
+            }
+        }
+        return (h == 0 || h == UINT64_MAX) ? (h ^ 0x9e3779b97f4a7c15ULL) : h;
+    }
+
+private:
+    const NgramEntryV6* entries_ = nullptr;
+    uint32_t capacity_ = 0;
+    uint32_t mask_ = 0;
+    const uint32_t* compact_buckets_ = nullptr;
+    const CompactNgramEntry* compact_entries_ = nullptr;
+    uint32_t compact_num_buckets_ = 0;
+    uint32_t compact_num_entries_ = 0;
+};
+
+struct CoreBgLookupResult {
+    uint16_t best_core_h = 0;
+    uint16_t alt_core_h = 0;
+    int16_t best_bonus = 0;
+    int16_t alt_bonus = 0;
+};
+
+class CoreBgTableV7 {
+public:
+    void init(const CoreBgEntryV7* entries, uint32_t capacity) {
+        entries_ = entries;
+        capacity_ = capacity;
+        mask_ = (capacity > 0 && (capacity & (capacity - 1u)) == 0) ? (capacity - 1u) : 0u;
+        compact_buckets_ = nullptr;
+        compact_entries_ = nullptr;
+        compact_num_buckets_ = 0;
+        compact_num_entries_ = 0;
+    }
+
+    bool init_compact(const uint8_t* blob, uint32_t byte_size) {
+        entries_ = nullptr;
+        capacity_ = 0;
+        mask_ = 0;
+        compact_buckets_ = nullptr;
+        compact_entries_ = nullptr;
+        compact_num_buckets_ = 0;
+        compact_num_entries_ = 0;
+        if (!blob || byte_size < sizeof(CompactBucketHeader)) return false;
+        const auto* h = reinterpret_cast<const CompactBucketHeader*>(blob);
+        if (h->num_buckets != 65536u) return false;
+        size_t off = sizeof(CompactBucketHeader);
+        size_t b_bytes = static_cast<size_t>(h->num_buckets + 1u) * sizeof(uint32_t);
+        size_t e_bytes = static_cast<size_t>(h->num_entries) * sizeof(CompactCoreBgEntry);
+        if (off + b_bytes + e_bytes > byte_size) return false;
+        compact_buckets_ = reinterpret_cast<const uint32_t*>(blob + off);
+        compact_entries_ = reinterpret_cast<const CompactCoreBgEntry*>(blob + off + b_bytes);
+        compact_num_buckets_ = h->num_buckets;
+        compact_num_entries_ = h->num_entries;
+        return true;
+    }
+
+    bool empty() const {
+        return (entries_ == nullptr || mask_ == 0) && (compact_entries_ == nullptr || compact_num_entries_ == 0);
+    }
+
+    inline const CoreBgEntryV7* find(uint8_t dir, const uint32_t* wids, uint8_t cnt) const {
+        if (!entries_ || mask_ == 0) return nullptr;
+        uint64_t key = NgramTableV6::fnv1a_key_tagged(wids, cnt, static_cast<uint8_t>(0x80u | dir));
+        uint32_t idx = static_cast<uint32_t>(key ^ (key >> 32)) & mask_;
+        for (uint32_t step = 0; step < 32; ++step) {
+            const CoreBgEntryV7& e = entries_[(idx + step) & mask_];
+            if (e.key_hash == key) return &e;
+            if (e.key_hash == 0) return nullptr;
+        }
+        return nullptr;
+    }
+
+    inline bool find_val(uint8_t dir, const uint32_t* wids, uint8_t cnt, CoreBgLookupResult& out) const {
+        if (compact_entries_) {
+            const uint64_t key = NgramTableV6::fnv1a_key_tagged(wids, cnt, static_cast<uint8_t>(0x80u | dir));
+            const uint32_t b = static_cast<uint32_t>(key >> 48);
+            const uint64_t klo = key & 0xFFFFFFFFFFFFULL;
+            uint32_t lo = compact_buckets_[b];
+            uint32_t hi = compact_buckets_[b + 1u];
+            if (hi > compact_num_entries_) hi = compact_num_entries_;
+            if (lo >= hi) return false;
+            if (hi - lo <= 8u) {
+                for (uint32_t i = lo; i < hi; ++i) {
+                    const uint64_t ek = read_u48(compact_entries_[i].key_lo);
+                    if (ek == klo) {
+                        out.best_core_h = compact_entries_[i].best_core_h;
+                        out.alt_core_h = compact_entries_[i].alt_core_h;
+                        out.best_bonus = compact_entries_[i].best_bonus;
+                        out.alt_bonus = compact_entries_[i].alt_bonus;
+                        return true;
+                    }
+                    if (ek > klo) return false;
+                }
+                return false;
+            }
+            while (lo < hi) {
+                uint32_t mid = lo + ((hi - lo) >> 1);
+                const uint64_t ek = read_u48(compact_entries_[mid].key_lo);
+                if (ek < klo) lo = mid + 1u;
+                else if (ek > klo) hi = mid;
+                else {
+                    out.best_core_h = compact_entries_[mid].best_core_h;
+                    out.alt_core_h = compact_entries_[mid].alt_core_h;
+                    out.best_bonus = compact_entries_[mid].best_bonus;
+                    out.alt_bonus = compact_entries_[mid].alt_bonus;
+                    return true;
+                }
+            }
+            return false;
+        }
+        const CoreBgEntryV7* e = find(dir, wids, cnt);
+        if (!e) return false;
+        out.best_core_h = e->best_core_h;
+        out.alt_core_h = e->alt_core_h;
+        out.best_bonus = e->best_bonus;
+        out.alt_bonus = e->alt_bonus;
+        return true;
+    }
+
+private:
+    const CoreBgEntryV7* entries_ = nullptr;
+    uint32_t capacity_ = 0;
+    uint32_t mask_ = 0;
+    const uint32_t* compact_buckets_ = nullptr;
+    const CompactCoreBgEntry* compact_entries_ = nullptr;
+    uint32_t compact_num_buckets_ = 0;
+    uint32_t compact_num_entries_ = 0;
+};
+
+struct ValencyInfo {
+    uint8_t v_trans = 0;         // 0=non-verb/unk, 1=intransitive, 2=transitive, 3=prep/clause-verb
+    uint8_t next_case_pref = 0;  // 0=neutral, 1=DAMMA, 2=FATHA, 3=KASRA
+    uint8_t word_syn_type = 0;   // 0=other, 1=mudaf-head, 2=adj/mod, 3=adverbial-acc
+    uint8_t next2_case_pref = 0; // 0=neutral, 1=DAMMA, 2=FATHA, 3=KASRA
+    int8_t val_odds = 0;         // -7..+7 (verbs: acc vs nom; nouns: gen_next vs non_gen)
+    uint8_t tan_ratio = 0;       // 0..7
+    uint8_t is_gram_fem = 0;     // 0..1
+    uint8_t next_nom_p = 0;      // 0..15
+    uint8_t next_acc_p = 0;      // 0..15
+    uint8_t next_gen_p = 0;      // 0..15
+    uint8_t verb_prob = 0;       // 0..15
+};
+
+inline ValencyInfo unpack_valency(uint32_t v) {
+    ValencyInfo o;
+    o.v_trans = static_cast<uint8_t>(v & 3u);
+    o.next_case_pref = static_cast<uint8_t>((v >> 2) & 3u);
+    o.word_syn_type = static_cast<uint8_t>((v >> 4) & 3u);
+    o.next2_case_pref = static_cast<uint8_t>((v >> 6) & 3u);
+    o.val_odds = static_cast<int8_t>(static_cast<int>((v >> 8) & 15u) - 7);
+    o.tan_ratio = static_cast<uint8_t>((v >> 12) & 7u);
+    o.is_gram_fem = static_cast<uint8_t>((v >> 15) & 1u);
+    o.next_nom_p = static_cast<uint8_t>((v >> 16) & 15u);
+    o.next_acc_p = static_cast<uint8_t>((v >> 20) & 15u);
+    o.next_gen_p = static_cast<uint8_t>((v >> 24) & 15u);
+    o.verb_prob = static_cast<uint8_t>((v >> 28) & 15u);
+    return o;
+}
+
+class ValencyTableV7 {
+public:
+    void init_raw(const uint32_t* raw, uint32_t count) {
+        raw_ = raw;
+        count_ = count;
+        bits_ = nullptr;
+        super_ = nullptr;
+        vals_ = nullptr;
+        num_nonzero_ = 0;
+    }
+
+    bool init_compact(const uint8_t* blob, uint32_t byte_size) {
+        raw_ = nullptr;
+        count_ = 0;
+        bits_ = nullptr;
+        super_ = nullptr;
+        vals_ = nullptr;
+        num_nonzero_ = 0;
+        if (!blob || byte_size < sizeof(CompactValencyHeader)) return false;
+        const auto* h = reinterpret_cast<const CompactValencyHeader*>(blob);
+        size_t off = (sizeof(CompactValencyHeader) + 7u) & ~7u;
+        size_t bw_bytes = static_cast<size_t>(h->bitmap_words) * sizeof(uint64_t);
+        size_t sb_bytes = ((static_cast<size_t>(h->super_blocks) * sizeof(uint32_t)) + 7u) & ~7u;
+        size_t val_bytes = static_cast<size_t>(h->num_nonzero) * sizeof(uint32_t);
+        if (off + bw_bytes + sb_bytes + val_bytes > byte_size) return false;
+        if (static_cast<uint64_t>(h->bitmap_words) * 64u < h->num_words) return false;
+        if (static_cast<uint64_t>(h->super_blocks) * 256u < h->num_words) return false;
+        bits_ = reinterpret_cast<const uint64_t*>(blob + off);
+        off += bw_bytes;
+        super_ = reinterpret_cast<const uint32_t*>(blob + off);
+        off += sb_bytes;
+        vals_ = reinterpret_cast<const uint32_t*>(blob + off);
+        count_ = h->num_words;
+        num_nonzero_ = h->num_nonzero;
+        return true;
+    }
+
+    bool valid() const { return count_ > 0 && (raw_ != nullptr || bits_ != nullptr); }
+    uint32_t count() const { return count_; }
+
+    inline uint32_t get_packed(uint32_t wid) const {
+        if (wid >= count_) return 0u;
+        if (raw_) return raw_[wid];
+        if (!bits_) return 0u;
+        if (((bits_[wid >> 6] >> (wid & 63u)) & 1ULL) == 0ULL) return 0u;
+        uint32_t sb = wid >> 8;
+        uint32_t r = super_[sb];
+        uint32_t w_start = sb << 2;
+        uint32_t w_end = wid >> 6;
+        for (uint32_t w = w_start; w < w_end; ++w) r += portable_popcnt64(bits_[w]);
+        uint32_t rem = wid & 63u;
+        if (rem) r += portable_popcnt64(bits_[w_end] & ((1ULL << rem) - 1ULL));
+        return (r < num_nonzero_) ? vals_[r] : 0u;
+    }
+
+    inline ValencyInfo get(uint32_t wid) const {
+        if (!valid() || wid >= count_) return ValencyInfo{};
+        return unpack_valency(get_packed(wid));
+    }
+
+private:
+    const uint32_t* raw_ = nullptr;
+    uint32_t count_ = 0;
+    const uint64_t* bits_ = nullptr;
+    const uint32_t* super_ = nullptr;
+    const uint32_t* vals_ = nullptr;
+    uint32_t num_nonzero_ = 0;
+};
+
+inline uint32_t pack_valency(const ValencyInfo& o) {
+    uint32_t vo = static_cast<uint32_t>(o.val_odds + 7) & 15u;
+    return (static_cast<uint32_t>(o.v_trans & 3u)) |
+           (static_cast<uint32_t>(o.next_case_pref & 3u) << 2) |
+           (static_cast<uint32_t>(o.word_syn_type & 3u) << 4) |
+           (static_cast<uint32_t>(o.next2_case_pref & 3u) << 6) |
+           (vo << 8) |
+           (static_cast<uint32_t>(o.tan_ratio & 7u) << 12) |
+           (static_cast<uint32_t>(o.is_gram_fem & 1u) << 15) |
+           (static_cast<uint32_t>(o.next_nom_p & 15u) << 16) |
+           (static_cast<uint32_t>(o.next_acc_p & 15u) << 20) |
+           (static_cast<uint32_t>(o.next_gen_p & 15u) << 24) |
+           (static_cast<uint32_t>(o.verb_prob & 15u) << 28);
+}
+
+inline uint16_t compute_core_hash(const uint8_t* syms, const uint8_t* diacs, uint8_t case_pos, uint8_t lam_skip) {
+    uint32_t h = 2166136261u;
+    for (uint8_t p = 0; p < case_pos; ++p) {
+        if (p == lam_skip) continue;
+        uint8_t d = diacs[p];
+        if (syms[p] == 4u && d == 0u) d = 3u; // normalize إ kasra-vs-none so CoreBg ignores hamza register
+        h ^= d;
+        h *= 16777619u;
+    }
+    uint8_t end_sh = (diacs[case_pos] >= 8u) ? 1u : 0u;
+    h ^= static_cast<uint8_t>((case_pos << 1) | end_sh);
+    h *= 16777619u;
+    uint16_t out = static_cast<uint16_t>((h ^ (h >> 16)) & 0xFFFFu);
+    return out ? out : 1u;
+}
 
 }

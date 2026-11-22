@@ -1,15 +1,26 @@
 import ctypes
 import os
+import sys
 from typing import Optional
 
 
 class TashkeelEngine:
-    """Thin ctypes wrapper around libtashkeel.so for ultra-fast Arabic diacritization."""
+    """Thin ctypes wrapper around libbarq.so / barq.dll for ultra-fast Arabic diacritization."""
 
     def __init__(self, model_path: str, lib_path: Optional[str] = None):
         if lib_path is None:
             here = os.path.dirname(os.path.abspath(__file__))
-            lib_path = os.path.normpath(os.path.join(here, "..", "build", "libtashkeel.so"))
+            root = os.path.normpath(os.path.join(here, ".."))
+            candidates = (
+                [os.path.join(root, "windows", "barq.dll"), os.path.join(root, "build", "windows", "barq.dll")]
+                if sys.platform == "win32"
+                else [
+                    os.path.join(root, "linux", "libbarq.so"),
+                    os.path.join(root, "build", "linux", "libbarq.so"),
+                    os.path.join(root, "build", "libtashkeel.so"),
+                ]
+            )
+            lib_path = next((p for p in candidates if os.path.exists(p)), candidates[-1])
         self._lib = ctypes.CDLL(lib_path)
 
         self._lib.tashkeel_create.argtypes = [ctypes.c_char_p]

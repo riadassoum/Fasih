@@ -12,6 +12,7 @@ TASH_VERSION = 2
 TASH_VERSION_3 = 3
 TASH_VERSION_4 = 4
 TASH_VERSION_5 = 5
+TASH_VERSION_6 = 6
 UINT32_MAX = 0xFFFFFFFF
 UINT64_MAX = 0xFFFFFFFFFFFFFFFF
 
@@ -23,6 +24,8 @@ HEADER_STRUCT = struct.Struct("<IHH" + "QI" * 9)
 HEADER_V3_STRUCT = struct.Struct("<IHH" + "QI" * 11)
 HEADER_V4_STRUCT = struct.Struct("<IHH" + "QI" * 12)
 HEADER_V5_STRUCT = struct.Struct("<IHH" + "QI" * 13)
+HEADER_V6_STRUCT = struct.Struct("<IHH" + "QI" * 14 + "I")
+NGRAM_ENTRY_V6_STRUCT = struct.Struct("<QhBBhBB")
 FST_V5_HDR_STRUCT = struct.Struct("<6I")
 BIT_TRIE_NODE_STRUCT = struct.Struct("<QII")
 BIT_TRIE_NODE_V3_STRUCT = struct.Struct("<QH")
@@ -463,7 +466,7 @@ def update_tash_weights(model_path: str, weights: List[int]) -> None:
     """Updates the calibrated weights array inside an existing .tash model in place."""
     with open(model_path, "r+b") as f:
         magic, version = struct.unpack("<IH", f.read(6))
-        if magic != TASH_MAGIC or version not in (2, 3, 4, 5):
+        if magic != TASH_MAGIC or version not in (2, 3, 4, 5, 6):
             raise ValueError("Not a valid .tash file")
         f.seek(0)
         hdr_map = {
@@ -471,12 +474,16 @@ def update_tash_weights(model_path: str, weights: List[int]) -> None:
             3: HEADER_V3_STRUCT,
             4: HEADER_V4_STRUCT,
             5: HEADER_V5_STRUCT,
+            6: HEADER_V6_STRUCT,
         }
         hdr_s = hdr_map[version]
         unpacked = hdr_s.unpack(f.read(hdr_s.size))
         if version == 4:
             weights_off = unpacked[-4]
             weights_count = unpacked[-3]
+        elif version == 6:
+            weights_off = unpacked[-5]
+            weights_count = unpacked[-4]
         else:
             weights_off = unpacked[-2]
             weights_count = unpacked[-1]

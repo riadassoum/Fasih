@@ -6,11 +6,21 @@
 namespace tashkeel {
 
 constexpr uint32_t TASH_MAGIC = 0x48534154;
+constexpr uint32_t TASH_COMP_MAGIC = 0x48535A54; // "TSZH" lossless compressed container
+constexpr uint16_t TASH_COMP_DEFLATE = 1;
 constexpr uint16_t TASH_VERSION_2 = 2;
 constexpr uint16_t TASH_VERSION_3 = 3;
 constexpr uint16_t TASH_VERSION_4 = 4;
 constexpr uint16_t TASH_VERSION_5 = 5;
-constexpr uint16_t TASH_VERSION = TASH_VERSION_5;
+constexpr uint16_t TASH_VERSION_6 = 6;
+constexpr uint16_t TASH_VERSION_7 = 7;
+constexpr uint16_t TASH_VERSION = TASH_VERSION_7;
+
+constexpr uint32_t V7F_IRAB2_V5_4B = 1u << 0;
+constexpr uint32_t V7F_IRAB2_V3_8B = 1u << 1;
+constexpr uint32_t V7F_COMPACT_NGRAM = 1u << 2;
+constexpr uint32_t V7F_COMPACT_CORE_BG = 1u << 3;
+constexpr uint32_t V7F_COMPACT_VALENCY = 1u << 4;
 
 enum DiacriticId : uint8_t {
     DIAC_NONE = 0,
@@ -70,12 +80,77 @@ constexpr size_t OOV_LEGACY_FEATURES = 16;
 constexpr size_t IRAB_NUM_FEATURES = 56;
 constexpr size_t IRAB_V5_BASE_FEATURES = 44;
 constexpr size_t IRAB_LEGACY_FEATURES = 40;
+constexpr size_t IRAB2_NUM_FEATURES = 96;
 constexpr size_t MORPH_NUM_FEATURES = 32;
 constexpr size_t NUM_MORPH_CLASSES = 12;
 constexpr size_t NUM_TRANS_ROLES_V5 = 24;
+constexpr size_t NUM_TRANS3_ROLES = 12;
+constexpr size_t NUM_TRANS3_FAMS = 5;
+constexpr size_t NUM_TRANS3_STATES = NUM_TRANS3_ROLES * NUM_TRANS3_FAMS; // 60
+constexpr size_t TRANS3_TABLE_SIZE = NUM_TRANS3_STATES * NUM_TRANS3_STATES * NUM_TRANS3_STATES; // 216000
 constexpr size_t BG_BLOCK_SHIFT_V5 = 5;
 
+enum V7WeightId : uint32_t {
+    V7W_NGRAM_LEFT = 0,
+    V7W_RBG = 1,
+    V7W_CTR3 = 2,
+    V7W_SKIP1 = 3,
+    V7W_CORE_BG_L = 4,
+    V7W_CORE_BG_R = 5,
+    V7W_CORE_BG_C = 6,
+    V7W_TRANS3 = 7,
+    V7W_VALENCY = 8,
+    V7W_IRAB2 = 9,
+    V7W_P2_IRAB1_SCALE = 10,
+    V7W_P2_SYN_SCALE = 11,
+    NUM_V7_WEIGHTS = 12
+};
+
+constexpr int32_t DEFAULT_V7_WEIGHTS[NUM_V7_WEIGHTS] = {
+    700, 600, 800, 350, 750, 850, 950, 450, 450, 900, 1000, 1000
+};
+
+constexpr uint8_t NG_ORDER_RBG = 12;
+constexpr uint8_t NG_ORDER_CTR3 = 13;
+constexpr uint8_t NG_ORDER_SKIP1 = 22;
+constexpr uint8_t CORE_DIR_LEFT = 0;
+constexpr uint8_t CORE_DIR_RIGHT = 1;
+constexpr uint8_t CORE_DIR_CTR3 = 2;
+
 #pragma pack(push, 1)
+struct CompressedFileHeader {
+    uint32_t magic;             // TASH_COMP_MAGIC
+    uint16_t method;            // TASH_COMP_DEFLATE (1 = raw RFC-1951 DEFLATE)
+    uint16_t flags;             // 0
+    uint32_t uncompressed_size; // exact byte size of inner .tash image
+    uint32_t crc32;             // IEEE CRC-32 of uncompressed .tash image
+};
+
+struct CompactBucketHeader {
+    uint32_t num_buckets;       // power of 2 (65536 = top 16 bits of key_hash)
+    uint32_t num_entries;
+};
+
+struct CompactNgramEntry {
+    uint8_t key_lo[6];          // low 48 bits of key_hash
+    uint8_t payload[5];         // [0..12]: best_bonus+4096, [13..25]: alt_bonus+4096, [26..29]: best_eid, [30..33]: alt_eid, [34..36]: order_code
+};
+
+struct CompactCoreBgEntry {
+    uint8_t key_lo[6];          // low 48 bits of key_hash
+    uint16_t best_core_h;
+    uint16_t alt_core_h;
+    int16_t best_bonus;
+    int16_t alt_bonus;
+};
+
+struct CompactValencyHeader {
+    uint32_t num_words;
+    uint32_t num_nonzero;
+    uint32_t bitmap_words;
+    uint32_t super_blocks;
+};
+
 struct FileHeader {
     uint32_t magic;
     uint16_t version;
@@ -197,6 +272,50 @@ struct FileHeaderV5 {
 
     uint64_t weights_offset;
     uint32_t weights_count;
+};
+
+struct FileHeaderV6 {
+    FileHeaderV5 base;
+    uint64_t ngram_entries_offset;
+    uint32_t ngram_capacity;
+    uint32_t ngram_count;
+};
+
+struct NgramEntryV6 {
+    uint64_t key_hash;
+    int16_t best_bonus;
+    uint8_t best_ending_id;
+    uint8_t order;
+    int16_t alt_bonus;
+    uint8_t alt_ending_id;
+    uint8_t reserved;
+};
+
+struct CoreBgEntryV7 {
+    uint64_t key_hash;
+    uint16_t best_core_h;
+    uint16_t alt_core_h;
+    int16_t best_bonus;
+    int16_t alt_bonus;
+};
+
+struct FileHeaderV7 {
+    FileHeaderV6 base;
+    uint64_t valency_offset;
+    uint32_t valency_count;
+    uint32_t v7_flags;
+    uint64_t trans3_offset;
+    uint32_t trans3_size;
+    uint32_t reserved1;
+    uint64_t irab2_trees_offset;
+    uint32_t irab2_trees_size;
+    uint32_t irab2_feat_count;
+    uint64_t core_bg_offset;
+    uint32_t core_bg_capacity;
+    uint32_t core_bg_count;
+    uint64_t v7_weights_offset;
+    uint32_t v7_weights_count;
+    uint32_t reserved2;
 };
 
 struct FstV5Header {
