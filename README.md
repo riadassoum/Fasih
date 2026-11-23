@@ -6,7 +6,7 @@ Developer: Riad Assoum ([github.com/riadassoum](https://github.com/riadassoum)).
 
 ## The voices
 
-The add-on comes with Riad and Aseel, the English voice Bdl and the French voice Elise. The other sixteen Arabic voices are voice packs: in NVDA's Tools menu, choose Fasih > Download voices, then "Arabic: Fasih voices", and install the ones you want (they become available after NVDA restarts). This keeps the add-on small.
+The add-on comes with Riad and Aseel, the English voice Bdl and the French voice Elise. The other seventeen Arabic voices are voice packs: in NVDA's Tools menu, choose Fasih > Download voices, then "Arabic: Fasih voices", and install the ones you want (they become available after NVDA restarts). This keeps the add-on small.
 
 All the Arabic voices speak at the same pace and the same loudness, and voices of the same gender have been brought close in bass and tone, so you can switch between them without readjusting NVDA.
 
@@ -27,6 +27,7 @@ All the Arabic voices speak at the same pace and the same loudness, and voices o
 - **Aisha**: a female voice trained by PlanetBlindTech with Fasih's recipe and added at their request.
 - **Hadi**: a male voice trained on speech cloned with OmniVoice (k2-fsa) from Yahya Alnwsany's Arabic professional voice dataset (NightPrince/Arabic-professional-voice, CC0).
 - **Bassel**: a male voice trained on about six hours read for Fasih by the second male speaker of nipponjo's Arabic FastPitch (tts_arabic), from the same family of voices as Sami and Nour.
+- **Rana**: a female voice trained on about seven hours read for Fasih by a female speaker of nipponjo's Arabic FastPitch (tts_arabic), from the same family of voices as Sami and Nour.
 - **Shahrazad**: a female storyteller's voice, trained on about 2.4 hours of Aïda Boumaza's LibriVox reading of Alf Layla wa Layla, Volume 1 (public domain), matched to the Hindawi edition of the text. A real human reader; because the recordings are an audiobook made at home, she is softer and less crisp than the studio voices.
 - **Aseel**: a male voice trained by PlanetBlindTech with Fasih's recipe, on about 12 hours made from the voice of Mr. Aseel Bashir, with his consent.
 - **Elise** (French): a young female voice, the first French voice for RHVoice, trained on the SIWIS French Speech Synthesis Database (Honnet, Lazaridis, Garner and Yamagishi, CC BY 4.0), about 9.2 hours of studio recordings. She is a secondary voice for French text.

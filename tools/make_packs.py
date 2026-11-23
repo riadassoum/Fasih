@@ -26,6 +26,7 @@ INFO = {
     "Aisha": ("عائشة", "female", "Trained by PlanetBlindTech with Fasih's recipe."),
     "Hadi": ("هادي", "male", "Trained on speech cloned with OmniVoice (k2-fsa, Apache-2.0) from Yahya Alnwsany's Arabic professional voice dataset (NightPrince, CC0)."),
     "Bassel": ("باسل", "male", "Trained on about 5.9 hours read for Fasih by speaker 1 of nipponjo's Arabic FastPitch (tts_arabic), the voice family Sami and Nour come from."),
+    "Rana": ("رنا", "female", "Trained on about 7 hours read for Fasih by speaker 2 of nipponjo's Arabic FastPitch (tts_arabic), the voice family Sami and Nour come from."),
     "Shahrazad": ("شهرزاد", "female", "A storyteller's voice, trained on Aida Boumaza's LibriVox reading of Alf Layla wa Layla (public domain)."),
 }
 ONLY = os.environ.get("FASIH_ONLY", "").split()
