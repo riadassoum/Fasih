@@ -91,6 +91,7 @@ public:
         bfs9_sub4_.clear();
         bfs7_trees_.clear();
         fast_nodes_.clear();
+        tree_span_.clear();
         for (auto& v : class_tree_off_) v = 0;
         mode_ = mode;
         if (!data || byte_size < sizeof(TreeEnsembleHeader)) return false;
@@ -201,6 +202,87 @@ public:
         return true;
     }
 
+    // Provably bit-exact branch-and-bound early pruning across 64-tree chunks:
+    // Any slice where (best_other - p1_v + rem_span) * w_c2 <= (c2_mar - 1) * 1000 can NEVER flip Pass-1.
+    template <size_t F8_STRIDE, typename SliceT>
+    inline bool predict_batch_binary_pruned_i8(const std::array<int8_t, F8_STRIDE>* f8_batch, size_t n_vecs,
+                                               const SliceT* slices, size_t n_slices,
+                                               int32_t w_c2, int32_t c2_mar,
+                                               std::vector<uint32_t>& active_vecs,
+                                               std::vector<uint32_t>& active_slices,
+                                               int32_t* __restrict out_logits) const {
+        if (!valid_ || fast_kind_ == 0 || header_->num_classes < 2 || n_vecs == 0) return false;
+        if (w_c2 <= 0 || n_slices == 0 || tree_span_.size() != header_->num_trees) {
+            return predict_batch_binary_i8(f8_batch, n_vecs, out_logits);
+        }
+        for (size_t v = 0; v < n_vecs; ++v) out_logits[v] = 0;
+        const uint32_t tb0 = class_tree_off_[0], te0 = class_tree_off_[1];
+        const uint32_t tb1 = class_tree_off_[1], te1 = class_tree_off_[2];
+
+        int64_t rem_span = 0;
+        for (uint32_t t = tb0; t < te0; ++t) rem_span += tree_span_[t];
+        for (uint32_t t = tb1; t < te1; ++t) rem_span += tree_span_[t];
+
+        active_slices.resize(n_slices);
+        for (size_t s = 0; s < n_slices; ++s) active_slices[s] = static_cast<uint32_t>(s);
+        bool any_pruned = false;
+        const int64_t prune_rhs = (static_cast<int64_t>(c2_mar) - 1LL) * 1000LL;
+        const int64_t w64 = static_cast<int64_t>(w_c2);
+
+        auto run_range = [&](uint32_t tb, uint32_t te, bool sign_pos, bool has_more_ranges) {
+            for (uint32_t cs = tb; cs < te && !active_slices.empty(); ) {
+                const uint32_t step = (cs == tb && !any_pruned) ? 160u : 64u;
+                const uint32_t ce = (cs + step < te) ? (cs + step) : te;
+                const uint32_t* idx_ptr = any_pruned ? active_vecs.data() : nullptr;
+                const size_t cnt = any_pruned ? active_vecs.size() : n_vecs;
+                if (cnt == 0) break;
+                if (sign_pos) eval_batch_range_add<F8_STRIDE, +1>(f8_batch, idx_ptr, cnt, cs, ce, out_logits, 1, 0);
+                else          eval_batch_range_add<F8_STRIDE, -1>(f8_batch, idx_ptr, cnt, cs, ce, out_logits, 1, 0);
+
+                for (uint32_t t = cs; t < ce; ++t) rem_span -= tree_span_[t];
+                cs = ce;
+                const bool more_trees = (ce < te) || has_more_ranges;
+                if (!more_trees) continue;
+
+                size_t keep = 0;
+                for (size_t ai = 0; ai < active_slices.size(); ++ai) {
+                    const uint32_t si = active_slices[ai];
+                    const SliceT& sl = slices[si];
+                    const int32_t p1_v = out_logits[sl.vec_off + static_cast<uint32_t>(sl.p1_g)];
+                    int32_t best_other = INT32_MIN / 4;
+                    for (int g = 0; g < sl.n_grp; ++g) {
+                        if (g == sl.p1_g) continue;
+                        const int32_t v = out_logits[sl.vec_off + static_cast<uint32_t>(g)];
+                        if (v > best_other) best_other = v;
+                    }
+                    const int64_t max_final_diff = static_cast<int64_t>(best_other) - static_cast<int64_t>(p1_v) + rem_span;
+                    if (max_final_diff * w64 <= prune_rhs) {
+                        for (int g = 0; g < sl.n_grp; ++g) {
+                            if (g != sl.p1_g) out_logits[sl.vec_off + static_cast<uint32_t>(g)] = INT32_MIN / 4;
+                        }
+                    } else {
+                        active_slices[keep++] = si;
+                    }
+                }
+                if (keep < active_slices.size()) {
+                    active_slices.resize(keep);
+                    any_pruned = true;
+                    active_vecs.clear();
+                    for (uint32_t si : active_slices) {
+                        const SliceT& sl = slices[si];
+                        for (int g = 0; g < sl.n_grp; ++g) {
+                            active_vecs.push_back(sl.vec_off + static_cast<uint32_t>(g));
+                        }
+                    }
+                }
+            }
+        };
+
+        if (tb1 < te1) run_range(tb1, te1, true, tb0 < te0);
+        if (tb0 < te0 && !active_slices.empty()) run_range(tb0, te0, false, false);
+        return true;
+    }
+
     // L1-cache-tiled & AVX2/SSE2/NEON sentence-batch single-class evaluation for Irab2 / Irab1 / Morph!
     template <size_t F8_STRIDE>
     inline void eval_class_batch_i8(uint32_t c, const std::array<int8_t, F8_STRIDE>* f8_buf,
@@ -242,8 +324,11 @@ public:
     }
 
 private:
-#if (defined(__x86_64__) || defined(_M_X64)) && (defined(__GNUC__) || defined(__clang__))
+#if (defined(__x86_64__) || defined(_M_X64)) && (defined(__GNUC__) || defined(__clang__) || defined(__AVX2__))
     static inline bool cpu_has_avx2() {
+#if defined(__AVX2__)
+        return true;
+#else
         static const bool has = []() {
             uint32_t eax = 0, ebx = 0, ecx = 0, edx = 0;
             __asm__ __volatile__("cpuid" : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx) : "a"(0u), "c"(0u));
@@ -257,6 +342,7 @@ private:
             return (ebx & (1u << 5)) != 0u; // AVX2
         }();
         return has;
+#endif
     }
 #endif
 
@@ -445,10 +531,15 @@ private:
         return eval_bfs9_sub4_range(bfs9_top5_.data(), bfs9_sub4_.data(), f8, tb, te);
     }
 
-#if (defined(__x86_64__) || defined(_M_X64)) && (defined(__GNUC__) || defined(__clang__))
+#if (defined(__x86_64__) || defined(_M_X64)) && (defined(__GNUC__) || defined(__clang__) || defined(__AVX2__))
+#if defined(__GNUC__) || defined(__clang__)
+#define TASHKEEL_TARGET_AVX2 __attribute__((target("avx2")))
+#else
+#define TASHKEEL_TARGET_AVX2
+#endif
     // AVX2 Phase-1 (32-lane L5 or 16-lane L4) + Scalar Phase-2 for any 1-based complete BFS tree!
     template <typename TreeT, int DEPTH, uint32_t LEAF_OFF, uint32_t TILE, size_t F8_STRIDE, int SIGN>
-    __attribute__((target("avx2")))
+    TASHKEEL_TARGET_AVX2
     static void eval_bfs_one_avx2(const TreeT* __restrict ts, uint32_t tb_all, uint32_t te_all,
                                   const std::array<int8_t, F8_STRIDE>* f8_buf, const uint32_t* indices, size_t count,
                                   int32_t* __restrict out_flat, size_t out_stride, uint32_t out_col,
@@ -644,7 +735,7 @@ private:
 
     // AVX2 Split Top5 (L5_32 / L5_16) + 1-cache-line Sub4 evaluator for depth-9 trees (Core2 & Irab2)!
     template <uint32_t TILE, size_t F8_STRIDE, int SIGN>
-    __attribute__((target("avx2")))
+    TASHKEEL_TARGET_AVX2
     static void eval_bfs9_sub4_avx2(const Bfs9Top5* __restrict tps, const Bfs9Sub4* __restrict sbs,
                                     uint32_t tb_all, uint32_t te_all,
                                     const std::array<int8_t, F8_STRIDE>* f8_buf, const uint32_t* indices, size_t count,
@@ -844,6 +935,7 @@ private:
             }
         }
     }
+#undef TASHKEEL_TARGET_AVX2
 #endif
 
 #if defined(__aarch64__) || defined(_M_ARM64)
@@ -1108,7 +1200,7 @@ private:
     template <size_t F8_STRIDE, int SIGN>
     inline void eval_batch_range_add(const std::array<int8_t, F8_STRIDE>* f8_buf, const uint32_t* indices, size_t count,
                                      uint32_t tb, uint32_t te, int32_t* __restrict out_flat, size_t out_stride, uint32_t out_col) const {
-#if (defined(__x86_64__) || defined(_M_X64)) && (defined(__GNUC__) || defined(__clang__))
+#if (defined(__x86_64__) || defined(_M_X64)) && (defined(__GNUC__) || defined(__clang__) || defined(__AVX2__))
         if (count >= 6u && cpu_has_avx2()) {
             switch (fast_kind_) {
                 case 1: eval_bfs_one_avx2<Bfs6One, 6, 64u, 64u, F8_STRIDE, SIGN>(bfs6_trees_.data(), tb, te, f8_buf, indices, count, out_flat, out_stride, out_col, used_feats_); return;
@@ -1313,6 +1405,8 @@ private:
             int32_t cid;
             uint32_t max_d;
             uint32_t max_f;
+            int32_t mn_leaf;
+            int32_t mx_leaf;
             bool ok;
             void walk(uint32_t idx, uint32_t d) {
                 if (!ok || idx >= total || d > 64u) { ok = false; return; }
@@ -1323,6 +1417,9 @@ private:
                     if (c >= nc) { ok = false; return; }
                     if (cid < 0) cid = static_cast<int32_t>(c);
                     else if (cid != static_cast<int32_t>(c)) { ok = false; return; }
+                    const int32_t lv = static_cast<int16_t>(nd & 0xFFFFu);
+                    if (lv < mn_leaf) mn_leaf = lv;
+                    if (lv > mx_leaf) mx_leaf = lv;
                     return;
                 }
                 const uint32_t feat = (nd >> 17) & 0x7Fu;
@@ -1340,17 +1437,31 @@ private:
         };
 
         std::vector<std::vector<uint32_t>> per_c_trees(nc);
-        ValCtx vc{nodes_v5_, total, nc, -1, 0, 0, true};
+        std::vector<int32_t> orig_span(nt, 0);
+        ValCtx vc{nodes_v5_, total, nc, -1, 0, 0, INT32_MAX, INT32_MIN, true};
         for (uint32_t t = 0; t < nt; ++t) {
             vc.cid = -1;
             vc.max_d = 0;
+            vc.mn_leaf = INT32_MAX;
+            vc.mx_leaf = INT32_MIN;
             vc.walk(tree_roots_[t], 0u);
             if (!vc.ok || vc.cid < 0) return;
             per_c_trees[static_cast<size_t>(vc.cid)].push_back(t);
+            orig_span[t] = (vc.mx_leaf >= vc.mn_leaf) ? (vc.mx_leaf - vc.mn_leaf) : 0;
             if (vc.max_d > max_depth_all) max_depth_all = vc.max_d;
             if (vc.max_f > max_feat_all) max_feat_all = vc.max_f;
         }
         used_feats_ = std::min<uint32_t>(128u, max_feat_all + 1u);
+
+        tree_span_.resize(nt);
+        {
+            uint32_t sp_i = 0;
+            for (uint32_t c = 0; c < nc; ++c) {
+                for (uint32_t orig_t : per_c_trees[c]) {
+                    tree_span_[sp_i++] = orig_span[orig_t];
+                }
+            }
+        }
 
         if (max_depth_all <= 6u) {
             fill_bfs_one_ensemble<Bfs6One, 6>(bfs6_trees_, per_c_trees, nt, nc);
@@ -1443,6 +1554,7 @@ private:
         if (!ok_tails) {
             bfs7_trees_.clear();
             fast_nodes_.clear();
+            tree_span_.clear();
             return;
         }
         class_tree_off_[nc] = out_t;
@@ -1523,6 +1635,7 @@ private:
     std::vector<Bfs9Sub4> bfs9_sub4_;
     std::vector<Bfs7Hybrid> bfs7_trees_;
     std::vector<FastNode> fast_nodes_;
+    std::vector<int32_t> tree_span_;
     uint32_t class_tree_off_[NUM_DIACRITICS + 1] = {};
     uint32_t used_feats_ = 128;
     uint8_t mode_ = 0;

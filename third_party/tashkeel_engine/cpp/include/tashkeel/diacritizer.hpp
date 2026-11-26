@@ -4,6 +4,7 @@
 #include "arabic_utf8.hpp"
 #include "bit_fst.hpp"
 #include "format.hpp"
+#include "neural_irab.hpp"
 #include "tree_eval.hpp"
 
 #include <cstddef>
@@ -153,6 +154,7 @@ public:
 
     std::string diacritize(const char* utf8_text, size_t len) const;
     std::string diacritize(const std::string& text) const { return diacritize(text.data(), text.size()); }
+    void diacritize_lines(const std::string* in_lines, std::string* out_lines, size_t count, int num_threads = 0) const;
 
     uint32_t vocab_size() const { return vocab_count_; }
     uint32_t fst_nodes_count() const { return fst_nodes_count_; }
@@ -165,11 +167,13 @@ public:
     bool has_v7_core_bg() const { return !core_bg_.empty(); }
     bool has_v8_extra_core() const { return extra_core_.valid(); }
     bool has_core2_trees() const { return core2_trees_.valid(); }
+    bool has_v9_neural() const { return neural_irab_.valid(); }
 
     int32_t weight(uint32_t id) const {
         if (id < NUM_WEIGHTS) return weights_[id];
         if (id >= 100 && id < 100 + NUM_V7_WEIGHTS) return v7_weights_[id - 100];
         if (id >= 200 && id < 200 + NUM_V8_WEIGHTS) return v8_weights_[id - 200];
+        if (id >= 300 && id < 300 + NUM_V9_WEIGHTS) return v9_weights_[id - 300];
         return 0;
     }
     bool set_weight(uint32_t id, int32_t v) {
@@ -190,9 +194,22 @@ public:
             ++cache_epoch_;
             return true;
         }
+        if (id >= 300 && id < 300 + NUM_V9_WEIGHTS) {
+            v9_weights_[id - 300] = v;
+            ++cache_epoch_;
+            return true;
+        }
         return false;
     }
     void set_restore_spelling(bool v) { restore_spelling_ = v; ++cache_epoch_; }
+
+    struct V9DumpToken {
+        NeuralIrabTokInput inp;
+        uint16_t cand_mask;
+        uint8_t gold_end;
+        uint8_t gold_pron;
+    };
+    void dump_v9_sentence(const char* gold_utf8, size_t len, std::vector<V9DumpToken>& out) const;
 
     // Fast C++ helper for training Pass-2 Stacked Irab2 GBDT with 100% zero train/inference skew
     struct Irab2DumpSample {
@@ -213,7 +230,16 @@ public:
     void dump_core2_sentence(const char* gold_utf8, size_t len, std::vector<Core2DumpSample>& out, uint32_t& next_group_id) const;
 
     // Fast FST/lexicon read helpers for external C++ V7/V8 table extractors
-    uint32_t lookup_word_id(const uint8_t* syms, size_t len) const { return fst_.lookup(syms, len); }
+    inline uint32_t fst_lookup(const uint8_t* syms, size_t len) const {
+        uint32_t wid = fst_.lookup(syms, len);
+        if (wid != UINT32_MAX) return wid;
+        if (!fst_ext_.empty()) {
+            uint32_t eid = fst_ext_.lookup(syms, len);
+            if (eid != UINT32_MAX) return base_vocab_count_ + eid;
+        }
+        return UINT32_MAX;
+    }
+    uint32_t lookup_word_id(const uint8_t* syms, size_t len) const { return fst_lookup(syms, len); }
     bool word_has_multi_core(uint32_t wid, const uint8_t* syms, size_t len) const;
     void extract_word_top_info(uint32_t wid, const uint8_t* syms, size_t len,
                                uint8_t& out_case_pos, uint8_t& out_top_end, uint8_t& out_top_verb) const;
@@ -296,7 +322,8 @@ private:
                                     std::vector<Irab2DumpSample>* dump_out,
                                     const std::vector<std::array<uint8_t, MAX_WORD_LEN>>* gold_diacs,
                                     std::vector<Core2DumpSample>* core2_dump_out = nullptr,
-                                    uint32_t* core2_group_id = nullptr) const;
+                                    uint32_t* core2_group_id = nullptr,
+                                    std::vector<V9DumpToken>* v9_dump_out = nullptr) const;
     bool has_stem_in_fst(const uint8_t* s, size_t stem_len) const;
     void emit_stem(Ctx& ctx, Token& tok, uint32_t stem_id, size_t pre_len, const uint8_t* pre_diac,
                    bool has_al, size_t suf_idx, int32_t penalty, uint8_t extra_flags,
@@ -387,18 +414,23 @@ private:
     }
 
     inline uint8_t meta_word_len(uint32_t wid) const {
+        if (word_meta_v8_) return word_meta_v8_[wid].word_len;
         return (is_v3_ || is_v5_) ? word_meta_v3_[wid].word_len : word_meta_[wid].word_len;
     }
     inline uint8_t meta_role_flags(uint32_t wid) const {
+        if (word_meta_v8_) return word_meta_v8_[wid].role_flags;
         return (is_v3_ || is_v5_) ? word_meta_v3_[wid].role_flags : word_meta_[wid].role_flags;
     }
     inline uint32_t meta_cand_start(uint32_t wid) const {
+        if (word_meta_v8_) return read_u24(word_meta_v8_[wid].cand_start);
         return (is_v3_ || is_v5_) ? read_u24(word_meta_v3_[wid].cand_start) : word_meta_[wid].cand_start;
     }
     inline uint16_t meta_cand_count(uint32_t wid) const {
+        if (word_meta_v8_) return word_meta_v8_[wid].cand_count;
         return (is_v3_ || is_v5_) ? word_meta_v3_[wid].cand_count : word_meta_[wid].cand_count;
     }
     inline uint16_t meta_bg_mask(uint32_t wid) const {
+        if (word_meta_v8_) return 0;
         return (is_v3_ || is_v5_) ? word_meta_v3_[wid].bg_end_mask : 0x7FFF;
     }
     inline WordCandidate read_cand(uint32_t idx) const {
@@ -439,13 +471,18 @@ private:
     bool is_v5_ = false;
     bool is_v7_ = false;
     bool is_v8_ = false;
+    bool is_v9_ = false;
     bool has_v5_24roles_ = false;
+    uint32_t v9_flags_ = 0;
     uint64_t cache_epoch_ = 1;
     uint32_t vocab_count_ = 0;
+    uint32_t base_vocab_count_ = 0;
     uint32_t fst_nodes_count_ = 0;
     BitmappedFST fst_;
+    BitmappedFST fst_ext_;
     const WordMeta* word_meta_ = nullptr;
     const WordMetaV3* word_meta_v3_ = nullptr;
+    const WordMetaV8* word_meta_v8_ = nullptr;
     const WordCandidate* candidates_ = nullptr;
     const WordCandidateV3* candidates_v3_ = nullptr;
     const WordCandidateV5* candidates_v5_ = nullptr;
@@ -475,6 +512,8 @@ private:
     int32_t weights_[NUM_WEIGHTS];
     int32_t v7_weights_[NUM_V7_WEIGHTS];
     int32_t v8_weights_[NUM_V8_WEIGHTS];
+    int32_t v9_weights_[NUM_V9_WEIGHTS];
+    NeuralIrabModel neural_irab_;
     bool restore_spelling_ = true;
 };
 

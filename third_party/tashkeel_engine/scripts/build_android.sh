@@ -8,12 +8,17 @@ if [ -z "${ANDROID_NDK_HOME:-}" ]; then
 fi
 
 TOOLCHAIN="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake"
+STRIP_BIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip"
 API_LEVEL="${ANDROID_API:-24}"
-LLVM_STRIP="$(find "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt" -maxdepth 3 -name llvm-strip 2>/dev/null | head -n 1 || true)"
+
+CMAKE_GEN_ARGS=()
+if command -v ninja >/dev/null 2>&1; then
+  CMAKE_GEN_ARGS=(-G Ninja)
+fi
 
 for ABI in arm64-v8a armeabi-v7a x86_64; do
   OUT="build_android/$ABI"
-  cmake -B "$OUT" \
+  cmake -B "$OUT" "${CMAKE_GEN_ARGS[@]}" \
     -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN" \
     -DANDROID_ABI="$ABI" \
     -DANDROID_PLATFORM="android-$API_LEVEL" \
@@ -24,10 +29,9 @@ for ABI in arm64-v8a armeabi-v7a x86_64; do
   cmake --build "$OUT" -j"$(nproc)"
   mkdir -p "android/jniLibs/$ABI"
   cp -f "$OUT/libbarq.so" "android/jniLibs/$ABI/libbarq.so"
-  if [ -n "$LLVM_STRIP" ]; then
-    "$LLVM_STRIP" --strip-unneeded "android/jniLibs/$ABI/libbarq.so" || true
+  if [ -x "$STRIP_BIN" ]; then
+    "$STRIP_BIN" --strip-unneeded "android/jniLibs/$ABI/libbarq.so"
   fi
 done
 
-rm -rf build_android
 echo "Built Android .so libraries under android/jniLibs/{arm64-v8a,armeabi-v7a,x86_64}/libbarq.so"

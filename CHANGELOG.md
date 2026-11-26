@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4 (in development)
+
+- **Barq 3**: Fasih now uses Barq 3, the newest version of PlanetBlindTech's engine by Shamseddin. In my tests it makes fewer mistakes than 1.3.1's Barq on classical text, Rawi's own test, news and the independent SadeedDiac-25 benchmark, and about as many on modern sentences.
+
 ## 1.3.1
 
 - **Barq is more accurate and faster**: Fasih now uses the newest version of Barq, PlanetBlindTech's engine by Shamseddin, with tighter grammar rules and wider word context. In my tests it makes about a third fewer mistakes than 1.3's Barq on modern sentences and news, and fewer on classical text, where it now does better than Rawi; it is also several times faster than 1.3's Barq. Choose it under Diacritizer in NVDA's voice settings.

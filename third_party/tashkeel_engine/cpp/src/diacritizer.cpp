@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstring>
 #include <limits>
+#include <thread>
 
 #ifdef _WIN32
 #ifndef NOMINMAX
@@ -902,6 +903,7 @@ Diacritizer::Diacritizer() {
     for (uint32_t i = 0; i < NUM_WEIGHTS; ++i) weights_[i] = DEFAULT_WEIGHTS[i];
     for (uint32_t i = 0; i < NUM_V7_WEIGHTS; ++i) v7_weights_[i] = DEFAULT_V7_WEIGHTS[i];
     for (uint32_t i = 0; i < NUM_V8_WEIGHTS; ++i) v8_weights_[i] = DEFAULT_V8_WEIGHTS[i];
+    for (uint32_t i = 0; i < NUM_V9_WEIGHTS; ++i) v9_weights_[i] = DEFAULT_V9_WEIGHTS[i];
 }
 
 Diacritizer::~Diacritizer() { unload(); }
@@ -934,11 +936,15 @@ void Diacritizer::unload() {
     is_v5_ = false;
     is_v7_ = false;
     is_v8_ = false;
+    is_v9_ = false;
     has_v5_24roles_ = false;
+    v9_flags_ = 0;
     vocab_count_ = 0;
+    base_vocab_count_ = 0;
     fst_nodes_count_ = 0;
     word_meta_ = nullptr;
     word_meta_v3_ = nullptr;
+    word_meta_v8_ = nullptr;
     candidates_ = nullptr;
     candidates_v3_ = nullptr;
     candidates_v5_ = nullptr;
@@ -957,6 +963,8 @@ void Diacritizer::unload() {
     irab2_feat_count_ = IRAB2_NUM_FEATURES;
     core2_feat_count_ = CORE2_NUM_FEATURES;
     fst_ = BitmappedFST();
+    fst_ext_ = BitmappedFST();
+    neural_irab_.clear();
     bigrams_ = BigramTable();
     ngrams_ = NgramTableV6();
     core_bg_ = CoreBgTableV7();
@@ -1059,7 +1067,8 @@ bool Diacritizer::load(const std::string& model_path, std::string* err_msg) {
         (hdr2->version != TASH_VERSION_2 && hdr2->version != TASH_VERSION_3 &&
          hdr2->version != TASH_VERSION_4 && hdr2->version != TASH_VERSION_5 &&
          hdr2->version != TASH_VERSION_6 && hdr2->version != TASH_VERSION_7 &&
-         hdr2->version != TASH_VERSION_8)) {
+         hdr2->version != TASH_VERSION_8 &&
+         hdr2->version != TASH_VERSION_9)) {
         unload();
         if (err_msg) *err_msg = "Bad magic or unsupported model version";
         return false;
@@ -1067,10 +1076,12 @@ bool Diacritizer::load(const std::string& model_path, std::string* err_msg) {
     auto in_range = [fsize](uint64_t off, uint64_t bytes) { return off <= fsize && bytes <= fsize - off; };
 
     if (hdr2->version == TASH_VERSION_5 || hdr2->version == TASH_VERSION_6 ||
-        hdr2->version == TASH_VERSION_7 || hdr2->version == TASH_VERSION_8) {
-        const size_t min_v56 = (hdr2->version == TASH_VERSION_8) ? sizeof(FileHeaderV8)
+        hdr2->version == TASH_VERSION_7 || hdr2->version == TASH_VERSION_8 ||
+        hdr2->version == TASH_VERSION_9) {
+        const size_t min_v56 = (hdr2->version == TASH_VERSION_9) ? sizeof(FileHeaderV9)
+                             : ((hdr2->version == TASH_VERSION_8) ? sizeof(FileHeaderV8)
                              : ((hdr2->version == TASH_VERSION_7) ? sizeof(FileHeaderV7)
-                             : ((hdr2->version == TASH_VERSION_6) ? sizeof(FileHeaderV6) : sizeof(FileHeaderV5)));
+                             : ((hdr2->version == TASH_VERSION_6) ? sizeof(FileHeaderV6) : sizeof(FileHeaderV5))));
         if (fsize < min_v56) {
             unload();
             if (err_msg) *err_msg = "Truncated header";
@@ -1080,6 +1091,8 @@ bool Diacritizer::load(const std::string& model_path, std::string* err_msg) {
         const auto* hdr6 = (hdr2->version >= TASH_VERSION_6) ? reinterpret_cast<const FileHeaderV6*>(base) : nullptr;
         const auto* hdr7 = (hdr2->version >= TASH_VERSION_7) ? reinterpret_cast<const FileHeaderV7*>(base) : nullptr;
         const auto* hdr8 = (hdr2->version >= TASH_VERSION_8) ? reinterpret_cast<const FileHeaderV8*>(base) : nullptr;
+        const auto* hdr9 = (hdr2->version >= TASH_VERSION_9) ? reinterpret_cast<const FileHeaderV9*>(base) : nullptr;
+        const bool compact_meta = (hdr9 && (hdr9->v9_flags & V9F_COMPACT_META) != 0);
         const bool cand5 = (hdr5->flags & 2u) != 0;
         const bool bg_int8 = (hdr5->flags & 4u) != 0;
         const uint8_t tree_mode = (hdr5->flags & 1u) ? 2 : 1;
@@ -1091,7 +1104,7 @@ bool Diacritizer::load(const std::string& model_path, std::string* err_msg) {
         const uint64_t val_bytes = hdr7 ? (compact_val ? uint64_t(hdr7->valency_count) : uint64_t(hdr7->valency_count) * sizeof(uint32_t)) : 0;
         const uint64_t cb_bytes = hdr7 ? (compact_cb ? uint64_t(hdr7->core_bg_capacity) : uint64_t(hdr7->core_bg_capacity) * sizeof(CoreBgEntryV7)) : 0;
         if (!in_range(hdr5->fst_blob_offset, hdr5->fst_blob_size) ||
-            !in_range(hdr5->word_meta_offset, uint64_t(hdr5->word_meta_count) * sizeof(WordMetaV3)) ||
+            !in_range(hdr5->word_meta_offset, uint64_t(hdr5->word_meta_count) * (compact_meta ? sizeof(WordMetaV8) : sizeof(WordMetaV3))) ||
             !in_range(hdr5->candidates_offset, uint64_t(hdr5->candidates_count) * (cand5 ? sizeof(WordCandidateV5) : sizeof(WordCandidateV3))) ||
             !in_range(hdr5->core_pool_offset, hdr5->core_pool_size) ||
             !in_range(hdr5->bg_row_off_offset, uint64_t(hdr5->bg_row_off_count) * sizeof(uint32_t)) ||
@@ -1111,7 +1124,8 @@ bool Diacritizer::load(const std::string& model_path, std::string* err_msg) {
             (hdr7 && hdr7->v7_weights_count > 0 && !in_range(hdr7->v7_weights_offset, uint64_t(hdr7->v7_weights_count) * sizeof(int32_t))) ||
             (hdr8 && hdr8->extra_core_size > 0 && !in_range(hdr8->extra_core_offset, hdr8->extra_core_size)) ||
             (hdr8 && hdr8->core2_trees_size > 0 && !in_range(hdr8->core2_trees_offset, hdr8->core2_trees_size)) ||
-            (hdr8 && hdr8->v8_weights_count > 0 && !in_range(hdr8->v8_weights_offset, uint64_t(hdr8->v8_weights_count) * sizeof(int32_t)))) {
+            (hdr8 && hdr8->v8_weights_count > 0 && !in_range(hdr8->v8_weights_offset, uint64_t(hdr8->v8_weights_count) * sizeof(int32_t))) ||
+            (hdr9 && hdr9->neural_irab_size > 0 && !in_range(hdr9->neural_irab_offset, hdr9->neural_irab_size))) {
             unload();
             if (err_msg) *err_msg = "Model sections exceed file bounds";
             return false;
@@ -1119,15 +1133,50 @@ bool Diacritizer::load(const std::string& model_path, std::string* err_msg) {
         is_v5_ = true;
         is_v7_ = (hdr7 != nullptr);
         is_v8_ = (hdr8 != nullptr);
+        is_v9_ = (hdr9 != nullptr);
         is_v3_ = false;
         vocab_count_ = hdr5->word_meta_count;
-        if (!fst_.init_v5(base + hdr5->fst_blob_offset, hdr5->fst_blob_size)) {
-            unload();
-            if (err_msg) *err_msg = "Invalid v5 FST blob";
-            return false;
+        if (hdr9 && (hdr9->v9_flags & V9F_DUAL_FST) != 0) {
+            if (hdr5->fst_blob_size < 8u) {
+                unload();
+                if (err_msg) *err_msg = "Invalid v9 dual FST header";
+                return false;
+            }
+            const uint8_t* fp = base + hdr5->fst_blob_offset;
+            uint32_t p_sz = 0, bv = 0;
+            std::memcpy(&p_sz, fp, 4);
+            std::memcpy(&bv, fp + 4, 4);
+            const size_t p_off = 8u;
+            const size_t ext_off = (p_off + p_sz + 7u) & ~size_t(7u);
+            if (p_off + p_sz > hdr5->fst_blob_size || ext_off > hdr5->fst_blob_size ||
+                !fst_.init_v5(fp + p_off, p_sz)) {
+                unload();
+                if (err_msg) *err_msg = "Invalid v9 primary FST blob";
+                return false;
+            }
+            if (ext_off < hdr5->fst_blob_size && !fst_ext_.init_v5(fp + ext_off, static_cast<uint32_t>(hdr5->fst_blob_size - ext_off))) {
+                unload();
+                if (err_msg) *err_msg = "Invalid v9 overlay FST blob";
+                return false;
+            }
+            base_vocab_count_ = bv;
+            fst_nodes_count_ = fst_.node_count() + fst_ext_.node_count();
+        } else {
+            if (!fst_.init_v5(base + hdr5->fst_blob_offset, hdr5->fst_blob_size)) {
+                unload();
+                if (err_msg) *err_msg = "Invalid v5 FST blob";
+                return false;
+            }
+            base_vocab_count_ = vocab_count_;
+            fst_nodes_count_ = fst_.node_count();
         }
-        fst_nodes_count_ = fst_.node_count();
-        word_meta_v3_ = reinterpret_cast<const WordMetaV3*>(base + hdr5->word_meta_offset);
+        if (compact_meta) {
+            word_meta_v8_ = reinterpret_cast<const WordMetaV8*>(base + hdr5->word_meta_offset);
+            word_meta_v3_ = nullptr;
+        } else {
+            word_meta_v8_ = nullptr;
+            word_meta_v3_ = reinterpret_cast<const WordMetaV3*>(base + hdr5->word_meta_offset);
+        }
         if (cand5) candidates_v5_ = reinterpret_cast<const WordCandidateV5*>(base + hdr5->candidates_offset);
         else candidates_v3_ = reinterpret_cast<const WordCandidateV3*>(base + hdr5->candidates_offset);
         core_pool_ = base + hdr5->core_pool_offset;
@@ -1226,6 +1275,18 @@ bool Diacritizer::load(const std::string& model_path, std::string* err_msg) {
             if (hdr8->v8_weights_count > 0) {
                 const auto* w8 = reinterpret_cast<const int32_t*>(base + hdr8->v8_weights_offset);
                 for (uint32_t i = 0; i < hdr8->v8_weights_count && i < NUM_V8_WEIGHTS; ++i) v8_weights_[i] = w8[i];
+            }
+        }
+        for (uint32_t i = 0; i < NUM_V9_WEIGHTS; ++i) v9_weights_[i] = DEFAULT_V9_WEIGHTS[i];
+        if (hdr9) {
+            v9_flags_ = hdr9->v9_flags;
+            for (uint32_t i = 0; i < NUM_V9_WEIGHTS; ++i) v9_weights_[i] = hdr9->v9_weights[i];
+            if (hdr9->neural_irab_size > 0) {
+                if (!neural_irab_.init(base + hdr9->neural_irab_offset, hdr9->neural_irab_size)) {
+                    unload();
+                    if (err_msg) *err_msg = "Invalid V9 neural_irab blob";
+                    return false;
+                }
             }
         }
         rebuild_trans_scaled();
@@ -1641,14 +1702,14 @@ uint32_t Diacritizer::lookup_relaxed(const uint8_t* syms, size_t n, int& repl_po
     repl_pos = -1;
     repl_sym = 0;
     if (n == 0 || n > MAX_WORD_LEN) return UINT32_MAX;
-    uint32_t wid = fst_.lookup(syms, n);
+    uint32_t wid = fst_lookup(syms, n);
     if (wid != UINT32_MAX && wid < vocab_count_) return wid;
     uint8_t buf[MAX_WORD_LEN];
     std::memcpy(buf, syms, n);
     auto attempt = [&](size_t pos, uint8_t sym, bool record_repl) -> uint32_t {
         uint8_t old = buf[pos];
         buf[pos] = sym;
-        uint32_t r = fst_.lookup(buf, n);
+        uint32_t r = fst_lookup(buf, n);
         buf[pos] = old;
         if (r != UINT32_MAX && r < vocab_count_) {
             if (record_repl) {
@@ -1684,20 +1745,20 @@ uint32_t Diacritizer::lookup_relaxed(const uint8_t* syms, size_t n, int& repl_po
 
 bool Diacritizer::has_stem_in_fst(const uint8_t* s, size_t stem_len) const {
     if (stem_len < 2 || stem_len > MAX_WORD_LEN) return false;
-    if (fst_.lookup(s, stem_len) != UINT32_MAX) return true;
+    if (fst_lookup(s, stem_len) != UINT32_MAX) return true;
     uint8_t buf[MAX_WORD_LEN];
     std::memcpy(buf, s, stem_len);
     if (buf[stem_len - 1] == S_TEH) {
         buf[stem_len - 1] = S_TEH_MARBUTA;
-        if (fst_.lookup(buf, stem_len) != UINT32_MAX) return true;
+        if (fst_lookup(buf, stem_len) != UINT32_MAX) return true;
         buf[stem_len - 1] = S_TEH;
     } else if (buf[stem_len - 1] == S_ALEF) {
         buf[stem_len - 1] = S_ALEF_MAKSURA;
-        if (fst_.lookup(buf, stem_len) != UINT32_MAX) return true;
+        if (fst_lookup(buf, stem_len) != UINT32_MAX) return true;
         buf[stem_len - 1] = S_ALEF;
     }
     if (stem_len >= 4 && (s[0] == S_WAW || s[0] == S_FEH || s[0] == S_BEH || s[0] == S_LAM || s[0] == S_KAF)) {
-        if (fst_.lookup(s + 1, stem_len - 1) != UINT32_MAX) return true;
+        if (fst_lookup(s + 1, stem_len - 1) != UINT32_MAX) return true;
     }
     return false;
 }
@@ -2215,14 +2276,14 @@ bool Diacritizer::analyze_morph(Ctx& ctx, Token& tok) const {
                     uint32_t wid = UINT32_MAX;
                     if (sl > 0 && stem_buf[stem_len - 1] == S_TEH) {
                         stem_buf[stem_len - 1] = S_TEH_MARBUTA;
-                        wid = fst_.lookup(stem_buf, stem_len);
+                        wid = fst_lookup(stem_buf, stem_len);
                         if (wid == UINT32_MAX || wid >= vocab_count_) {
                             wid = UINT32_MAX;
                             stem_buf[stem_len - 1] = S_TEH;
                         }
                     } else if (sl > 0 && stem_buf[stem_len - 1] == S_ALEF) {
                         stem_buf[stem_len - 1] = S_ALEF_MAKSURA;
-                        wid = fst_.lookup(stem_buf, stem_len);
+                        wid = fst_lookup(stem_buf, stem_len);
                         if (wid == UINT32_MAX || wid >= vocab_count_) {
                             wid = UINT32_MAX;
                             stem_buf[stem_len - 1] = S_ALEF;
@@ -2295,17 +2356,17 @@ bool Diacritizer::analyze_morph(Ctx& ctx, Token& tok) const {
         auto lookup_noun_stem = [&](const uint8_t* ptr, size_t blen, bool try_tm) -> uint32_t {
             if (blen < 2 || blen + 1 >= MAX_WORD_LEN) return UINT32_MAX;
             std::memcpy(stem_buf, ptr, blen);
-            uint32_t w = fst_.lookup(stem_buf, blen);
+            uint32_t w = fst_lookup(stem_buf, blen);
             if (w != UINT32_MAX && w < vocab_count_) return w;
             if (try_tm) {
                 if (stem_buf[blen - 1] == S_TEH) {
                     stem_buf[blen - 1] = S_TEH_MARBUTA;
-                    w = fst_.lookup(stem_buf, blen);
+                    w = fst_lookup(stem_buf, blen);
                     if (w != UINT32_MAX && w < vocab_count_) return w;
                     stem_buf[blen - 1] = S_TEH;
                 }
                 stem_buf[blen] = S_TEH_MARBUTA;
-                w = fst_.lookup(stem_buf, blen + 1);
+                w = fst_lookup(stem_buf, blen + 1);
                 if (w != UINT32_MAX && w < vocab_count_) return w;
             }
             return UINT32_MAX;
@@ -2400,7 +2461,7 @@ bool Diacritizer::analyze_morph(Ctx& ctx, Token& tok) const {
                 if (s[n - vs.len] != vs.s0) continue;
                 if (vs.len == 2 && s[n - 1] != vs.s1) continue;
                 size_t slen = n - vpre - vs.len;
-                uint32_t wid = fst_.lookup(s + vpre, slen);
+                uint32_t wid = fst_lookup(s + vpre, slen);
                 if (wid == UINT32_MAX || wid >= vocab_count_ || meta_word_len(wid) != slen) continue;
                 const WordCandidate wc = read_cand(meta_cand_start(wid));
                 if ((meta_role_flags(wid) & MORPH_VERB_LIKE) == 0) continue;
@@ -2728,7 +2789,7 @@ void Diacritizer::build_oov(Ctx& ctx, Token& tok) const {
         if (i == 0 && n >= 6 && si.al_len == 0 && si.verb_like == 0 &&
             s[0] == S_WAW && s[1] == S_YEH &&
             ((s[n - 2] == S_YEH && s[n - 1] == S_ALEF) || (s[2] == S_KAF && s[3] == S_YEH)) &&
-            fst_.lookup(s + 1, n - 1) == UINT32_MAX) {
+            fst_lookup(s + 1, n - 1) == UINT32_MAX) {
             sc[DIAC_KASRA] += 3 * w_c;
         }
         if (i == 1 && n >= 6 && si.al_len == 0 && si.verb_like == 0 &&
@@ -3050,7 +3111,7 @@ void Diacritizer::build_candidates(Ctx& ctx, Token& tok) const {
                 !tc.verb_pattern &&
                 (tc.diac[n - 1] != DIAC_NONE || ((tc.flags & CF_SUFFIX) && tc.diac[tc.case_pos] != DIAC_NONE)) &&
                 !(s[0] == S_BEH && n == 4 && is_masdar_prep_adv(s, n)) &&
-                fst_.lookup(s + 1, n - 1) != UINT32_MAX) {
+                fst_lookup(s + 1, n - 1) != UINT32_MAX) {
                 if (s[0] == S_LAM && n >= 5 && is_imperf_prefix(s[1]) && tc.diac[0] == DIAC_KASRA &&
                     !tok.has_noun_lex && diac_family(tc.diac[n - 1]) != FAM_KASRA && !diac_is_tanween(tc.diac[n - 1])) {
                     for (uint32_t k = 0; k < tok.cand_count; ++k) {
@@ -5300,7 +5361,28 @@ void Diacritizer::fill_pair_bin(const Ctx& ctx, const CandMeta* cmeta, uint32_t 
 }
 
 std::string Diacritizer::diacritize(const char* text, size_t len) const {
-    return diacritize_internal(text, len, nullptr, nullptr, nullptr, nullptr);
+    return diacritize_internal(text, len, nullptr, nullptr, nullptr, nullptr, nullptr);
+}
+
+void Diacritizer::diacritize_lines(const std::string* in_lines, std::string* out_lines, size_t count, int num_threads) const {
+    if (!in_lines || !out_lines || count == 0) return;
+    int nt = num_threads;
+    if (nt <= 0) nt = static_cast<int>(std::thread::hardware_concurrency());
+    if (nt <= 1 || count < 8) {
+        for (size_t i = 0; i < count; ++i) out_lines[i] = diacritize(in_lines[i].data(), in_lines[i].size());
+        return;
+    }
+    nt = static_cast<int>(std::min<size_t>(static_cast<size_t>(nt), count));
+    std::vector<std::thread> workers;
+    workers.reserve(static_cast<size_t>(nt));
+    for (int t = 0; t < nt; ++t) {
+        const size_t s = (count * static_cast<size_t>(t)) / static_cast<size_t>(nt);
+        const size_t e = (count * static_cast<size_t>(t + 1)) / static_cast<size_t>(nt);
+        workers.emplace_back([this, in_lines, out_lines, s, e]() {
+            for (size_t i = s; i < e; ++i) out_lines[i] = diacritize(in_lines[i].data(), in_lines[i].size());
+        });
+    }
+    for (auto& w : workers) w.join();
 }
 
 std::string Diacritizer::diacritize_internal(
@@ -5308,7 +5390,8 @@ std::string Diacritizer::diacritize_internal(
     std::vector<Irab2DumpSample>* dump_out,
     const std::vector<std::array<uint8_t, MAX_WORD_LEN>>* gold_diacs,
     std::vector<Core2DumpSample>* core2_dump_out,
-    uint32_t* core2_group_id) const {
+    uint32_t* core2_group_id,
+    std::vector<V9DumpToken>* v9_dump_out) const {
     if (!is_loaded() || !text || len == 0) return text ? std::string(text, len) : std::string();
 
     struct Span {
@@ -5436,14 +5519,19 @@ std::string Diacritizer::diacritize_internal(
             int32_t n_grp;
             int32_t p1_g;
             uint32_t rep_k[8];
+            uint16_t core_h[8];
         };
         std::vector<Core2Slice> c2_slices;
         std::vector<std::array<int8_t, 128>> c2_feat_buf;
         std::vector<int32_t> c2_logits;
+        std::vector<uint32_t> c2_active_vecs;
+        std::vector<uint32_t> c2_active_slices;
         std::vector<std::array<int8_t, 128>> i2_feat_buf;
         std::vector<uint32_t> i2_tok_idx;
         std::vector<uint32_t> i2_cls_words[NUM_DIACRITICS];
         std::vector<int32_t> i2_scores_flat;
+        std::vector<NeuralIrabTokInput> v9_in;
+        NeuralIrabWorkspace v9_ws;
     };
     thread_local Scratch sc_buf;
     if (sc_buf.cand_cache.size() != CAND_CACHE_SETS * CAND_CACHE_WAYS) {
@@ -6013,6 +6101,172 @@ std::string Diacritizer::diacritize_internal(
         }
     }
 
+    const bool use_v9_neural = is_v9_ && neural_irab_.valid() && (v9_flags_ & V9F_NEURAL_IRAB) != 0 && v9_dump_out == nullptr;
+    if (v9_dump_out != nullptr || use_v9_neural) {
+        sc_buf.v9_in.resize(W);
+        std::vector<int32_t>& seg_end_dist = sc_buf.dp;
+        seg_end_dist.resize(W);
+        int32_t cur_end = static_cast<int32_t>(W);
+        for (int32_t ii = static_cast<int32_t>(W) - 1; ii >= 0; --ii) {
+            seg_end_dist[static_cast<size_t>(ii)] = cur_end - 1 - ii;
+            if (ctx.toks[static_cast<size_t>(ii)].boundary_before && (ctx.toks[static_cast<size_t>(ii)].bkind_mask & BK_HARD)) {
+                cur_end = ii;
+            }
+        }
+        int32_t cur_start = 0;
+        for (size_t i = 0; i < W; ++i) {
+            const Token& t = ctx.toks[i];
+            const bool is_hard_start = (i == 0) || (t.boundary_before && (t.bkind_mask & BK_HARD));
+            if (is_hard_start) cur_start = static_cast<int32_t>(i);
+            NeuralIrabTokInput& vi = sc_buf.v9_in[i];
+            std::memset(&vi, 0, sizeof(vi));
+            vi.word_id = t.word_id;
+            vi.part_id = t.si.particle < 32 ? t.si.particle : 0;
+            vi.pos_id = t.top_pos < 16 ? t.top_pos : 0;
+            vi.hard_boundary = is_hard_start ? 1 : 0;
+
+            const uint8_t* s = &ctx.syms[t.off];
+            const size_t n = t.n;
+            const size_t st = std::min<size_t>(t.si.al_len, n);
+            const size_t slen = n - st;
+            auto h32_arr = [](const uint8_t* p, size_t blen) -> uint16_t {
+                uint32_t h = 2166136261u;
+                for (size_t k = 0; k < blen; ++k) { h ^= p[k]; h *= 16777619u; }
+                return static_cast<uint16_t>((h >> 16) ^ (h & 0xFFFFu));
+            };
+            {
+                uint8_t b0[5] = {t.si.al_len, t.si.has_prep, t.si.has_conj, n > 0 ? s[0] : uint8_t(0), n > 1 ? s[1] : uint8_t(0)};
+                uint8_t b1[3] = {static_cast<uint8_t>(n), n >= 2 ? s[n - 2] : uint8_t(0), n >= 1 ? s[n - 1] : uint8_t(0)};
+                uint8_t b2[4] = {static_cast<uint8_t>(slen), st < n ? s[st] : uint8_t(0), st + slen / 2 < n ? s[st + slen / 2] : uint8_t(0), n >= 1 ? s[n - 1] : uint8_t(0)};
+                vi.hashes[0] = h32_arr(b0, 5);
+                vi.hashes[1] = h32_arr(b1, 3);
+                vi.hashes[2] = h32_arr(b2, 4);
+                vi.hashes[3] = static_cast<uint16_t>(fnv1a_32_syms(s, n) & 0xFFFFu);
+            }
+
+            float max_b[8];
+            for (int c = 0; c < 8; ++c) max_b[c] = -1e9f;
+            uint8_t amask = 0;
+            uint8_t has_sh_end = 0;
+            for (uint32_t k = 0; k < t.cand_count; ++k) {
+                const Cand& ck = ctx.cands[t.cand_begin + k];
+                uint8_t ce = ck.diac[ck.case_pos];
+                uint8_t base_e = (ce >= DIAC_SHADDA) ? static_cast<uint8_t>(ce - DIAC_SHADDA) : ce;
+                if (ce >= DIAC_SHADDA) has_sh_end = 1;
+                if (base_e < 8) {
+                    float sc_v = static_cast<float>(ck.emis) / 1000.0f;
+                    if (sc_v > max_b[base_e]) max_b[base_e] = sc_v;
+                }
+                uint8_t fm = diac_family(ce);
+                if (fm == FAM_DAMMA) amask |= 1;
+                else if (fm == FAM_FATHA) amask |= 2;
+                else if (fm == FAM_KASRA) amask |= 4;
+                else if (fm == FAM_SUKUN) amask |= 8;
+                if (diac_is_tanween(ce)) amask |= 16;
+            }
+            float mx_all = -1e9f;
+            for (int c = 0; c < 8; ++c) if (max_b[c] > mx_all) mx_all = max_b[c];
+            if (mx_all > -1e8f) {
+                float sm = 0.0f;
+                for (int c = 0; c < 8; ++c) {
+                    float ev = (max_b[c] > -1e8f) ? std::exp(std::max(-20.0f, max_b[c] - mx_all)) : 0.0f;
+                    vi.dense[c] = ev;
+                    sm += ev;
+                }
+                if (sm > 0.0f) for (int c = 0; c < 8; ++c) vi.dense[c] /= sm;
+            }
+            for (int c = 0; c < 5; ++c) vi.dense[8 + c] = (amask & (1u << c)) ? 1.0f : 0.0f;
+            vi.dense[13] = has_sh_end ? 1.0f : 0.0f;
+
+            const int32_t d_eos = seg_end_dist[i];
+            const bool is_eos = (d_eos == 0);
+            const bool is_cl_end = (i + 1 == W) || ctx.toks[i + 1].boundary_before;
+            vi.dense[14] = is_hard_start ? 1.0f : 0.0f;
+            vi.dense[15] = is_eos ? 1.0f : 0.0f;
+            vi.dense[16] = is_cl_end ? 1.0f : 0.0f;
+            vi.dense[17] = (d_eos == 1) ? 1.0f : 0.0f;
+            vi.dense[18] = (d_eos == 2) ? 1.0f : 0.0f;
+            vi.dense[19] = static_cast<float>(std::min<int32_t>(d_eos, 16)) / 16.0f;
+            vi.dense[20] = static_cast<float>(std::min<int32_t>(static_cast<int32_t>(i) - cur_start, 16)) / 16.0f;
+            vi.dense[21] = (t.bkind_mask & BK_COMMA) ? 1.0f : 0.0f;
+
+            const bool has_suf = (t.cand_count > 0 && (ctx.cands[t.cand_begin].flags & CF_SUFFIX) != 0);
+            const bool is_oov = (t.cand_count > 0 && (ctx.cands[t.cand_begin].flags & CF_OOV) != 0);
+            const uint8_t last_s = n > 0 ? s[n - 1] : 0;
+            uint8_t need_pron = 0;
+            if (n >= 2 && (last_s == S_KAF || last_s == S_HEH)) {
+                for (uint32_t k = 0; k < t.cand_count; ++k) {
+                    if ((ctx.cands[t.cand_begin + k].flags & CF_SUFFIX) != 0) {
+                        need_pron = 1;
+                        break;
+                    }
+                }
+            }
+            vi.need_pron = need_pron;
+            vi.dense[22] = (t.si.al_len > 0) ? 1.0f : 0.0f;
+            vi.dense[23] = t.si.has_prep ? 1.0f : 0.0f;
+            vi.dense[24] = t.si.has_conj ? 1.0f : 0.0f;
+            vi.dense[25] = has_suf ? 1.0f : 0.0f;
+            vi.dense[26] = is_oov ? 1.0f : 0.0f;
+            vi.dense[27] = t.is_fem_at ? 1.0f : 0.0f;
+            vi.dense[28] = (t.is_diptote_lex == 1) ? 1.0f : 0.0f;
+            vi.dense[29] = (t.is_diptote_lex == 2) ? 1.0f : 0.0f;
+            vi.dense[30] = t.is_ibn ? 1.0f : 0.0f;
+            vi.dense[31] = t.is_adj_like ? 1.0f : 0.0f;
+            vi.dense[32] = t.top_verb ? 1.0f : 0.0f;
+            vi.dense[33] = t.has_noun_lex ? 1.0f : 0.0f;
+            vi.dense[34] = (last_s == S_TEH_MARBUTA) ? 1.0f : 0.0f;
+            vi.dense[35] = (last_s == S_ALEF || last_s == S_ALEF_MAKSURA || last_s == S_YEH || last_s == S_WAW) ? 1.0f : 0.0f;
+
+            uint8_t pt_id = t.si.particle;
+            vi.dense[36] = (pt_id == PART_GEN) ? 1.0f : 0.0f;
+            vi.dense[37] = (pt_id == PART_INNA || (t.surf_flags & SF_INNA_PRON)) ? 1.0f : 0.0f;
+            vi.dense[38] = (pt_id == PART_KANA) ? 1.0f : 0.0f;
+            vi.dense[39] = (pt_id == PART_NASB || pt_id == PART_AN || pt_id == PART_LI_AN || pt_id == PART_HATTA) ? 1.0f : 0.0f;
+            vi.dense[40] = (pt_id == PART_JAZM || pt_id == PART_IN || pt_id == PART_LAMA) ? 1.0f : 0.0f;
+            vi.dense[41] = (pt_id == PART_CONJ) ? 1.0f : 0.0f;
+            vi.dense[42] = (pt_id == PART_REL || pt_id == PART_DEM) ? 1.0f : 0.0f;
+
+            ValencyInfo val = is_v7_ ? get_valency(t.word_id) : ValencyInfo{};
+            vi.dense[43] = static_cast<float>(val.v_trans) / 2.0f;
+            vi.dense[44] = static_cast<float>(val.verb_prob) / 15.0f;
+            vi.dense[45] = static_cast<float>(val.tan_ratio) / 15.0f;
+            vi.dense[46] = val.is_gram_fem ? 1.0f : 0.0f;
+            vi.dense[47] = static_cast<float>(std::min<size_t>(n, 12)) / 12.0f;
+        }
+        if (v9_dump_out != nullptr) {
+            if (gold_diacs && gold_diacs->size() >= W) {
+                for (size_t i = 0; i < W; ++i) {
+                    const Token& t = ctx.toks[i];
+                    if (t.cand_count == 0) continue;
+                    const Cand& c0 = ctx.cands[t.cand_begin];
+                    uint16_t cmask = 0;
+                    for (uint32_t k = 0; k < t.cand_count; ++k) {
+                        uint8_t ce = ctx.cands[t.cand_begin + k].diac[ctx.cands[t.cand_begin + k].case_pos];
+                        if (ce < NUM_DIACRITICS) cmask |= static_cast<uint16_t>(1u << ce);
+                    }
+                    uint8_t ge = (c0.case_pos < MAX_WORD_LEN) ? (*gold_diacs)[i][c0.case_pos] : 0;
+                    uint8_t gp = 0;
+                    const uint8_t* ts = &ctx.syms[t.off];
+                    if ((c0.flags & CF_SUFFIX) && t.n >= 2 && (ts[t.n - 1] == S_KAF || ts[t.n - 1] == S_HEH)) {
+                        uint8_t pd = (*gold_diacs)[i][t.n - 1];
+                        if (pd == DIAC_FATHA) gp = 1;
+                        else if (pd == DIAC_DAMMA) gp = 2;
+                        else if (pd == DIAC_KASRA) gp = 3;
+                    }
+                    V9DumpToken dt;
+                    dt.inp = sc_buf.v9_in[i];
+                    dt.cand_mask = cmask;
+                    dt.gold_end = (ge < NUM_DIACRITICS) ? ge : 0;
+                    dt.gold_pron = gp;
+                    v9_dump_out->push_back(dt);
+                }
+            }
+            return std::string();
+        }
+        neural_irab_.forward(sc_buf.v9_in.data(), W, sc_buf.v9_ws);
+    }
+
     const bool track_p2_sigs = (dump_out != nullptr) || (is_v7_ && irab2_trees_.valid() && v7_weights_[V7W_IRAB2] != 0);
     const bool lazy_irab1 = track_p2_sigs && (dump_out == nullptr) && irab_trees_.valid() &&
                             (weights_[W_IRAB_TREE] != 0) && irab_trees_.has_fast_v5();
@@ -6285,7 +6539,57 @@ std::string Diacritizer::diacritize_internal(
         }
     }
 
-    const uint32_t beam_k_lim = (is_v8_ || core2_dump_out != nullptr) ? 14u : 10u;
+    if (use_v9_neural) {
+        const float* end_lp  = sc_buf.v9_ws.end_logp.data();
+        const float* fam_lp  = sc_buf.v9_ws.fam_logp.data();
+        const float* tan_lp  = sc_buf.v9_ws.tan_logp.data();
+        const float* pron_lp = sc_buf.v9_ws.pron_logp.data();
+        const int32_t w_end  = v9_weights_[V9W_NEURAL_END];
+        const int32_t w_fam  = v9_weights_[V9W_NEURAL_FAM];
+        const int32_t w_tan  = v9_weights_[V9W_NEURAL_TAN];
+        const int32_t w_pron = v9_weights_[V9W_NEURAL_PRON];
+        const int32_t exp_refund = (weights_[W_EXPAND_PEN] * v9_weights_[V9W_EXP_REFUND]) / 1000;
+        const int32_t eos_damp = v9_weights_[V9W_LEX_END_DAMP];
+        for (size_t i = 0; i < W; ++i) {
+            Token& t = ctx.toks[i];
+            if (t.cand_count == 0) continue;
+            const uint8_t* ts = &ctx.syms[t.off];
+            const bool is_eos = (i + 1 == W) || (ctx.toks[i + 1].boundary_before && (ctx.toks[i + 1].bkind_mask & BK_HARD));
+            int32_t max_raw = NEG_INF;
+            if (is_eos && t.cand_count >= 2 && eos_damp < 1000) {
+                for (uint32_t k = 0; k < t.cand_count; ++k) {
+                    int32_t em = ctx.cands[t.cand_begin + k].emis + ((ctx.cands[t.cand_begin + k].flags & CF_EXPANDED) ? exp_refund : 0);
+                    if (em > max_raw) max_raw = em;
+                }
+            }
+            const float* el = end_lp  + i * NUM_DIACRITICS;
+            const float* fl = fam_lp  + i * 5;
+            const float* tl = tan_lp  + i * 2;
+            const float* pl = pron_lp + i * 4;
+            for (uint32_t k = 0; k < t.cand_count; ++k) {
+                Cand& ck = ctx.cands[t.cand_begin + k];
+                if (ck.flags & CF_EXPANDED) ck.emis += exp_refund;
+                if (is_eos && t.cand_count >= 2 && eos_damp < 1000) {
+                    ck.emis = max_raw + static_cast<int32_t>((static_cast<int64_t>(ck.emis - max_raw) * eos_damp) / 1000);
+                }
+                const uint8_t ce = ck.diac[ck.case_pos];
+                const uint8_t cf = diac_family(ce);
+                const size_t ti = diac_is_tanween(ce) ? 1u : 0u;
+                float nscore = 0.0f;
+                if (ce < NUM_DIACRITICS) nscore += el[ce] * static_cast<float>(w_end);
+                if (cf < 5) nscore += fl[cf] * static_cast<float>(w_fam);
+                nscore += tl[ti] * static_cast<float>(w_tan);
+                if ((ck.flags & CF_SUFFIX) && t.n >= 2 && (ts[t.n - 1] == S_KAF || ts[t.n - 1] == S_HEH)) {
+                    uint8_t pd = ck.diac[t.n - 1];
+                    uint8_t pcls = (pd == DIAC_FATHA) ? 1 : ((pd == DIAC_DAMMA) ? 2 : ((pd == DIAC_KASRA) ? 3 : 0));
+                    nscore += pl[pcls] * static_cast<float>(w_pron);
+                }
+                ck.emis += static_cast<int32_t>(std::lrintf(nscore));
+            }
+        }
+    }
+
+    const uint32_t beam_k_lim = use_v9_neural ? 10u : ((is_v8_ || core2_dump_out != nullptr) ? 14u : 10u);
     for (size_t i = 0; i < W; ++i) {
         Token& t = ctx.toks[i];
         if (t.cand_count > beam_k_lim) {
@@ -6414,6 +6718,17 @@ std::string Diacritizer::diacritize_internal(
         if (raw == 0) return 0;
         return static_cast<int32_t>((static_cast<int64_t>(raw) * w_scale) / 1000);
     };
+
+    int32_t v9_crf_sc[16][16] = {};
+    if (use_v9_neural && neural_irab_.crf_trans()) {
+        const float* ct_mat = neural_irab_.crf_trans();
+        const int32_t w_crf = v9_weights_[V9W_NEURAL_CRF];
+        for (int pe = 0; pe < 15; ++pe) {
+            for (int ce = 0; ce < 15; ++ce) {
+                v9_crf_sc[pe][ce] = static_cast<int32_t>(std::lrintf(ct_mat[pe * 15 + ce] * static_cast<float>(w_crf)));
+            }
+        }
+    }
 
     // Process Viterbi in 16-token prefetch chunks so compact ngram + bigram L3 misses overlap in parallel!
     constexpr size_t NG_CHUNK = 16u;
@@ -6673,12 +6988,23 @@ std::string Diacritizer::diacritize_internal(
                     const int32_t dp_p = dp[prev_dp_base + p];
                     const int32_t* __restrict pbin_row = pbin + static_cast<size_t>(p) * ccnt;
                     const int16_t* __restrict tr_row = trans_scaled16_row(pm.role, pm.ce);
+                    const int32_t* __restrict crf_row = use_v9_neural ? v9_crf_sc[pm.ce] : nullptr;
                     if (tr_row) {
-                        for (uint32_t c = 0; c < ccnt; ++c) {
-                            const int32_t v = dp_p + tr_row[col_idx_stack[c]] + pbin_row[c];
-                            if (v > dp_cur[c]) {
-                                dp_cur[c] = v;
-                                back_cur[c] = static_cast<int>(p);
+                        if (crf_row) {
+                            for (uint32_t c = 0; c < ccnt; ++c) {
+                                const int32_t v = dp_p + tr_row[col_idx_stack[c]] + crf_row[cmeta[cur_dp_base + c].ce] + pbin_row[c];
+                                if (v > dp_cur[c]) {
+                                    dp_cur[c] = v;
+                                    back_cur[c] = static_cast<int>(p);
+                                }
+                            }
+                        } else {
+                            for (uint32_t c = 0; c < ccnt; ++c) {
+                                const int32_t v = dp_p + tr_row[col_idx_stack[c]] + pbin_row[c];
+                                if (v > dp_cur[c]) {
+                                    dp_cur[c] = v;
+                                    back_cur[c] = static_cast<int>(p);
+                                }
                             }
                         }
                     } else {
@@ -6703,7 +7029,7 @@ std::string Diacritizer::diacritize_internal(
                     int best_p = 0;
                     for (uint32_t p = 0; p < pcnt; ++p) {
                         const CandMeta& pm = cmeta[prev_dp_base + p];
-                        const int32_t t_sc = trans_score_scaled(pm.role, pm.ce, cr, ce);
+                        const int32_t t_sc = trans_score_scaled(pm.role, pm.ce, cr, ce) + (use_v9_neural ? v9_crf_sc[pm.ce][ce] : 0);
                         const int32_t v = dp[prev_dp_base + p] + t_sc + pbin[p * ccnt + c];
                         if (v > best) {
                             best = v;
@@ -7493,11 +7819,14 @@ std::string Diacritizer::diacritize_internal(
                                 : nullptr;
                             for (size_t oi = 0; oi < n_opts_eff; ++oi) {
                                 const SynOpt& op = opt_info[oi];
-                                const int32_t trans_v = (tr_row && opt_tr_col[oi] != UINT16_MAX)
+                                int32_t trans_v = (tr_row && opt_tr_col[oi] != UINT16_MAX)
                                     ? static_cast<int32_t>(tr_row[opt_tr_col[oi]])
                                     : (pt
                                         ? trans_score_scaled(h.st.last_role, h.st.last_end, op.role, op.ce)
                                         : trans_score_scaled(0, DIAC_NONE, op.role, op.ce));
+                                if (pt && use_v9_neural && h.st.last_end < NUM_DIACRITICS && op.ce < NUM_DIACRITICS) {
+                                    trans_v += v9_crf_sc[h.st.last_end][op.ce];
+                                }
                                 const int32_t bin_v = pbin_row ? pbin_row[op.ok] : 0;
                                 SynState nst = h.st;
                                 int32_t syn_v = step_syn(nst, i, t, tc, op, pt, pc_ptr, nx, is_seg_end);
@@ -7589,7 +7918,7 @@ std::string Diacritizer::diacritize_internal(
         };
 
         // Pass-1 Beam Search
-        run_case_beam(nullptr, 1000);
+        run_case_beam(nullptr, use_v9_neural ? v9_weights_[V9W_SYN_KEEP] : 1000);
 
         // Pass-2 Stacked Bidirectional Core2-GBDT Candidate Ranker (V8)
         auto& core2_locked = sc_buf.core2_locked;
@@ -7656,6 +7985,10 @@ std::string Diacritizer::diacritize_internal(
                 int32_t cbg_c = 0;
                 int32_t tr_sc = 0;
                 int32_t bin_sc = 0;
+                int32_t n_end_max = NEG_INF;
+                int32_t n_fam_max = NEG_INF;
+                int32_t n_tan_max = NEG_INF;
+                uint8_t has_n_best_end = 0;
                 uint8_t count = 0;
                 uint8_t is_p1 = 0;
                 uint8_t has_tan = 0;
@@ -7677,6 +8010,56 @@ std::string Diacritizer::diacritize_internal(
                 return idx;
             };
 
+            auto pick_best_k_in_group = [&](size_t tok_i, uint16_t target_core_h, uint32_t fallback_k) -> uint32_t {
+                const Token& tk = ctx.toks[tok_i];
+                const uint32_t dbase = dp_off[tok_i];
+                const int im1 = get_nb_c2(tok_i, -1);
+                const int ip1 = get_nb_c2(tok_i, 1);
+                const Token* pt = (im1 >= 0) ? &ctx.toks[static_cast<size_t>(im1)] : nullptr;
+                const Token* nx = (ip1 >= 0) ? &ctx.toks[static_cast<size_t>(ip1)] : nullptr;
+                const uint32_t p_ch = (pt && pt->cand_count > 0) ? chosen[static_cast<size_t>(im1)] : 0u;
+                const uint32_t n_ch = (nx && nx->cand_count > 0) ? chosen[static_cast<size_t>(ip1)] : 0u;
+                const bool has_p = (pt && pt->cand_count > 0);
+                const bool has_n = (nx && nx->cand_count > 0);
+                const uint8_t pr = has_p ? c2_role[static_cast<size_t>(im1)] : 0u;
+                const uint8_t pe = has_p ? ctx.cands[pt->cand_begin + p_ch].diac[ctx.cands[pt->cand_begin + p_ch].case_pos] : DIAC_NONE;
+                const uint8_t nr = has_n ? c2_role[static_cast<size_t>(ip1)] : 0u;
+                const uint8_t ne = has_n ? ctx.cands[nx->cand_begin + n_ch].diac[ctx.cands[nx->cand_begin + n_ch].case_pos] : DIAC_NONE;
+                const int32_t* pbin_l = has_p ? &pair_bin[pair_off[tok_i] + p_ch * tk.cand_count] : nullptr;
+                const int32_t* pbin_r = has_n ? &pair_bin[pair_off[tok_i + 1]] : nullptr;
+                const uint32_t nx_ccnt = has_n ? nx->cand_count : 0u;
+
+                uint32_t best_k = fallback_k;
+                int32_t best_sc = NEG_INF;
+                for (uint32_t k = 0; k < tk.cand_count; ++k) {
+                    const CandMeta& cm = cmeta[dbase + k];
+                    if (cm.core_h != target_core_h) continue;
+                    const Cand& ck = ctx.cands[tk.cand_begin + k];
+                    int32_t sc = ck.emis + dp_bg[dbase + k];
+                    const uint8_t ce = cm.ce;
+                    const uint8_t cr = cm.role;
+                    if (has_p) {
+                        sc += trans_score_scaled(pr, pe, cr, ce) + pbin_l[k];
+                        if (use_v9_neural && pe < NUM_DIACRITICS && ce < NUM_DIACRITICS) {
+                            sc += v9_crf_sc[pe][ce];
+                        }
+                    } else {
+                        sc += trans_score_scaled(0, DIAC_NONE, cr, ce);
+                    }
+                    if (has_n) {
+                        sc += trans_score_scaled(cr, ce, nr, ne) + pbin_r[k * nx_ccnt + n_ch];
+                        if (use_v9_neural && ce < NUM_DIACRITICS && ne < NUM_DIACRITICS) {
+                            sc += v9_crf_sc[ce][ne];
+                        }
+                    }
+                    if (sc > best_sc) {
+                        best_sc = sc;
+                        best_k = k;
+                    }
+                }
+                return best_k;
+            };
+
             const bool use_fast_c2 = (core2_dump_out == nullptr) && core2_trees_.has_fast_v5() && (core2_trees_.num_classes() >= 2);
             const size_t c2_fc_lim = std::min<size_t>(core2_feat_count_, CORE2_NUM_FEATURES);
             alignas(64) int8_t fc_base[128];
@@ -7686,6 +8069,10 @@ std::string Diacritizer::diacritize_internal(
                 sc_buf.c2_feat_buf.clear();
             }
 
+            const float* c2_end_lp_base = use_v9_neural ? sc_buf.v9_ws.end_logp.data() : nullptr;
+            const float* c2_fam_lp_base = use_v9_neural ? sc_buf.v9_ws.fam_logp.data() : nullptr;
+            const float* c2_tan_lp_base = use_v9_neural ? sc_buf.v9_ws.tan_logp.data() : nullptr;
+
             int32_t fc[CORE2_NUM_FEATURES];
             for (size_t i = 0; i < W; ++i) {
                 const Token& t = ctx.toks[i];
@@ -7693,6 +8080,16 @@ std::string Diacritizer::diacritize_internal(
                 const uint8_t* ts = &ctx.syms[t.off];
                 const uint8_t lam_skip = (t.si.al_len >= 2) ? t.si.al_lam_pos : 255;
                 const uint32_t dbase = dp_off[i];
+                const float* el_i = c2_end_lp_base ? (c2_end_lp_base + i * NUM_DIACRITICS) : nullptr;
+                const float* fl_i = c2_fam_lp_base ? (c2_fam_lp_base + i * 5) : nullptr;
+                const float* tl_i = c2_tan_lp_base ? (c2_tan_lp_base + i * 2) : nullptr;
+                uint8_t n_best_end = 255;
+                if (el_i) {
+                    float best_el = -1e30f;
+                    for (uint8_t e = 0; e < NUM_DIACRITICS; ++e) {
+                        if (el_i[e] > best_el) { best_el = el_i[e]; n_best_end = e; }
+                    }
+                }
 
                 CoreGrp grps[8];
                 int n_grp = 0;
@@ -7715,6 +8112,18 @@ std::string Diacritizer::diacritize_internal(
                     ++gr.count;
                     if (cm.bits & CMB_TAN) gr.has_tan = 1;
                     if (cm.cf == FAM_KASRA) gr.has_kasra = 1;
+                    if (el_i) {
+                        const uint8_t ce = cm.ce;
+                        const uint8_t cf = cm.cf;
+                        const size_t ti = (cm.bits & CMB_TAN) ? 1u : 0u;
+                        const int32_t nev = (ce < NUM_DIACRITICS) ? static_cast<int32_t>(std::lrintf(el_i[ce] * 100.0f)) : -1000;
+                        const int32_t nfv = (cf < 5) ? static_cast<int32_t>(std::lrintf(fl_i[cf] * 100.0f)) : -1000;
+                        const int32_t ntv = static_cast<int32_t>(std::lrintf(tl_i[ti] * 100.0f));
+                        if (nev > gr.n_end_max) gr.n_end_max = nev;
+                        if (nfv > gr.n_fam_max) gr.n_fam_max = nfv;
+                        if (ntv > gr.n_tan_max) gr.n_tan_max = ntv;
+                        if (ce == n_best_end) gr.has_n_best_end = 1;
+                    }
                     const bool is_exp = (ck.flags & CF_EXPANDED) != 0;
                     if (!is_exp) {
                         if (!gr.has_non_exp || ck.lex_emis > gr.lex_max) gr.lex_max = ck.lex_emis;
@@ -7958,6 +8367,15 @@ std::string Diacritizer::diacritize_internal(
                                         16 * (pt->si.al_len > 0 ? 1 : 0) + 32 * (pt->si.has_prep ? 1 : 0)) : -1);
                 fc[70] = clamp_c2(p1_rc.pos_tag + 16 * p1_rc.verb_pattern + 48 * ((p1_rc.ext_flags & EF_PASSIVE) ? 1 : 0));
                 fc[71] = clamp_c2(p1_rc.diac[st] + 16 * ((st + 1 < t.n) ? diac_family(p1_rc.diac[st + 1]) : 0));
+                fc[76] = clamp_c2((im1 < 0 ? 1 : 0) | (ip1 < 0 ? 2 : 0) | (t.boundary_before ? 4 : 0) |
+                                  ((i + 1 < W && ctx.toks[i + 1].boundary_before) ? 8 : 0));
+                fc[78] = clamp_c2((t.lex_top_end != 255) ? static_cast<int32_t>(t.lex_top_end) : -1);
+                fc[79] = clamp_c2((pt && pt->si.particle == PART_CONJ ? 1 : 0) |
+                                  (pt && pt->si.has_prep ? 2 : 0) |
+                                  (pt && pt->top_verb == 1 ? 4 : 0) |
+                                  (nx && nx->top_verb == 1 ? 8 : 0) |
+                                  (nx && nx->si.al_len > 0 ? 16 : 0) |
+                                  (t.is_fem_at ? 32 : 0));
 
                 if (use_fast_c2) {
                     for (size_t fi = 13; fi < c2_fc_lim; ++fi) fc_base[fi] = static_cast<int8_t>(fc[fi]);
@@ -7968,7 +8386,10 @@ std::string Diacritizer::diacritize_internal(
                     sl.vec_off = vec_off;
                     sl.n_grp = n_grp;
                     sl.p1_g = p1_g;
-                    for (int g = 0; g < n_grp; ++g) sl.rep_k[g] = grps[g].rep_k;
+                    for (int g = 0; g < n_grp; ++g) {
+                        sl.rep_k[g] = grps[g].rep_k;
+                        sl.core_h[g] = grps[g].core_h;
+                    }
                     sc_buf.c2_slices.push_back(sl);
 
                     for (int g = 0; g < n_grp; ++g) {
@@ -7978,6 +8399,7 @@ std::string Diacritizer::diacritize_internal(
                         int32_t o_lex = NEG_INF, o_em = NEG_INF, o_mo = NEG_INF;
                         int32_t o_cl = NEG_INF, o_cr = NEG_INF, o_cc = NEG_INF;
                         int32_t o_tr = NEG_INF, o_bn = NEG_INF;
+                        int32_t o_ne = NEG_INF, o_nf = NEG_INF, o_nt = NEG_INF;
                         int rank_lex = 0, rank_em = 0;
                         for (int o = 0; o < n_grp; ++o) {
                             if (o == g) continue;
@@ -7991,6 +8413,9 @@ std::string Diacritizer::diacritize_internal(
                             if (grps[o].cbg_c > o_cc) o_cc = grps[o].cbg_c;
                             if (grps[o].tr_sc > o_tr) o_tr = grps[o].tr_sc;
                             if (grps[o].bin_sc > o_bn) o_bn = grps[o].bin_sc;
+                            if (grps[o].n_end_max > o_ne) o_ne = grps[o].n_end_max;
+                            if (grps[o].n_fam_max > o_nf) o_nf = grps[o].n_fam_max;
+                            if (grps[o].n_tan_max > o_nt) o_nt = grps[o].n_tan_max;
                         }
 
                         uint8_t sh_cnt = 0, suk_cnt = 0;
@@ -8033,6 +8458,18 @@ std::string Diacritizer::diacritize_internal(
                         if (c2_fc_lim > 64) {
                             fg[64] = static_cast<int8_t>(fc64_base | ((rc.flags & CF_EXPANDED) ? 32 : 0));
                         }
+                        if (c2_fc_lim > 72) {
+                            fg[72] = clamp_c2_i8(el_i ? (60 + (gr.n_end_max - o_ne) / 10) : -1);
+                            fg[73] = clamp_c2_i8(fl_i ? (60 + (gr.n_fam_max - o_nf) / 10) : -1);
+                            fg[74] = clamp_c2_i8(tl_i ? (60 + (gr.n_tan_max - o_nt) / 10) : -1);
+                            fg[75] = clamp_c2_i8(el_i ? gr.has_n_best_end : -1);
+                            fg[77] = clamp_c2_i8((rc.diac[st] == DIAC_DAMMA ? 1 : 0) |
+                                                 (rc.diac[st] == DIAC_KASRA ? 2 : 0) |
+                                                 (rc.diac[st] == DIAC_FATHA ? 4 : 0) |
+                                                 ((st + 1 < rc.case_pos && rc.diac[st + 1] == DIAC_SUKUN) ? 8 : 0) |
+                                                 ((rc.case_pos >= 1 && rc.diac[rc.case_pos - 1] == DIAC_KASRA) ? 16 : 0) |
+                                                 ((rc.case_pos >= 1 && rc.diac[rc.case_pos - 1] == DIAC_FATHA) ? 32 : 0));
+                        }
                     }
                     continue;
                 }
@@ -8048,6 +8485,7 @@ std::string Diacritizer::diacritize_internal(
                     int32_t o_lex = NEG_INF, o_em = NEG_INF, o_mo = NEG_INF;
                     int32_t o_cl = NEG_INF, o_cr = NEG_INF, o_cc = NEG_INF;
                     int32_t o_tr = NEG_INF, o_bn = NEG_INF;
+                    int32_t o_ne = NEG_INF, o_nf = NEG_INF, o_nt = NEG_INF;
                     int rank_lex = 0, rank_em = 0;
                     for (int o = 0; o < n_grp; ++o) {
                         if (o == g) continue;
@@ -8061,6 +8499,9 @@ std::string Diacritizer::diacritize_internal(
                         if (grps[o].cbg_c > o_cc) o_cc = grps[o].cbg_c;
                         if (grps[o].tr_sc > o_tr) o_tr = grps[o].tr_sc;
                         if (grps[o].bin_sc > o_bn) o_bn = grps[o].bin_sc;
+                        if (grps[o].n_end_max > o_ne) o_ne = grps[o].n_end_max;
+                        if (grps[o].n_fam_max > o_nf) o_nf = grps[o].n_fam_max;
+                        if (grps[o].n_tan_max > o_nt) o_nt = grps[o].n_tan_max;
                     }
 
                     uint8_t sh_cnt = 0, suk_cnt = 0;
@@ -8099,6 +8540,16 @@ std::string Diacritizer::diacritize_internal(
                     fc[61] = clamp_c2(60 + (gr.tr_sc - o_tr) / 80);
                     fc[62] = clamp_c2(60 + (gr.bin_sc - o_bn) / 100);
                     fc[64] = clamp_c2(fc64_base | ((rc.flags & CF_EXPANDED) ? 32 : 0));
+                    fc[72] = clamp_c2(el_i ? (60 + (gr.n_end_max - o_ne) / 10) : -1);
+                    fc[73] = clamp_c2(fl_i ? (60 + (gr.n_fam_max - o_nf) / 10) : -1);
+                    fc[74] = clamp_c2(tl_i ? (60 + (gr.n_tan_max - o_nt) / 10) : -1);
+                    fc[75] = clamp_c2(el_i ? gr.has_n_best_end : -1);
+                    fc[77] = clamp_c2((rc.diac[st] == DIAC_DAMMA ? 1 : 0) |
+                                      (rc.diac[st] == DIAC_KASRA ? 2 : 0) |
+                                      (rc.diac[st] == DIAC_FATHA ? 4 : 0) |
+                                      ((st + 1 < rc.case_pos && rc.diac[st + 1] == DIAC_SUKUN) ? 8 : 0) |
+                                      ((rc.case_pos >= 1 && rc.diac[rc.case_pos - 1] == DIAC_KASRA) ? 16 : 0) |
+                                      ((rc.case_pos >= 1 && rc.diac[rc.case_pos - 1] == DIAC_FATHA) ? 32 : 0));
 
                     if (core2_dump_out != nullptr) {
                         Core2DumpSample smp;
@@ -8120,20 +8571,25 @@ std::string Diacritizer::diacritize_internal(
                     int32_t b_sc = static_cast<int32_t>((static_cast<int64_t>(best_logit) * v8_weights_[V8W_CORE2]) / 1000);
                     int32_t p_sc = static_cast<int32_t>((static_cast<int64_t>(p1_logit) * v8_weights_[V8W_CORE2]) / 1000);
                     if (b_sc > p_sc + v8_weights_[V8W_CORE2_MARGIN]) {
-                        new_chosen[i] = grps[best_g].rep_k;
+                        new_chosen[i] = pick_best_k_in_group(i, grps[best_g].core_h, grps[best_g].rep_k);
                         core2_locked[i] = 1;
                         has_core2_locks = true;
                     }
                 }
             }
 
-            // Sentence-batched L1-tiled Core2 evaluation across all multi-core words at once!
+            // Sentence-batched L1-tiled Core2 evaluation with exact branch-and-bound pruning
             if (use_fast_c2 && !sc_buf.c2_feat_buf.empty()) {
                 const size_t n_vecs = sc_buf.c2_feat_buf.size();
                 sc_buf.c2_logits.resize(n_vecs);
-                core2_trees_.predict_batch_binary_i8(sc_buf.c2_feat_buf.data(), n_vecs, sc_buf.c2_logits.data());
                 const int32_t w_c2 = v8_weights_[V8W_CORE2];
                 const int32_t c2_mar = v8_weights_[V8W_CORE2_MARGIN];
+                core2_trees_.predict_batch_binary_pruned_i8(
+                    sc_buf.c2_feat_buf.data(), n_vecs,
+                    sc_buf.c2_slices.data(), sc_buf.c2_slices.size(),
+                    w_c2, c2_mar,
+                    sc_buf.c2_active_vecs, sc_buf.c2_active_slices,
+                    sc_buf.c2_logits.data());
                 for (const auto& sl : sc_buf.c2_slices) {
                     int32_t best_logit = NEG_INF;
                     int32_t p1_logit = 0;
@@ -8147,7 +8603,7 @@ std::string Diacritizer::diacritize_internal(
                         const int32_t b_sc = static_cast<int32_t>((static_cast<int64_t>(best_logit) * w_c2) / 1000);
                         const int32_t p_sc = static_cast<int32_t>((static_cast<int64_t>(p1_logit) * w_c2) / 1000);
                         if (b_sc > p_sc + c2_mar) {
-                            new_chosen[sl.tok_i] = sl.rep_k[best_g];
+                            new_chosen[sl.tok_i] = pick_best_k_in_group(sl.tok_i, sl.core_h[best_g], sl.rep_k[best_g]);
                             core2_locked[sl.tok_i] = 1;
                             has_core2_locks = true;
                         }
@@ -9952,7 +10408,7 @@ void Diacritizer::dump_irab2_sentence(const char* gold_utf8, size_t len, std::ve
         }
     }
     if (gold_diacs.empty()) return;
-    diacritize_internal(plain.data(), plain.size(), &out, &gold_diacs);
+    diacritize_internal(plain.data(), plain.size(), &out, &gold_diacs, nullptr, nullptr, nullptr);
 }
 
 void Diacritizer::dump_core2_sentence(const char* gold_utf8, size_t len,
@@ -10022,7 +10478,76 @@ void Diacritizer::dump_core2_sentence(const char* gold_utf8, size_t len,
         }
     }
     if (gold_diacs.empty()) return;
-    diacritize_internal(plain.data(), plain.size(), nullptr, &gold_diacs, &out, &next_group_id);
+    diacritize_internal(plain.data(), plain.size(), nullptr, &gold_diacs, &out, &next_group_id, nullptr);
+}
+
+void Diacritizer::dump_v9_sentence(const char* gold_utf8, size_t len, std::vector<V9DumpToken>& out) const {
+    if (!is_loaded() || !gold_utf8 || len == 0) return;
+    std::string plain;
+    plain.reserve(len);
+    std::vector<std::array<uint8_t, MAX_WORD_LEN>> gold_diacs;
+    size_t pos = 0;
+    while (pos < len) {
+        size_t save = pos;
+        uint32_t cp = utf8_next(gold_utf8, len, pos);
+        if (is_arabic_letter(cp)) {
+            std::array<uint8_t, MAX_WORD_LEN> gd{};
+            gd.fill(DIAC_NONE);
+            size_t cnt = 0;
+            auto consume_diacs = [&](size_t l_idx) {
+                bool has_sh = false;
+                uint8_t base = DIAC_NONE;
+                while (pos < len) {
+                    size_t ps = pos;
+                    uint32_t dcp = utf8_next(gold_utf8, len, pos);
+                    if (is_tatweel(dcp)) continue;
+                    if (!is_arabic_diacritic(dcp)) { pos = ps; break; }
+                    if (dcp == 0x0651u) has_sh = true;
+                    else if (dcp == 0x064Eu) base = DIAC_FATHA;
+                    else if (dcp == 0x064Fu) base = DIAC_DAMMA;
+                    else if (dcp == 0x0650u) base = DIAC_KASRA;
+                    else if (dcp == 0x0652u) base = DIAC_SUKUN;
+                    else if (dcp == 0x064Bu) base = DIAC_FATHATAN;
+                    else if (dcp == 0x064Cu) base = DIAC_DAMMATAN;
+                    else if (dcp == 0x064Du) base = DIAC_KASRATAN;
+                }
+                if (l_idx < MAX_WORD_LEN) {
+                    uint8_t did = base;
+                    if (has_sh) {
+                        if (base == DIAC_FATHA) did = DIAC_SHADDA_FATHA;
+                        else if (base == DIAC_DAMMA) did = DIAC_SHADDA_DAMMA;
+                        else if (base == DIAC_KASRA) did = DIAC_SHADDA_KASRA;
+                        else if (base == DIAC_FATHATAN) did = DIAC_SHADDA_FATHATAN;
+                        else if (base == DIAC_DAMMATAN) did = DIAC_SHADDA_DAMMATAN;
+                        else if (base == DIAC_KASRATAN) did = DIAC_SHADDA_KASRATAN;
+                        else did = DIAC_SHADDA;
+                    }
+                    gd[l_idx] = did;
+                }
+            };
+            utf8_append(plain, cp);
+            consume_diacs(0);
+            cnt = 1;
+            while (pos < len) {
+                size_t ns = pos;
+                uint32_t ncp = utf8_next(gold_utf8, len, pos);
+                if (is_tatweel(ncp) || is_arabic_diacritic(ncp)) continue;
+                if (is_arabic_letter(ncp)) {
+                    utf8_append(plain, ncp);
+                    consume_diacs(cnt);
+                    ++cnt;
+                } else {
+                    pos = ns;
+                    break;
+                }
+            }
+            if (cnt <= MAX_WORD_LEN) gold_diacs.push_back(gd);
+        } else {
+            if (!is_arabic_diacritic(cp)) plain.append(gold_utf8 + save, pos - save);
+        }
+    }
+    if (gold_diacs.empty()) return;
+    diacritize_internal(plain.data(), plain.size(), nullptr, &gold_diacs, nullptr, nullptr, &out);
 }
 
 }

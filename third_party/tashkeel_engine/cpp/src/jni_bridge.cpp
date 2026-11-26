@@ -2,13 +2,17 @@
 #include "tashkeel/diacritizer.hpp"
 #include <string>
 
-#define BARQ_JNI_EXPORT JNIEXPORT __attribute__((visibility("default")))
+#ifndef BARQ_JNI_EXPORT
+#define BARQ_JNI_EXPORT extern "C" __attribute__((visibility("default"))) JNIEXPORT
+#endif
 
-namespace {
+extern "C" {
 
-jlong jni_create_impl(JNIEnv* env, jstring modelPath) {
+BARQ_JNI_EXPORT jlong JNICALL
+Java_com_planetblindtech_barq_barq_nativeCreate(JNIEnv* env, jclass, jstring modelPath) {
     if (!modelPath) return 0;
     const char* path = env->GetStringUTFChars(modelPath, nullptr);
+    if (!path) return 0;
     auto* engine = new tashkeel::Diacritizer();
     bool ok = engine->load(path);
     env->ReleaseStringUTFChars(modelPath, path);
@@ -19,26 +23,89 @@ jlong jni_create_impl(JNIEnv* env, jstring modelPath) {
     return reinterpret_cast<jlong>(engine);
 }
 
-void jni_destroy_impl(jlong handle) {
+BARQ_JNI_EXPORT void JNICALL
+Java_com_planetblindtech_barq_barq_nativeDestroy(JNIEnv*, jclass, jlong handle) {
     delete reinterpret_cast<tashkeel::Diacritizer*>(handle);
 }
 
-jstring jni_diacritize_impl(JNIEnv* env, jlong handle, jstring text) {
+BARQ_JNI_EXPORT jstring JNICALL
+Java_com_planetblindtech_barq_barq_nativeDiacritize(JNIEnv* env, jclass, jlong handle, jstring text) {
     if (!handle || !text) return text;
     auto* engine = reinterpret_cast<tashkeel::Diacritizer*>(handle);
     const char* utf8 = env->GetStringUTFChars(text, nullptr);
+    if (!utf8) return nullptr;
     jsize len = env->GetStringUTFLength(text);
     std::string out = engine->diacritize(utf8, static_cast<size_t>(len));
     env->ReleaseStringUTFChars(text, utf8);
     return env->NewStringUTF(out.c_str());
 }
 
-jint jni_vocab_size_impl(jlong handle) {
+BARQ_JNI_EXPORT jobjectArray JNICALL
+Java_com_planetblindtech_barq_barq_nativeDiacritizeBatch(JNIEnv* env, jclass, jlong handle, jobjectArray texts) {
+    if (!handle || !texts) return nullptr;
+    jclass str_cls = env->FindClass("java/lang/String");
+    if (!str_cls) return nullptr;
+    jsize n = env->GetArrayLength(texts);
+    jobjectArray out_arr = env->NewObjectArray(n, str_cls, nullptr);
+    if (!out_arr) {
+        env->DeleteLocalRef(str_cls);
+        return nullptr;
+    }
+    auto* engine = reinterpret_cast<tashkeel::Diacritizer*>(handle);
+    for (jsize i = 0; i < n; ++i) {
+        auto item = static_cast<jstring>(env->GetObjectArrayElement(texts, i));
+        if (!item) {
+            continue;
+        }
+        jsize ulen = env->GetStringUTFLength(item);
+        if (ulen == 0) {
+            env->SetObjectArrayElement(out_arr, i, item);
+            env->DeleteLocalRef(item);
+            continue;
+        }
+        const char* utf8 = env->GetStringUTFChars(item, nullptr);
+        if (!utf8) {
+            env->DeleteLocalRef(item);
+            env->DeleteLocalRef(str_cls);
+            return nullptr;
+        }
+        std::string out = engine->diacritize(utf8, static_cast<size_t>(ulen));
+        env->ReleaseStringUTFChars(item, utf8);
+        jstring res = env->NewStringUTF(out.c_str());
+        if (!res) {
+            env->DeleteLocalRef(item);
+            env->DeleteLocalRef(str_cls);
+            return nullptr;
+        }
+        env->SetObjectArrayElement(out_arr, i, res);
+        env->DeleteLocalRef(res);
+        env->DeleteLocalRef(item);
+    }
+    env->DeleteLocalRef(str_cls);
+    return out_arr;
+}
+
+BARQ_JNI_EXPORT jint JNICALL
+Java_com_planetblindtech_barq_barq_nativeVocabSize(JNIEnv*, jclass, jlong handle) {
     if (!handle) return 0;
     return static_cast<jint>(reinterpret_cast<tashkeel::Diacritizer*>(handle)->vocab_size());
 }
 
-jboolean jni_set_weight_impl(jlong handle, jint id, jint value) {
+BARQ_JNI_EXPORT jboolean JNICALL
+Java_com_planetblindtech_barq_barq_nativeHasNeuralIrab(JNIEnv*, jclass, jlong handle) {
+    if (!handle) return JNI_FALSE;
+    return reinterpret_cast<tashkeel::Diacritizer*>(handle)->has_v9_neural() ? JNI_TRUE : JNI_FALSE;
+}
+
+BARQ_JNI_EXPORT jint JNICALL
+Java_com_planetblindtech_barq_barq_nativeGetWeight(JNIEnv*, jclass, jlong handle, jint id) {
+    if (!handle || id < 0) return 0;
+    return static_cast<jint>(
+        reinterpret_cast<tashkeel::Diacritizer*>(handle)->weight(static_cast<uint32_t>(id)));
+}
+
+BARQ_JNI_EXPORT jboolean JNICALL
+Java_com_planetblindtech_barq_barq_nativeSetWeight(JNIEnv*, jclass, jlong handle, jint id, jint value) {
     if (!handle || id < 0) return JNI_FALSE;
     return reinterpret_cast<tashkeel::Diacritizer*>(handle)->set_weight(
                static_cast<uint32_t>(id), static_cast<int32_t>(value))
@@ -46,75 +113,10 @@ jboolean jni_set_weight_impl(jlong handle, jint id, jint value) {
                : JNI_FALSE;
 }
 
-void jni_set_restore_spelling_impl(jlong handle, jboolean enabled) {
+BARQ_JNI_EXPORT void JNICALL
+Java_com_planetblindtech_barq_barq_nativeSetRestoreSpelling(JNIEnv*, jclass, jlong handle, jboolean enabled) {
     if (!handle) return;
     reinterpret_cast<tashkeel::Diacritizer*>(handle)->set_restore_spelling(enabled == JNI_TRUE);
-}
-
-} // namespace
-
-extern "C" {
-
-/* Primary Barq Android JNI bindings (com.barq.BarqEngine) */
-BARQ_JNI_EXPORT jlong JNICALL
-Java_com_barq_BarqEngine_nativeCreate(JNIEnv* env, jclass, jstring modelPath) {
-    return jni_create_impl(env, modelPath);
-}
-
-BARQ_JNI_EXPORT void JNICALL
-Java_com_barq_BarqEngine_nativeDestroy(JNIEnv*, jclass, jlong handle) {
-    jni_destroy_impl(handle);
-}
-
-BARQ_JNI_EXPORT jstring JNICALL
-Java_com_barq_BarqEngine_nativeDiacritize(JNIEnv* env, jclass, jlong handle, jstring text) {
-    return jni_diacritize_impl(env, handle, text);
-}
-
-BARQ_JNI_EXPORT jint JNICALL
-Java_com_barq_BarqEngine_nativeVocabSize(JNIEnv*, jclass, jlong handle) {
-    return jni_vocab_size_impl(handle);
-}
-
-BARQ_JNI_EXPORT jboolean JNICALL
-Java_com_barq_BarqEngine_nativeSetWeight(JNIEnv*, jclass, jlong handle, jint id, jint value) {
-    return jni_set_weight_impl(handle, id, value);
-}
-
-BARQ_JNI_EXPORT void JNICALL
-Java_com_barq_BarqEngine_nativeSetRestoreSpelling(JNIEnv*, jclass, jlong handle, jboolean enabled) {
-    jni_set_restore_spelling_impl(handle, enabled);
-}
-
-/* Legacy ABI-compatible Android JNI bindings (com.tashkeel.TashkeelEngine) */
-BARQ_JNI_EXPORT jlong JNICALL
-Java_com_tashkeel_TashkeelEngine_nativeCreate(JNIEnv* env, jclass, jstring modelPath) {
-    return jni_create_impl(env, modelPath);
-}
-
-BARQ_JNI_EXPORT void JNICALL
-Java_com_tashkeel_TashkeelEngine_nativeDestroy(JNIEnv*, jclass, jlong handle) {
-    jni_destroy_impl(handle);
-}
-
-BARQ_JNI_EXPORT jstring JNICALL
-Java_com_tashkeel_TashkeelEngine_nativeDiacritize(JNIEnv* env, jclass, jlong handle, jstring text) {
-    return jni_diacritize_impl(env, handle, text);
-}
-
-BARQ_JNI_EXPORT jint JNICALL
-Java_com_tashkeel_TashkeelEngine_nativeVocabSize(JNIEnv*, jclass, jlong handle) {
-    return jni_vocab_size_impl(handle);
-}
-
-BARQ_JNI_EXPORT jboolean JNICALL
-Java_com_tashkeel_TashkeelEngine_nativeSetWeight(JNIEnv*, jclass, jlong handle, jint id, jint value) {
-    return jni_set_weight_impl(handle, id, value);
-}
-
-BARQ_JNI_EXPORT void JNICALL
-Java_com_tashkeel_TashkeelEngine_nativeSetRestoreSpelling(JNIEnv*, jclass, jlong handle, jboolean enabled) {
-    jni_set_restore_spelling_impl(handle, enabled);
 }
 
 }

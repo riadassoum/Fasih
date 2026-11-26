@@ -15,7 +15,8 @@ constexpr uint16_t TASH_VERSION_5 = 5;
 constexpr uint16_t TASH_VERSION_6 = 6;
 constexpr uint16_t TASH_VERSION_7 = 7;
 constexpr uint16_t TASH_VERSION_8 = 8;
-constexpr uint16_t TASH_VERSION = TASH_VERSION_8;
+constexpr uint16_t TASH_VERSION_9 = 9;
+constexpr uint16_t TASH_VERSION = TASH_VERSION_9;
 
 constexpr uint32_t V7F_IRAB2_V5_4B = 1u << 0;
 constexpr uint32_t V7F_IRAB2_V3_8B = 1u << 1;
@@ -25,6 +26,13 @@ constexpr uint32_t V7F_COMPACT_VALENCY = 1u << 4;
 
 constexpr uint32_t V8F_CORE2_V5_4B = 1u << 0;
 constexpr uint32_t V8F_OOV_V8_38F = 1u << 1;
+
+constexpr uint32_t V9F_NEURAL_IRAB  = 1u << 0;
+constexpr uint32_t V9F_LATTICE_V9   = 1u << 1;
+constexpr uint32_t V9F_CLEAN_POST   = 1u << 2;
+constexpr uint32_t V9F_DUAL_FST     = 1u << 3;
+constexpr uint32_t V9F_COMPACT_META = 1u << 4;
+constexpr uint32_t NEURAL_IRAB_MAGIC = 0x4241524Eu; // "NRAB"
 
 enum DiacriticId : uint8_t {
     DIAC_NONE = 0,
@@ -86,7 +94,7 @@ constexpr size_t IRAB_NUM_FEATURES = 56;
 constexpr size_t IRAB_V5_BASE_FEATURES = 44;
 constexpr size_t IRAB_LEGACY_FEATURES = 40;
 constexpr size_t IRAB2_NUM_FEATURES = 96;
-constexpr size_t CORE2_NUM_FEATURES = 72;
+constexpr size_t CORE2_NUM_FEATURES = 80;
 constexpr size_t MORPH_NUM_FEATURES = 32;
 constexpr size_t NUM_MORPH_CLASSES = 12;
 constexpr size_t NUM_TRANS_ROLES_V5 = 24;
@@ -125,6 +133,22 @@ enum V8WeightId : uint32_t {
 
 constexpr int32_t DEFAULT_V8_WEIGHTS[NUM_V8_WEIGHTS] = {
     1000, 0, 0
+};
+
+enum V9WeightId : uint32_t {
+    V9W_NEURAL_END = 0,
+    V9W_NEURAL_CRF = 1,
+    V9W_NEURAL_FAM = 2,
+    V9W_NEURAL_TAN = 3,
+    V9W_NEURAL_PRON = 4,
+    V9W_EXP_REFUND = 5,
+    V9W_LEX_END_DAMP = 6,
+    V9W_SYN_KEEP = 7,
+    NUM_V9_WEIGHTS = 8
+};
+
+constexpr int32_t DEFAULT_V9_WEIGHTS[NUM_V9_WEIGHTS] = {
+    3200, 1400, 2000, 900, 800, 200, 400, 1200
 };
 
 constexpr uint8_t NG_ORDER_RBG = 12;
@@ -355,6 +379,36 @@ struct FileHeaderV8 {
     uint32_t v8_flags;
     uint32_t v8_weights_count;
     uint64_t v8_weights_offset;
+};
+
+struct NeuralIrabHeader {
+    uint32_t magic;
+    uint16_t version;      // 2 = LightningBiIrab (Dilated Conv + Bi-GLRU + 4-tok INT8 GEMM)
+    uint16_t d_model;
+    uint16_t n_layers;
+    uint16_t n_heads;      // d_rec for v2 (48 fwd + 48 bwd = 96)
+    uint16_t d_ff;
+    uint16_t conv_kernel;
+    uint32_t vocab_size;
+    uint16_t word_emb_rows;
+    uint16_t hash_buckets;
+    uint16_t n_dense_feat;
+    uint16_t reserved;
+};
+
+struct FileHeaderV9 {
+    FileHeaderV8 base;
+    uint64_t neural_irab_offset;
+    uint32_t neural_irab_size;
+    uint32_t v9_flags;
+    int32_t  v9_weights[NUM_V9_WEIGHTS];
+};
+
+struct WordMetaV8 {
+    uint8_t cand_start[3];
+    uint8_t cand_count;
+    uint8_t word_len;
+    uint8_t role_flags;
 };
 
 struct FstV5Header {

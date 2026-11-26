@@ -2,21 +2,29 @@
 setlocal
 cd /d "%~dp0\.."
 
-REM Option 1: MSVC / Visual Studio Build Tools via CMake
+where cl >nul 2>&1
+if errorlevel 1 (
+    for %%V in (
+        "C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
+        "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
+        "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"
+        "C:\Program Files\Microsoft Visual Studio\2022\Professional\VC\Auxiliary\Build\vcvars64.bat"
+    ) do (
+        if exist %%V (
+            call %%V >nul
+            goto :cmake_build
+        )
+    )
+)
+
+:cmake_build
 cmake -B build_win -DCMAKE_BUILD_TYPE=Release
-if errorlevel 1 goto :mingw
+if errorlevel 1 exit /b 1
 cmake --build build_win --config Release
-if errorlevel 1 goto :mingw
+if errorlevel 1 exit /b 1
 if not exist windows mkdir windows
 copy /Y build_win\Release\barq.dll windows\barq.dll >nul
 copy /Y build_win\Release\barq.lib windows\barq.lib >nul
 copy /Y build_win\Release\barq.exe windows\barq.exe >nul
 echo Built Windows: windows\barq.dll, windows\barq.lib, windows\barq.exe
 exit /b 0
-
-:mingw
-echo Trying MinGW g++...
-if not exist windows mkdir windows
-g++ -std=c++17 -O3 -DBARQ_EXPORTS -DTASHKEEL_EXPORTS -Icpp/include -shared -o windows\barq.dll cpp\src\diacritizer.cpp cpp\src\c_api.cpp
-g++ -std=c++17 -O3 -Icpp/include -o windows\barq.exe cpp\src\diacritizer.cpp cpp\src\cli.cpp
-echo Built Windows: windows\barq.dll and windows\barq.exe
