@@ -32,6 +32,8 @@ INFO = {
 ONLY = os.environ.get("FASIH_ONLY", "").split()
 os.makedirs(OUT, exist_ok=True)
 voices = []
+REG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "voice_versions.json")
+REG = json.load(open(REG_PATH, encoding="utf-8")) if os.path.exists(REG_PATH) else {}
 for name in sorted(os.listdir(os.path.join(REPO, "voices"))):
     if name in CORE or (ONLY and name not in ONLY):
         continue
@@ -51,10 +53,20 @@ for name in sorted(os.listdir(os.path.join(REPO, "voices"))):
         if not os.path.exists(os.path.join(src, "variants", "gain.txt")):
             z.writestr("variants/gain.txt", "0.7\n")
     data = open(zpath, "rb").read()
+    # Versions live in tools/voice_versions.json: a voice keeps its version until its own files change,
+    # so "check for updates" only offers voices that really were updated.
+    h = hashlib.sha256()
+    for root, _, files in sorted(os.walk(src)):
+        for f in sorted(files):
+            h.update(os.path.relpath(os.path.join(root, f), src).encode()); h.update(open(os.path.join(root, f), "rb").read())
+    sha = h.hexdigest(); rec = REG.get(name)
+    if rec is None or rec["sha256"] != sha:
+        rec = REG[name] = {"version": VER, "sha256": sha}
     ar, gender, desc = INFO.get(name, (name, "male", ""))
     voices.append({"id": name.lower(), "name": name, "name_ar": ar, "gender": gender, "description": desc,
-                   "version": VER, "dataUrl": BASE + os.path.basename(zpath),
+                   "version": rec["version"], "dataUrl": BASE + os.path.basename(zpath),
                    "dataMd5": base64.b64encode(hashlib.md5(data).digest()).decode(), "size": len(data)})
     print("%-8s %6.1f MB" % (name, len(data) / 1e6))
+json.dump(REG, open(REG_PATH, "w", encoding="utf-8"), indent=1, sort_keys=True)
 json.dump({"version": 1, "voices": voices}, open(os.path.join(OUT, "voices.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
 print("voices.json:", len(voices), "voices")
