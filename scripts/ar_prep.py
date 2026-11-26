@@ -10,7 +10,7 @@ import re
 
 ALEF, WASLA = "ا", "ٱ"
 MARKS = "ً-ْٰ"
-_word = re.compile(r"[ء-يٱً-ْٰـ]+")
+_word = re.compile(r"[ء-يٱپچژڤڨگکیً-ْٰـ]+")  # پ چ ژ ڤ ڨ گ ک ی are letters too
 _phrase_break = re.compile(r"[.,;:!?،؛؟۔()\[\]{}\"«»\n\-–—]")
 
 
@@ -34,16 +34,16 @@ def normalize(text: str) -> str:
         if "\u0651" not in marks:
             marks = "\u0651" + marks
         return m.group(1) + m.group(2) + marks
-    text = re.sub("(?<![\u0621-\u064A])((?:[\u0648\u0641\u0628\u0643][\u064E\u0650]?)?(?:[\u0627\u0671][\u064E]?\u0644|\u0644\u0650?\u0644))\u0652"
+    text = re.sub("(?<![\u0621-\u064A\u067E\u0686\u0698\u06A4\u06A8\u06AF\u06A9\u06CC])((?:[\u0648\u0641\u0628\u0643][\u064E\u0650]?)?(?:[\u0627\u0671][\u064E]?\u0644|\u0644\u0650?\u0644))\u0652"
                   "([\u062A\u062B\u062F\u0630\u0631\u0632\u0633\u0634\u0635\u0636\u0637\u0638\u0644\u0646])([\u064B-\u0652]*)", _sun, text)
-    text = re.sub("(^|(?<=[^\u0621-\u064A\u0671\u064B-\u0652\u0670]))[\u064B-\u0652\u0670]+", "", text)  # marks with no letter
+    text = re.sub("(^|(?<=[^\u0621-\u064A\u067E\u0686\u0698\u06A4\u06A8\u06AF\u06A9\u06CC\u0671\u064B-\u0652\u0670]))[\u064B-\u0652\u0670]+", "", text)  # marks with no letter
     # a word-final ي after a consonant with no mark is the long vowel ī (في، الذي، التي, left bare in
     # partly vowelled text): without the kasra it was read as the consonant y (في ٱلدّانمارك -> f-y-dd...).
-    text = re.sub("([\u0628-\u063A\u0641-\u0648])(?=\u064A(?![\u0621-\u064A\u064B-\u0652\u0670]))", "\\1\u0650", text)
+    text = re.sub("([\u0628-\u063A\u0641-\u0648])(?=\u064A(?![\u0621-\u064A\u067E\u0686\u0698\u06A4\u06A8\u06AF\u06A9\u06CC\u064B-\u0652\u0670]))", "\\1\u0650", text)
     return text
 
 
-_END = re.compile(r"([\u0621-\u064A\u0671][\u0621-\u064A\u0671\u064B-\u0652\u0670]*)(?=\s*(?:[.!?\u061F\u06D4\n]|$))")
+_END = re.compile(r"([\u0621-\u064A\u067E\u0686\u0698\u06A4\u06A8\u06AF\u06A9\u06CC\u0671][\u0621-\u064A\u067E\u0686\u0698\u06A4\u06A8\u06AF\u06A9\u06CC\u0671\u064B-\u0652\u0670]*)(?=\s*(?:[.!?\u061F\u06D4\n]|$))")
 
 
 def _waqf_word(w: str) -> str:
@@ -63,7 +63,7 @@ def pausal_ending(text: str) -> str:
     return _END.sub(lambda m: _waqf_word(m.group(1)), text)
 
 
-_PHRASE_END = re.compile(r"([\u0621-\u064A\u0671][\u0621-\u064A\u0671\u064B-\u0652\u0670]*)(?=\s*[,:\u060C\u061B;])")
+_PHRASE_END = re.compile(r"([\u0621-\u064A\u067E\u0686\u0698\u06A4\u06A8\u06AF\u06A9\u06CC\u0671][\u0621-\u064A\u067E\u0686\u0698\u06A4\u06A8\u06AF\u06A9\u06CC\u0671\u064B-\u0652\u0670]*)(?=\s*[,:\u060C\u061B;])")
 
 
 def light_case(text: str) -> str:
