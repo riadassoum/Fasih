@@ -217,7 +217,7 @@ def process(text, diacritize=True, is_cancelled=None):
         if new != text and not new.strip():
             return new
         if new in _INV_NAMES.values():
-            return _step(ar_prep.mark_wasl, new)
+            return _engine_safe(_step(ar_prep.mark_wasl, new))
         text = new
     out = _step(dm.apply_user_dictionary, text)
     out = _step(dm.apply_default_rules, out)
@@ -227,7 +227,7 @@ def process(text, diacritize=True, is_cancelled=None):
         name = _step(pt.get_single_char_name, out) if out.strip() else out
         if name != out:
             # a name is said on its own, so in its pausal form (شَدَّة, not شَدَّةٌ)
-            return _step(ar_prep.mark_wasl, _step(ar_prep.pausal_ending, _alif_fatha(name)))
+            return _engine_safe(_step(ar_prep.mark_wasl, _step(ar_prep.pausal_ending, _alif_fatha(name))))
     if options.get("read_emojis", True):
         out = _step(dm.replace_emojis, out)
     if not _AR.search(out):
@@ -259,8 +259,28 @@ def process(text, diacritize=True, is_cancelled=None):
 _PUNCT = str.maketrans({"\u061F": "?", "\u061B": ";", "\u2026": "..."})
 
 
+# Inputs the engine cannot pronounce, which make it drop the WHOLE sentence, not just the word
+# (found by trying every letter and mark pair): alef wasla straight after a letter that has no
+# vowel (پٱلجبوب), tatweel next to some letters, and the rare letters U+063B-U+063F.
+_RARE = str.maketrans({"\u063B": "\u0643", "\u063C": "\u0643", "\u063D": "\u064A",
+                       "\u063E": "\u064A", "\u063F": "\u064A", "\u0640": None})
+_BAD_WASL = re.compile("(?<=[\u0621-\u064A\u0671-\u06D3])\u0671")
+
+
+# ژ and ڨ also fail after an alef and under a shadda: there, use the nearest letters the engine
+# always reads (ژ -> ج, ڨ -> گ).
+_BAD_ZH = re.compile("(?<=[\u0627\u0671])[\u0698\u06A8]|[\u0698\u06A8](?=\u0651)")
+
+
+def _engine_safe(s):
+    if not s:
+        return s
+    s = _BAD_WASL.sub("\u0627", s.translate(_RARE))
+    return _BAD_ZH.sub(lambda m: "\u062C" if m.group(0) == "\u0698" else "\u06AF", s)
+
+
 def _engine_punct(s):
-    return s.translate(_PUNCT) if s else s
+    return _engine_safe(s).translate(_PUNCT) if s else s
 
 
 _ABD = re.compile("(?<![\u0621-\u064a])(\u0639\u0628\u062f)(?=\u0627\u0644[\u0621-\u064a]{2})")
