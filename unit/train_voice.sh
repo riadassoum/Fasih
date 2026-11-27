@@ -74,10 +74,11 @@ if [ ! -s "$V/units.bin" ]; then
   RHV_LABELLING="$LDIR/labelling.xml" python3 "$HERE/build_units.py" "$R" "$V" | tail -n 1
 fi
 [ -s "$V/marks.bin" ] || { stage "pitch marks"; WORKERS=$W python3 "$HERE/build_units.py" "$R" "$V" marks; }
+[ -s "$V/models.bin" ] || { stage "duration, pitch and spectrum models (hybrid target cost, unit quality)"; python3 "$HERE/build_models.py" "$V" "$LDIR/phonemes.xml" | tail -n 5; }
 if [ ! -s "$V/audio.opa" ]; then
   stage "audio compression (Opus)"
   "$HERE/bin/fasih-us-encode" "$V" "${OPUS_KBPS:-56}" 2>&1 | tail -n 1
 fi
-[ -s "$V/weights.txt" ] || printf "join_f0 12\nmax_cands 100\n" > "$V/weights.txt"
+[ -s "$V/weights.txt" ] || printf "join_f0 12\nmax_cands 100\nling 0.5\ndur 0.6\nf0 0.6\nspec 0.4\njoin 1.5\n" > "$V/weights.txt"
 printf "name=%s\nlanguage=%s\ngender=%s\nformat=3\nrevision=1\n" "$NAME" "$LANG_" "$GENDER" > "$V/voice.info"
 stage "voice ready: $V (audio.pcm is only needed to re-encode; the add-on uses audio.opa)"

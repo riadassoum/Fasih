@@ -113,6 +113,7 @@ namespace fasih_us
     load_audio(join_path(dir,opus?"audio.opa":"audio.pcm"));
     try{ load_weights(join_path(dir,"weights.txt")); } catch(...) {}
     try{ load_marks(join_path(dir,"marks.bin")); } catch(...) {mark_off.clear();}
+    try{ load_models(join_path(dir,"models.bin")); } catch(...) {trees.clear(); questions.clear();}
     build_index();
   }
 
@@ -209,6 +210,11 @@ namespace fasih_us
         else if(p[0]=="target") w.target=v;
         else if(p[0]=="join") w.join=v;
         else if(p[0]=="max_cands") w.max_cands=int(v);
+        else if(p[0]=="ling") w.ling=v;
+        else if(p[0]=="dur") w.dur=v;
+        else if(p[0]=="f0") w.f0=v;
+        else if(p[0]=="spec") w.spec=v;
+        else if(p[0]=="quality") w.quality=v;
       }
   }
 
@@ -240,7 +246,7 @@ namespace fasih_us
       {
         uint16_t p; uint8_t h,pad; uint32_t ut,a,b;
         f.read((char*)&p,2); f.read((char*)&h,1); f.read((char*)&pad,1); f.read((char*)&ut,4); f.read((char*)&a,4); f.read((char*)&b,4);
-        x.phone=p; x.half=h; x.utt=ut; x.start=utts[ut].first+a; x.end=utts[ut].first+b;
+        x.phone=p; x.half=h; x.utt=ut; x.quality=pad; x.start=utts[ut].first+a; x.end=utts[ut].first+b;
         std::memset(x.ctx,0,sizeof(x.ctx));
         f.read((char*)x.ctx,nc);
         f.read((char*)hb.data(),2*(jd+1)); for(uint32_t i=0;i<jd;++i) x.jl[i]=hb[i]; x.lf0l=h2f(hb[jd]);
@@ -344,6 +350,59 @@ namespace fasih_us
     if(!f) throw std::runtime_error("truncated marks");
   }
 
+  void voice::load_models(const std::string& path)
+  {
+    auto f=open_in(path,std::ios::binary);
+    char magic[8]; f.read(magic,8);
+    if(std::memcmp(magic,"FSUM0001",8)!=0) throw std::runtime_error("bad models");
+    uint32_t nq; f.read((char*)&nq,4);
+    questions.resize(nq);
+    for(auto& q: questions)
+      {
+        uint8_t t; uint16_t fi; f.read((char*)&t,1); f.read((char*)&fi,2);
+        q.type=t; q.field=fi;
+        if(t==0)
+          {
+            uint16_t n; f.read((char*)&n,2); std::string s(n,0); f.read(&s[0],n);
+            for(auto& x: split_spaces(s)) q.set[x]=1;
+          }
+      }
+    uint32_t nt; f.read((char*)&nt,4);
+    trees.resize(nt);
+    for(auto& t: trees)
+      {
+        uint32_t n; f.read((char*)&n,4); f.read((char*)&t.dim,4);
+        t.sd.resize(t.dim); f.read((char*)t.sd.data(),4*t.dim);
+        t.feat.resize(n); t.thr.resize(n); t.left.resize(n); t.right.resize(n); t.val.resize(size_t(n)*t.dim);
+        f.read((char*)t.feat.data(),4*n); f.read((char*)t.thr.data(),4*n);
+        f.read((char*)t.left.data(),4*n); f.read((char*)t.right.data(),4*n);
+        f.read((char*)t.val.data(),4*size_t(n)*t.dim);
+      }
+    if(!f) throw std::runtime_error("truncated models");
+  }
+
+  const float* voice::predict(int ti,const std::vector<std::string>& v,int half,char utt_type) const
+  {
+    const tree& t=trees[ti];
+    int node=0;
+    while(t.left[node]>=0)
+      {
+        const question& q=questions[t.feat[node]];
+        float x=0;
+        if(q.type==0) x=(q.field<int(v.size())&&q.set.count(v[q.field]))?1.0f:0.0f;
+        else if(q.type==1)
+          {
+            const std::string& s=(q.field<int(v.size()))?v[q.field]:std::string("x");
+            char* e=nullptr; long n=std::strtol(s.c_str(),&e,10);
+            x=(e==s.c_str())?-1.0f:float(n);
+          }
+        else if(q.type==2) x=float(half);
+        else x=(utt_type=='q')?1.0f:(utt_type=='e')?2.0f:0.0f;
+        node=(x<=t.thr[node])?t.left[node]:t.right[node];
+      }
+    return t.val.data()+size_t(node)*t.dim;
+  }
+
   void voice::build_index()
   {
     for(uint32_t i=0;i<u.size();++i)
@@ -440,6 +499,14 @@ namespace fasih_us
                 else t.ctx[k]=uint8_t(it->second);
               }
           }
+        if(has_models())
+          {
+            t.pred=true;
+            t.pdur=predict(0,v,h,utt_type)[0];
+            t.plf0=predict(1,v,h,utt_type)[0];
+            const float* ps=predict(2,v,h,utt_type);
+            for(int i=0;i<jd&&i<int(trees[2].dim);++i) t.pspec[i]=ps[i];
+          }
       }
     return true;
   }
@@ -456,7 +523,18 @@ namespace fasih_us
           if(w.ctx[k]==0) continue;
           if(!t.known[k]||t.ctx[k]!=x.ctx[k]) c+=w.ctx[k];
         }
-      return c;
+      if(!t.pred) return c;
+      // hybrid: distance to the statistical predictions, in units of the models' own spread
+      const auto& T=v.trees;
+      double d=c*w.ling;
+      double du=std::log(double(std::max<uint64_t>(x.end-x.start,1)));
+      d+=w.dur*std::fabs(du-t.pdur)/T[0].sd[0];
+      if(x.lf0l>0&&x.lf0r>0) d+=w.f0*std::fabs(0.5*(x.lf0l+x.lf0r)-t.plf0)/T[1].sd[0];
+      double e=0; int n=std::min<int>(v.jdim(),T[2].dim);
+      for(int i=0;i<n;++i){ double z=(0.5*(half_to_float(x.jl[i])+half_to_float(x.jr[i]))-t.pspec[i])/T[2].sd[i]; e+=z*z; }
+      d+=w.spec*std::sqrt(e/std::max(n,1));
+      d+=w.quality*x.quality/20.0;
+      return d;
     }
 
     double join_cost(const voice& v,uint32_t a,uint32_t b)
@@ -828,7 +906,14 @@ namespace fasih_us
           {
             // phrase end: the recording's own release when a pause followed it there
             int64_t ext=v.recorded_before_pause(last_u[i])?std::min<int64_t>(EXT_OUT,int64_t(s.A+s.buf.size()-s.b)):0;
-            int64_t f=std::max<int64_t>(ext,sr/400);
+            if(ext>0)
+              {
+                // only a real release: the recording must fade after the unit, not carry on (a drawn-out vowel)
+                double before=rms(s,int64_t(s.b)-sr/100,int64_t(s.b)), after=rms(s,int64_t(s.b)+ext/2,int64_t(s.b)+ext);
+                if(before<1e-4||after>0.35*before) ext=0;
+              }
+            int64_t f=ext?ext:std::min<int64_t>(sr/100,int64_t(s.b-s.a)/2);   // no release: a 10 ms fade, gentle on fricatives
+            if(f<1) f=1;
             int64_t a=int64_t(s.b)-(ext?0:f);
             if(ext==0)
               { // no release available: fade the last 2.5 ms already written

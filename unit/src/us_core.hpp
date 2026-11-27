@@ -18,6 +18,7 @@ namespace fasih_us
   {
     uint16_t phone;
     uint8_t half;
+    uint8_t quality;                // quality cost * 20 (0 = typical unit)
     uint32_t utt;
     uint64_t start, end;      // global sample positions
     uint8_t ctx[NC_MAX];
@@ -34,6 +35,8 @@ namespace fasih_us
     uint8_t ctx[NC_MAX];
     bool known[NC_MAX];
     double pause_ms; // for pauses
+    bool pred{false};            // statistical targets available
+    float pdur, plf0, pspec[JD_MAX];
   };
 
   struct weights
@@ -42,6 +45,7 @@ namespace fasih_us
     double join_spec=1.0, join_energy=1.0, join_pace=3.0, join_register=4.0, level_db=0.0, join_f0=6.0, join_vuv=2.0, join_base_mid=0.6, join_base_edge=1.2;
     double target=1.0, join=1.0;
     int max_cands=60;
+    double ling=0.5, dur=1.0, f0=1.0, spec=1.0, quality=1.0;   // hybrid target cost
   };
 
   class voice
@@ -83,6 +87,15 @@ namespace fasih_us
     void load_weights(const std::string& path);
     void build_index();
     void load_marks(const std::string& path);
+    void load_models(const std::string& path);
+  public:
+    struct question {int type; int field; std::unordered_map<std::string,int> set;};
+    struct tree {uint32_t dim; std::vector<float> sd; std::vector<int32_t> feat,left,right; std::vector<float> thr,val;};
+    std::vector<question> questions;
+    std::vector<tree> trees;      // duration, pitch, spectrum
+    bool has_models() const {return trees.size()==3;}
+    const float* predict(int t,const std::vector<std::string>& v,int half,char utt_type) const;
+  private:
     std::vector<uint32_t> mark_data;
     std::vector<uint64_t> mark_off;
 

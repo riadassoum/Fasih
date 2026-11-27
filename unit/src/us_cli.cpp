@@ -7,6 +7,8 @@
 #include <chrono>
 #include <cstdint>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 namespace fasih_us{extern std::vector<size_t>* debug_joins;}
 
 static void write_wav(const std::string& path,const std::vector<float>& x,int sr)
@@ -34,6 +36,8 @@ int main(int argc,char** argv)
     std::vector<fasih_us::target> T;
     for(size_t i=0;i<labs.size();++i){ fasih_us::target l,r; if(v.parse_label(labs[i],ut,l,r)){T.push_back(l);T.push_back(r);} else {l.phone=-1; l.pause_ms=(i==0)?30:(i+1==labs.size())?60:180; T.push_back(l);} }
     auto sel=fasih_us::select_units(v,T);
+    if(getenv("DIAG")) for(size_t k=0;k<T.size();++k){ if(sel.units[k]<0) continue; const auto& u=v.units()[sel.units[k]];
+      fprintf(stderr,"%zu ph%d h%d dur %.0fms pred %.0fms q %.2f utt %u\n",k,T[k].phone,T[k].half,(u.end-u.start)/24.0,T[k].pred?std::exp(T[k].pdur)/24.0:0.0,u.quality/20.0,u.utt);}
     int n=0,runs=0; int64_t prev=-2;
     for(auto id: sel.units){ if(id<0){prev=-2;continue;} ++n; if(id!=prev+1) ++runs; prev=id; }
     std::cerr<<"halves "<<n<<" runs "<<runs<<" avg run "<<(runs?double(n)/runs:0)<<" cost "<<sel.cost<<"\n";

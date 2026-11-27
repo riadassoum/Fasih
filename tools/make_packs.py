@@ -57,7 +57,7 @@ for name in sorted(os.listdir(os.path.join(REPO, "voices"))):
                    "dataMd5": base64.b64encode(hashlib.md5(data).digest()).decode(), "size": len(data)})
     print("%-8s %6.1f MB" % (name, len(data) / 1e6))
 # premium voices: the voice folder itself is data/
-PREMIUM_FILES = ("voice.info", "voice.params", "units.bin", "audio.opa", "marks.bin", "layout.txt", "phones.txt", "context.txt", "weights.txt")
+PREMIUM_FILES = ("voice.info", "voice.params", "units.bin", "audio.opa", "marks.bin", "models.bin", "layout.txt", "phones.txt", "context.txt", "weights.txt")
 for src in os.environ.get("FASIH_PREMIUM", "").split():
     info = dict(l.strip().split("=", 1) for l in open(os.path.join(src, "voice.info"), encoding="utf-8") if "=" in l)
     name = info["name"]

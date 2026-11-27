@@ -81,6 +81,7 @@ def main():
         return d[v]
 
     units = []      # tuples
+    unit_labels = []  # full-context label of every unit (for build_models.py)
     audio = open(os.path.join(out, "audio.pcm"), "wb")
     utt_tab = []
     pos = 0
@@ -142,6 +143,7 @@ def main():
                         ctx.append(0)
             ctx.append({"s": 0, "q": 1, "e": 2}[ut])
             mid = (s_smp + e_smp) // 2
+            unit_labels.append((lab, ut)); unit_labels.append((lab, ut))
             for half, (a, b) in enumerate(((s_smp, mid), (mid, e_smp))):
                 ma, la = jfeat(a); mb, lb = jfeat(b)
                 units.append((phones[ph], half, len(utt_tab) - 1, base + a, base + b, ctx, ma, la, mb, lb))
@@ -166,6 +168,9 @@ def main():
             f.write(np.array(ctx, dtype=np.uint8).tobytes())
             f.write((ma / sd).astype(np.float16).tobytes()); f.write(np.float16(la).tobytes())
             f.write((mb / sd).astype(np.float16).tobytes()); f.write(np.float16(lb).tobytes())
+    with open(os.path.join(out, "unit_labels.txt"), "w", encoding="utf-8") as f:   # training only, not shipped
+        for lab, ut in unit_labels:
+            f.write("%s %s\n" % (ut, lab))
     with open(os.path.join(out, "phones.txt"), "w", encoding="utf-8") as f:
         for p, i in sorted(phones.items(), key=lambda t: t[1]):
             f.write(p + "\n")
