@@ -1,3 +1,4 @@
+#include <complex>
 /* Fasih unit-selection core (concatenative, non-neural).
    Copyright (C) 2026 Riad Assoum.  GPL-2.0-or-later, like RHVoice. */
 #include "us_core.hpp"
@@ -219,6 +220,7 @@ namespace fasih_us
         else if(p[0]=="join_energy") w.join_energy=v;
         else if(p[0]=="join_pace") w.join_pace=v;
         else if(p[0]=="level_db") w.level_db=v;
+        else if(p[0]=="join_smooth") w.join_smooth=v;
         else if(p[0]=="join_register") w.join_register=v;
         else if(p[0]=="join_vuv") w.join_vuv=v;
         else if(p[0]=="join_base_mid") w.join_base_mid=v;
@@ -814,6 +816,7 @@ namespace fasih_us
           {
             uint32_t id=pool[pi];
             if(exclude_utt>=0&&int64_t(U[id].utt)==exclude_utt) continue;
+            if(U[id].quality==255) continue;   // pruned from this voice (its audio is gone)
             const uint8_t* cx=pc?pc+pi*NCX:U[id].ctx; float c=0;
             for(int k=0;k<NCX;++k) c+=tab[size_t(k)*256+cx[k]];
             scored.push_back({double(c)+target_cost_base(v,t),id});
@@ -831,7 +834,7 @@ namespace fasih_us
         if(i==0&&prev_unit>=0)
           {
             uint32_t q=uint32_t(prev_unit)+1;
-            if(q<U.size()&&U[q].utt==U[prev_unit].utt&&U[q].phone==uint32_t(t.phone)&&U[q].half==t.half)
+            if(q<U.size()&&U[q].utt==U[prev_unit].utt&&U[q].phone==uint32_t(t.phone)&&U[q].half==t.half&&U[q].quality!=255)
               scored.push_back({target_cost(v,t,U[q]),q});
           }
         // continuations of the previous step's candidates keep natural runs available
@@ -839,7 +842,7 @@ namespace fasih_us
           for(uint32_t p: cand[i-1])
             {
               uint32_t q=p+1;
-              if(q<U.size()&&U[q].utt==U[p].utt&&U[q].phone==uint32_t(t.phone)&&U[q].half==t.half)
+              if(q<U.size()&&U[q].utt==U[p].utt&&U[q].phone==uint32_t(t.phone)&&U[q].half==t.half&&U[q].quality!=255)
                 scored.push_back({target_cost(v,t,U[q]),q});
             }
         std::sort(scored.begin(),scored.end(),[](auto& a,auto& b){return a.second<b.second;});
@@ -847,7 +850,7 @@ namespace fasih_us
         if(scored.empty())
           {
             // nothing at all for this phone: fall back to any unit of the same half
-            for(uint32_t id=0;id<U.size()&&scored.size()<1;++id) if(U[id].half==t.half) scored.push_back({100.0,id});
+            for(uint32_t id=0;id<U.size()&&scored.size()<1;++id) if(U[id].half==t.half&&U[id].quality!=255) scored.push_back({100.0,id});
           }
         for(auto& s: scored){cand[i].push_back(s.second); cost[i].push_back(s.first*w.target);}
         back[i].assign(cand[i].size(),-1);
@@ -1090,6 +1093,81 @@ namespace fasih_us
     }
   }
 
+
+  // ---- spectral-envelope smoothing at joins (in the waveform domain, no vocoder) ----
+  // Joins inside a phone are where two recordings meet with slightly different formants. Around each such
+  // join, both sides' spectral envelopes are moved towards each other (meeting halfway at the join, fading
+  // out over W) by a smooth gain on each short-time spectrum; magnitudes change, phases are kept, so the
+  // waveform stays the recording's own. Envelopes are cepstrally smoothed log spectra (no pitch harmonics).
+  namespace
+  {
+    const double JS_PI=3.14159265358979323846;
+    void fft(std::vector<std::complex<double>>& a,bool inv)
+    {
+      const size_t n=a.size();
+      for(size_t i=1,j=0;i<n;++i){ size_t bit=n>>1; for(;j&bit;bit>>=1) j^=bit; j^=bit; if(i<j) std::swap(a[i],a[j]); }
+      for(size_t len=2;len<=n;len<<=1)
+        {
+          double ang=2*JS_PI/double(len)*(inv?1:-1); std::complex<double> wl(std::cos(ang),std::sin(ang));
+          for(size_t i=0;i<n;i+=len){ std::complex<double> w(1); for(size_t j=0;j<len/2;++j){ auto u=a[i+j], v=a[i+j+len/2]*w; a[i+j]=u+v; a[i+j+len/2]=u-v; w*=wl; } }
+        }
+      if(inv) for(auto& x: a) x/=double(n);
+    }
+    // cepstrally smoothed log-magnitude envelope of x[c-N/2, c+N/2)
+    bool envelope(const std::vector<float>& x,long c,int N,int ncep,std::vector<double>& env)
+    {
+      if(c-N/2<0||c+N/2>long(x.size())) return false;
+      std::vector<std::complex<double>> a(N); double e=0;
+      for(int i=0;i<N;++i){ double w=0.5-0.5*std::cos(2*JS_PI*(i+0.5)/N); double v=x[size_t(c-N/2+i)]*w; a[i]=v; e+=v*v; }
+      if(e<1e-8) return false;
+      fft(a,false);
+      for(auto& z: a) z=std::log(std::abs(z)+1e-6);
+      fft(a,true);
+      for(int i=ncep;i<=N-ncep;++i) a[i]=0;
+      fft(a,false);
+      env.resize(N/2+1); for(int k=0;k<=N/2;++k) env[k]=a[k].real();
+      return true;
+    }
+  }
+
+  void smooth_joins(std::vector<float>& out,const std::vector<size_t>& joins,int sr,double strength)
+  {
+    if(strength<=0) return;
+    const int N=512, HOP=N/4, NC=40;
+    const long W=long(sr)*30/1000, D=long(sr)*12/1000;
+    std::vector<double> win(N); for(int i=0;i<N;++i) win[i]=std::sqrt(0.5-0.5*std::cos(2*JS_PI*(i+0.5)/N));
+    for(size_t jj: joins)
+      {
+        const long j=long(jj);
+        std::vector<double> eL,eR;
+        if(!envelope(out,j-D,N,NC,eL)||!envelope(out,j+D,N,NC,eR)) continue;
+        std::vector<double> d(N/2+1); double md=0;
+        for(int k=0;k<=N/2;++k){ d[k]=std::max(-1.4,std::min(1.4,eR[k]-eL[k])); md+=std::fabs(d[k]); }   // at most +-12 dB
+        md/=(N/2+1);
+        if(md<0.06) continue;   // under about 0.5 dB on average: nothing to smooth
+        const long a=j-W-N, b=j+W+N;
+        if(a<0||b>long(out.size())) continue;
+        std::vector<double> y(size_t(b-a),0.0);
+        std::vector<std::complex<double>> F(N);
+        for(long t=a;t+N<=b;t+=HOP)
+          {
+            for(int i=0;i<N;++i) F[i]=out[size_t(t+i)]*win[i];
+            fft(F,false);
+            const long c=t+N/2; const double r=double(c-j)/double(W);
+            double w=(std::fabs(r)<1.0)?0.5*strength*(0.5+0.5*std::cos(JS_PI*r)):0.0;   // smooth bell, 0.5 at the join
+            if(w>0)
+              {
+                const double sgn=(c<j)?1.0:-1.0;
+                for(int k=0;k<=N/2;++k){ double g=std::exp(sgn*w*d[k]); F[k]*=g; if(k>0&&k<N/2) F[N-k]*=g; }
+              }
+            fft(F,true);
+            for(int i=0;i<N;++i) y[size_t(t-a+i)]+=F[i].real()*win[i];
+          }
+        // sqrt-Hann analysis and synthesis at 75% overlap sum to 2: the untouched parts come back exactly
+        for(long p=j-W;p<j+W;++p) out[size_t(p)]=float(y[size_t(p-a)]/2.0);
+      }
+  }
+
   void concatenate(const voice& v,const select_result& sel,std::vector<float>& out,double pause_scale,std::vector<size_t>* joins)
   {
     const auto& U=v.units();
@@ -1103,6 +1181,7 @@ namespace fasih_us
     const int EXT_IN=sr*15/1000; // and starts with its own onset (up to 15 ms)
     const int PAD=H_MID+M+EXT_OUT+sr/100;
     std::vector<piece> segs;
+    std::vector<size_t> mid_joins;
     std::vector<uint32_t> first_u,last_u;
     double pending_pause=0; bool pause_flag=true;
     for(size_t i=0;i<sel.units.size();++i)
@@ -1222,6 +1301,7 @@ namespace fasih_us
             int64_t r0=int64_t(s.b)-hh, q0=int64_t(q.a)+k[i+1]-hh;
             if(debug_joins) debug_joins->push_back(out.size()+hh);
             if(joins) joins->push_back(out.size()+hh);
+            if(hh>=H_MID) mid_joins.push_back(out.size()+hh);   // a join inside a phone
             for(int j=0;j<2*hh;++j)
               {
                 double w=0.5-0.5*std::cos(PI*(j+0.5)/(2*hh));
@@ -1257,6 +1337,11 @@ namespace fasih_us
           }
       }
     out.insert(out.end(),size_t(std::max(0.0,tail_pause*pause_scale)*sr/1000.0),0.0f);
+    {
+      double st=v.get_weights().join_smooth;
+      if(const char* e=std::getenv("FASIH_JOIN_SMOOTH")) st=std::atof(e);
+      smooth_joins(out,mid_joins,sr,st);
+    }
     if(v.get_weights().level_db!=0.0)
       {
         float g=float(std::pow(10.0,v.get_weights().level_db/20.0));

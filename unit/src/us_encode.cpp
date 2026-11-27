@@ -1,3 +1,4 @@
+#include <cstdlib>
 #include <cmath>
 // fasih-us-encode VOICE_DIR [kbps] [voice|celt] [sibilant_boost_db]
 // sibilant_boost_db (voice mode): the 4-8 kHz band is raised by this much before encoding, because
@@ -49,7 +50,9 @@ int main(int argc,char** argv)
   uint32_t nu=hdr[0], nc=hdr[3];
   std::vector<std::vector<std::pair<uint32_t,uint32_t>>> keep(nutt);
   {
-    const uint32_t M=sr/8;   // 125 ms around every unit: joins, ramps, releases and onsets stay intact
+    // 125 ms around every unit (FASIH_KEEP_MS): joins, ramps, releases and onsets stay intact; units marked
+    // removed by prune_voice.py (quality 255) keep nothing
+    const uint32_t M=uint32_t(sr*(std::getenv("FASIH_KEEP_MS")?std::atoi(std::getenv("FASIH_KEEP_MS")):125)/1000);
     // FSUV0002: every unit has both edges (4*(jd+1) bytes after its context); FSUV0003 (a finished,
     // compacted voice): a bitmap of shared right edges, then records with only the left edge
     const bool compact=std::string(magic,8)=="FSUV0003";
@@ -60,7 +63,7 @@ int main(int argc,char** argv)
         char rec[16]; u.read(rec,16);
         uint32_t ut,a0,b0; std::memcpy(&ut,rec+4,4); std::memcpy(&a0,rec+8,4); std::memcpy(&b0,rec+12,4);
         u.seekg(nc+tail,std::ios::cur);
-        if(ut<nutt) keep[ut].push_back({a0>M?a0-M:0,b0+M});
+        if(ut<nutt&&uint8_t(rec[3])!=255) keep[ut].push_back({a0>M?a0-M:0,b0+M});
       }
   }
   std::ifstream a(dir+"/audio.pcm",std::ios::binary);
