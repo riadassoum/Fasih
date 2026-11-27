@@ -2,7 +2,22 @@
 
 ## 2.0 (in development)
 
+### Voices
+
+- **Haytham (هيثم), a new voice to download**: trained on seven and a half hours of natural, expressive speech, with breaths and the wide pitch range of a human reader. He is the most natural Fasih voice.
+- **Bassel (باسل) and Rana (رنا)**: a male and a female voice from the same family as Sami and Nour, each trained on six to seven hours.
+- **Hadi (هادي)**: a male voice from a professional speaker's recordings, the smallest Fasih voice (2.5 MB).
+- **Listen from the internet**: voices added after your copy of Fasih was built play their sample from the internet in the download window, so every voice can be heard before you install it.
+- **Only updated voices are offered as updates**: "Check for updates" no longer offers voices that have not changed.
+
+### Reading
+
+- **No more silent sentences**: a sentence that contained a word the voices could not pronounce (for example پ before الـ, as in پِالجبوب, or some rarely used letters) was not spoken at all. Now such a word is left out and the rest of the sentence is read; پ چ ژ ڤ ڨ گ ک ی are read as letters, with their vowels.
 - **Barq 3**: Fasih now uses Barq 3, the newest version of PlanetBlindTech's engine by Shamseddin. In my tests it makes fewer mistakes than 1.3.1's Barq on classical text, Rawi's own test, news and the independent SadeedDiac-25 benchmark, and about as many on modern sentences.
+
+### Help
+
+- **Up-to-date help**: the English and Arabic help pages now always match the current version.
 
 ## 1.3.1
 
