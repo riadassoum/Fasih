@@ -46,6 +46,7 @@ namespace fasih_us
     double join_base_stop=4.0, join_creak=2.5, join_spec=1.0, join_energy=1.0, join_pace=3.0, join_register=4.0, level_db=0.0, join_f0=6.0, join_vuv=2.0, join_base_mid=0.6, join_base_edge=1.2;
     double target=1.0, join=1.0;
     int max_cands=60;
+    double vocoder=0;   // 1: neural smoothing when installed
     double ling=0.5, dur=1.0, f0=1.0, spec=1.0, quality=1.0;   // hybrid target cost
   };
 
@@ -156,7 +157,7 @@ namespace fasih_us
   select_result select_units(const voice& v,const std::vector<target>& t,int64_t exclude_utt=-1,int64_t prev_unit=-1);
 
   // concatenate the selected units into 16-bit samples (pauses scaled by pause_scale)
-  void concatenate(const voice& v,const select_result& sel,std::vector<float>& out,double pause_scale=1.0);
+  void concatenate(const voice& v,const select_result& sel,std::vector<float>& out,double pause_scale=1.0,std::vector<size_t>* joins=nullptr);
 
   // convenience: labels -> samples
   void synthesize(const voice& v,const std::vector<std::string>& labels,char utt_type,std::vector<float>& out,double pause_scale=1.0);

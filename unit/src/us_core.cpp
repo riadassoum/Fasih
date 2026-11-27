@@ -223,6 +223,7 @@ namespace fasih_us
         else if(p[0]=="join") w.join=v;
         else if(p[0]=="max_cands") w.max_cands=int(v);
         else if(p[0]=="ling") w.ling=v;
+        else if(p[0]=="vocoder") w.vocoder=v;
         else if(p[0]=="dur") w.dur=v;
         else if(p[0]=="f0") w.f0=v;
         else if(p[0]=="spec") w.spec=v;
@@ -1005,7 +1006,7 @@ namespace fasih_us
     }
   }
 
-  void concatenate(const voice& v,const select_result& sel,std::vector<float>& out,double pause_scale)
+  void concatenate(const voice& v,const select_result& sel,std::vector<float>& out,double pause_scale,std::vector<size_t>* joins)
   {
     const auto& U=v.units();
     const int sr=v.sample_rate();
@@ -1136,6 +1137,7 @@ namespace fasih_us
             int hh=h[i+1];
             int64_t r0=int64_t(s.b)-hh, q0=int64_t(q.a)+k[i+1]-hh;
             if(debug_joins) debug_joins->push_back(out.size()+hh);
+            if(joins) joins->push_back(out.size()+hh);
             for(int j=0;j<2*hh;++j)
               {
                 double w=0.5-0.5*std::cos(PI*(j+0.5)/(2*hh));

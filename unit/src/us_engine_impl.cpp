@@ -12,6 +12,15 @@
 #include "core/relation.hpp"
 #include "core/utterance.hpp"
 #include "sonic.h"
+#include "core/us_vocoder.hpp"
+#include <cstdlib>
+#include <sys/stat.h>
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#else
+#include <dlfcn.h>
+#endif
 
 namespace RHVoice
 {
@@ -19,6 +28,35 @@ namespace RHVoice
   {
     std::mutex cache_mutex;
     std::map<std::string,std::weak_ptr<const fasih_us::voice>> cache;
+
+    bool exists(const std::string& p){ struct stat st; return stat(p.c_str(),&st)==0; }
+
+    // the vocoder folder: FASIH_VOCODER_DIR, or "vocoder" two levels above this library (add-on layout:
+    // synthDrivers/fasih/lib/x64/libRHVoice_core.dll -> synthDrivers/fasih/vocoder)
+    std::string vocoder_dir(std::string& ort)
+    {
+      if(const char* d=std::getenv("FASIH_VOCODER_DIR"))
+        { const char* o=std::getenv("FASIH_ORT_LIB"); ort=o?o:""; return d; }
+      std::string here;
+#ifdef _WIN32
+      HMODULE m=nullptr;
+      if(GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,(LPCWSTR)&vocoder_dir,&m))
+        {
+          wchar_t buf[2048]; DWORD n=GetModuleFileNameW(m,buf,2048);
+          int len=WideCharToMultiByte(CP_UTF8,0,buf,int(n),nullptr,0,nullptr,nullptr);
+          here.assign(len,0); WideCharToMultiByte(CP_UTF8,0,buf,int(n),&here[0],len,nullptr,nullptr);
+        }
+      for(int up=0;up<3;++up){ size_t s=here.find_last_of("\\/"); if(s==std::string::npos) return ""; here.resize(s); }
+      ort=here+"\\vocoder\\fasih_ort.dll";
+      return here+"\\vocoder";
+#else
+      Dl_info info;
+      if(dladdr((void*)&vocoder_dir,&info)&&info.dli_fname) here=info.dli_fname;
+      for(int up=0;up<3;++up){ size_t s=here.find_last_of('/'); if(s==std::string::npos) return ""; here.resize(s); }
+      ort=here+"/vocoder/libfasih_ort.so";
+      return here+"/vocoder";
+#endif
+    }
 
     std::shared_ptr<const fasih_us::voice> open_db(const std::string& dir)
     {
@@ -59,10 +97,24 @@ namespace RHVoice
   {
     db=open_db(data_path);
     sample_rate=static_cast<sample_rate_t>(db->sample_rate());
+    // neural smoothing: on for voices that ask for it (weights.txt "vocoder 1"), when the vocoder is installed
+    if(db->get_weights().vocoder>0)
+      {
+        std::string ort, dir=vocoder_dir(ort);
+        if(!dir.empty()&&exists(dir+"/vocos_core.onnx")&&!ort.empty()&&exists(ort))
+          { try { voc=fasih_us::vocoder::shared(ort,dir); } catch(...) { voc.reset(); } }
+      }
   }
 
   void us_engine_impl::do_reset()
   {
+  }
+
+  bool us_engine_impl::vocoder_off() const
+  {
+    if(const char* e=std::getenv("FASIH_VOCODER")) return std::string(e)=="0";
+    std::string ort, dir=vocoder_dir(ort);
+    return dir.empty()||exists(dir+"/off");
   }
 
   void us_engine_impl::do_synthesize()
@@ -148,7 +200,7 @@ namespace RHVoice
         // spoken last, so the choice is practically that of the whole phrase
         std::vector<std::size_t> cuts{c0};
         {
-          std::size_t last=c0, minlen=12;
+          std::size_t last=c0, minlen=voc?8:12;   // the vocoder costs time per piece: start with a shorter one
           for(std::size_t k=c0+1;k+8<c1;++k)
             {
               const auto& t=T[k];
@@ -159,6 +211,7 @@ namespace RHVoice
         }
         cuts.push_back(c1);
         int64_t spoken=-1;
+        std::vector<float> spoken_audio;   // context for the vocoder across streamed pieces
         for(std::size_t ci=0;ok&&ci+1<cuts.size();++ci)
           {
             std::size_t a0=cuts[ci], a1=cuts[ci+1];
@@ -167,8 +220,16 @@ namespace RHVoice
             fasih_us::select_result sel=fasih_us::select_units(*db,sub,-1,spoken);
             sel.units.resize(a1-a0); sel.pause_ms.resize(a1-a0);
             for(auto id: sel.units) if(id>=0) spoken=id;
-            std::vector<float> out;
-            fasih_us::concatenate(*db,sel,out);
+            std::vector<float> out; std::vector<size_t> jn;
+            fasih_us::concatenate(*db,sel,out,1.0,&jn);
+            // neural smoothing (can be switched off without restarting: a file named "off" in the vocoder folder)
+            if(voc&&!vocoder_off())
+              {
+                std::vector<float> y;
+                try { voc->process(out,jn,spoken_audio,y); out.swap(y); } catch(...) {}
+              }
+            spoken_audio.insert(spoken_audio.end(),out.begin(),out.end());
+            if(spoken_audio.size()>8192) spoken_audio.erase(spoken_audio.begin(),spoken_audio.end()-8192);
             double tot=0; std::vector<double> len(sel.units.size());
             for(std::size_t k=0;k<sel.units.size();++k)
               {

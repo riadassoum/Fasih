@@ -6,7 +6,7 @@
 #include <string>
 #include "hts_engine_impl.hpp"
 
-namespace fasih_us { class voice; }
+namespace fasih_us { class voice; class vocoder; }
 
 namespace RHVoice
 {
@@ -27,8 +27,10 @@ namespace RHVoice
     void do_synthesize() override;
     void do_reset() override;
     sample_rate_t get_sample_rate_for_quality(quality_t q) const override;
+    bool vocoder_off() const;
 
     std::shared_ptr<const fasih_us::voice> db;
+    std::shared_ptr<fasih_us::vocoder> voc;   // neural smoothing, when installed and enabled
   };
 }
 #endif

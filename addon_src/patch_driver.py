@@ -652,6 +652,21 @@ rep('''    def terminate(self):''', '''    # quality settings: rewrite voice fil
     def _set_modulationPostfilter(self, v):
         self._quality_set("ms", bool(v))
 
+    # premium (unit-selection) voices: the engine resynthesizes them through the Vocos vocoder unless
+    # vocoder/off exists; it checks for every phrase, so no restart is needed
+    def _get_neuralSmoothing(self):
+        return not os.path.exists(os.path.join(os.path.dirname(__file__), "vocoder", "off"))
+
+    def _set_neuralSmoothing(self, v):
+        flag = os.path.join(os.path.dirname(__file__), "vocoder", "off")
+        try:
+            if v and os.path.exists(flag):
+                os.remove(flag)
+            elif not v and os.path.isdir(os.path.dirname(flag)):
+                open(flag, "w").close()
+        except OSError:
+            log.debugWarning("Fasih: could not switch neural smoothing", exc_info=True)
+
     def terminate(self):''')
 # 2) PlanetBlindTech audio post-filter (DC/rumble high-pass + soft limiter) in the audio path
 rep('''    def do_play(self, data, index=None):
@@ -683,6 +698,7 @@ except Exception:
 rep('''        BooleanDriverSetting("sharpening", "Sharpening (crisper sound)", defaultVal=False, availableInSettingsRing=True),''', '''        BooleanDriverSetting("sharpening", "Sharpening (crisper sound)", defaultVal=False, availableInSettingsRing=True),
         BooleanDriverSetting("consonantRepair", "Consonant repair (crisper ق ط ش, may sound muffled)", defaultVal=False, availableInSettingsRing=True),
         BooleanDriverSetting("modulationPostfilter", "Modulation postfilter (livelier, less muffled)", defaultVal=True, availableInSettingsRing=True),
+        BooleanDriverSetting("neuralSmoothing", "Neural smoothing for premium voices", defaultVal=True, availableInSettingsRing=True),
         BooleanDriverSetting("readEmojis", "Read emojis and symbols by name", defaultVal=True),
         BooleanDriverSetting("pausalEnding", "Pausal ending (waqf) at end of sentences", defaultVal=True),
         BooleanDriverSetting("fullCaseEndings", "Full case endings (classical reading)", defaultVal=False, availableInSettingsRing=True),
@@ -912,7 +928,7 @@ rep('''        arabic_pipeline.preload()''', '''        arabic_pipeline.preload(
 # --- 1.1: translations (locale/<lang>/LC_MESSAGES/nvda.mo) ---------------------------------
 s = s.replace("import addonHandler\n", "import addonHandler\ntry:\n    addonHandler.initTranslation()\nexcept Exception:\n    pass\ntry:\n    _\nexcept NameError:\n    def _(text):\n        return text\n", 1)
 for _lit in ["&Secondary voice (for non-Arabic text)", "Clarity (postfilter)", "Breathiness",
-             "Sharpening (crisper sound)", "Consonant repair (crisper ق ط ش, may sound muffled)", "Modulation postfilter (livelier, less muffled)", "Read emojis and symbols by name",
+             "Sharpening (crisper sound)", "Consonant repair (crisper ق ط ش, may sound muffled)", "Modulation postfilter (livelier, less muffled)", "Neural smoothing for premium voices", "Read emojis and symbols by name",
              "Pausal ending (waqf) at end of sentences", "Full case endings (classical reading)", "Mixed Arabic and Latin text",
              "Natural (recommended)", "Less", "Low", "Very low",
              "Automatic: Latin text as written, by the secondary voice",

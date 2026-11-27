@@ -1,6 +1,7 @@
 // fasih-us-cli VOICE_DIR LABELS OUT.wav [s|q|e] [rate]
 // LABELS: RHVoice full-context labels, one per line (times optional; the label is the last field)
 #include "us_core.hpp"
+#include "us_vocoder.hpp"
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -45,7 +46,17 @@ int main(int argc,char** argv)
     for(auto id: sel.units){ if(id<0){prev=-2;continue;} ++n; if(id!=prev+1) ++runs; prev=id; }
     std::cerr<<"halves "<<n<<" runs "<<runs<<" avg run "<<(runs?double(n)/runs:0)<<" cost "<<sel.cost<<"\n";
     std::vector<size_t> J; fasih_us::debug_joins=&J;
-    fasih_us::concatenate(v,sel,out);
+    std::vector<size_t> jn;
+    fasih_us::concatenate(v,sel,out,1.0,&jn);
+    if(getenv("FASIH_VOCODER_DIR"))
+      {
+        auto vc=fasih_us::vocoder::shared(getenv("FASIH_ORT_LIB"),getenv("FASIH_VOCODER_DIR"));
+        std::vector<float> y; auto tv0=std::chrono::steady_clock::now();
+        if(getenv("NOSMOOTH")) jn.clear();
+        vc->process(out,jn,{},y);
+        std::cerr<<"vocoder "<<std::chrono::duration<double>(std::chrono::steady_clock::now()-tv0).count()*1000<<"ms\n";
+        out.swap(y);
+      }
     if(getenv("JOINS")){std::ofstream jf(std::string(argv[3])+".joins"); for(auto j: J) jf<<j<<"\n";}
   }
   auto t2=std::chrono::steady_clock::now();

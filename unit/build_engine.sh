@@ -14,8 +14,11 @@ if [ ! -e src/core/us_core.cpp ]; then
   git apply "$REPO/engine/rhvoice-world-vocoder.patch"
   cp -r "$REPO/engine/world" src/core/world
   cp "$HERE/src/us_core.hpp" "$HERE/src/us_engine_impl.hpp" src/include/core/
-  cp "$HERE/src/us_core.cpp" "$HERE/src/us_engine_impl.cpp" src/core/
+  cp "$HERE/src/us_vocoder.hpp" src/include/core/
+  cp "$HERE/src/us_core.cpp" "$HERE/src/us_engine_impl.cpp" "$HERE/src/us_vocoder.cpp" src/core/
+  mkdir -p src/core/ort && cp "$HERE"/src/ort/*.h src/core/ort/
   sed -i 's|#include "us_core.hpp"|#include "core/us_core.hpp"|' src/core/us_core.cpp
+  sed -i 's|#include "us_vocoder.hpp"|#include "core/us_vocoder.hpp"|' src/core/us_vocoder.cpp
   python3 - <<'E'
 p='src/include/core/hts_engine_pool.hpp'; s=open(p).read()
 s=s.replace('#include "str_hts_engine_impl.hpp"','#include "str_hts_engine_impl.hpp"\n#include "us_engine_impl.hpp"')
@@ -27,7 +30,7 @@ s=s.replace('add_library(RHVoice_core SHARED "${SRCFILES}")',
  'set(SONIC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../external/libs/sonic")\nadd_library(RHVoice_core SHARED "${SRCFILES}" "${SONIC_DIR}/sonic.c")\ntarget_compile_definitions(RHVoice_core PRIVATE ENABLE_SONIC=1)')
 s=s.replace('"${CMAKE_CURRENT_SOURCE_DIR}/world")','"${CMAKE_CURRENT_SOURCE_DIR}/world" "${SONIC_DIR}")')
 s=s.replace('target_compile_definitions(RHVoice_core PRIVATE ENABLE_SONIC=1)','target_compile_definitions(RHVoice_core PRIVATE ENABLE_SONIC=1)\nif(FASIH_OPUS_DIR)\n  target_compile_definitions(RHVoice_core PRIVATE FASIH_US_OPUS=1)\n  target_include_directories(RHVoice_core PRIVATE "${FASIH_OPUS_DIR}/include")\n  list(APPEND fasih_extra_libs "${FASIH_OPUS_LIB}")\nendif()')
-s=s.replace('target_link_libraries(RHVoice_core "${libs2link}")','target_link_libraries(RHVoice_core "${libs2link}" ${fasih_extra_libs})')
+s=s.replace('target_link_libraries(RHVoice_core "${libs2link}")','target_link_libraries(RHVoice_core "${libs2link}" ${fasih_extra_libs} ${CMAKE_DL_LIBS})')
 open(p,'w').write(s)
 E
 fi
@@ -39,7 +42,7 @@ if [ "$TARGET" = linux ]; then
   make -j"$(nproc)" RHVoice_core RHVoice-make-hts-labels RHVoice-test
   # the unit tools: test client and Opus encoder
   mkdir -p "$HERE/bin"
-  g++ -O2 -std=c++17 -DFASIH_US_OPUS -I"$OPUS/include" -o "$HERE/bin/fasih-us-cli" "$HERE/src/us_cli.cpp" "$HERE/src/us_core.cpp" "$OPUS/bl/libopus.a" -lm
+  g++ -O2 -std=c++17 -DFASIH_US_OPUS -I"$HERE/src" -I"$OPUS/include" -o "$HERE/bin/fasih-us-cli" "$HERE/src/us_cli.cpp" "$HERE/src/us_core.cpp" "$HERE/src/us_vocoder.cpp" "$OPUS/bl/libopus.a" -lm -ldl -lpthread
   g++ -O2 -std=c++17 -I"$OPUS/include" -o "$HERE/bin/fasih-us-encode" "$HERE/src/us_encode.cpp" "$OPUS/bl/libopus.a" -lm
   exit 0
 fi

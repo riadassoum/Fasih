@@ -80,6 +80,6 @@ if [ ! -s "$V/audio.opa" ]; then
   "$HERE/bin/fasih-us-encode" "$V" "${OPUS_KBPS:-56}" 2>&1 | tail -n 1
 fi
 python3 "$HERE/compact_voice.py" "$V" | sed 's/^/   /'   # lossless: shared boundaries, 16-bit frame sizes
-[ -s "$V/weights.txt" ] || printf "join_f0 12\nmax_cands 100\nling 0.5\ndur 0.6\nf0 0.6\nspec 0.4\njoin 1.5\n" > "$V/weights.txt"
+[ -s "$V/weights.txt" ] || printf "join_f0 12\nmax_cands 100\nling 0.5\ndur 0.6\nf0 0.6\nspec 0.4\njoin 1.5\njoin_base_edge 3\nvocoder 1\n" > "$V/weights.txt"
 printf "name=%s\nlanguage=%s\ngender=%s\nformat=3\nrevision=1\n" "$NAME" "$LANG_" "$GENDER" > "$V/voice.info"
 stage "voice ready: $V (audio.pcm is only needed to re-encode; the add-on uses audio.opa)"
