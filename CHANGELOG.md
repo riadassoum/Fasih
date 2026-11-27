@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.4 (in development)
+## 2.0 (in development)
 
 - **Barq 3**: Fasih now uses Barq 3, the newest version of PlanetBlindTech's engine by Shamseddin. In my tests it makes fewer mistakes than 1.3.1's Barq on classical text, Rawi's own test, news and the independent SadeedDiac-25 benchmark, and about as many on modern sentences.
 
