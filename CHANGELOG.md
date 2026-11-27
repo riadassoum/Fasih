@@ -4,7 +4,7 @@
 
 ### Voices
 
-- **Premium voices**: a new kind of voice to download, Haytham Premium, Jamal Premium and Zayd Premium, made of real recorded speech chosen and joined unit by unit rather than generated, so they sound like the person. The download window marks each voice as premium or compact.
+- **Premium voices**: a new kind of voice to download, Aseel Premium, Haytham Premium, Jamal Premium and Zayd Premium, made of real recorded speech chosen and joined unit by unit rather than generated, so they sound like the person. The download window marks each voice as premium or compact.
 - **Haytham (هيثم), a new voice to download**: trained on seven and a half hours of natural, expressive speech, with breaths and the wide pitch range of a human reader. He is the most natural Fasih voice.
 - **Bassel (باسل) and Rana (رنا)**: a male and a female voice from the same family as Sami and Nour, each trained on six to seven hours.
 - **Hadi (هادي)**: a male voice from a professional speaker's recordings, the smallest Fasih voice (2.5 MB).
