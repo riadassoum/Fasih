@@ -8,6 +8,7 @@
    "id": "aisha",
    "name": "Aisha",
    "name_ar": "\u0639\u0627\u0626\u0634\u0629",
+   "quality": "compact",
    "size": 12288780,
    "version": "1.3.1"
   },
@@ -23,6 +24,7 @@
    "id": "amjad",
    "name": "Amjad",
    "name_ar": "\u0623\u0645\u062c\u062f",
+   "quality": "compact",
    "size": 20042530,
    "version": "1.3.1"
   },
@@ -38,6 +40,7 @@
    "id": "bassel",
    "name": "Bassel",
    "name_ar": "\u0628\u0627\u0633\u0644",
+   "quality": "compact",
    "size": 17506022,
    "version": "1.3.1"
   },
@@ -53,6 +56,7 @@
    "id": "evan",
    "name": "Evan",
    "name_ar": "\u0625\u064a\u0641\u0627\u0646",
+   "quality": "compact",
    "size": 12096225,
    "version": "1.3.1"
   },
@@ -68,6 +72,7 @@
    "id": "faris",
    "name": "Faris",
    "name_ar": "\u0641\u0627\u0631\u0633",
+   "quality": "compact",
    "size": 17043373,
    "version": "1.3.1"
   },
@@ -83,6 +88,7 @@
    "id": "hadi",
    "name": "Hadi",
    "name_ar": "\u0647\u0627\u062f\u064a",
+   "quality": "compact",
    "size": 2497141,
    "version": "1.3.1"
   },
@@ -98,11 +104,28 @@
    "id": "haytham",
    "name": "Haytham",
    "name_ar": "\u0647\u064a\u062b\u0645",
+   "quality": "compact",
    "sampleUrl": "https://github.com/riadassoum/Fasih/releases/download/voices/Fasih-sample-Haytham.wav",
    "size": 18527946,
    "version": "2.0"
   },
   "sha256": "c982d5b66118b67edacc3925813c9bfee8a671427fca772c3e1bcbb89ab9ef40",
+  "version": "2.0"
+ },
+ "Haytham Premium": {
+  "entry": {
+   "dataMd5": "AIZNYxmTi7trWmy/Y+NfoA==",
+   "dataUrl": "https://github.com/riadassoum/Fasih/releases/download/voices/Fasih-voice-Haytham-Premium.zip",
+   "description": "A premium voice made of real recorded speech, from the recordings Haytham was trained on (generated for Fasih with Google's Gemini text-to-speech), smoothed by a neural vocoder.",
+   "gender": "male",
+   "id": "haytham-premium",
+   "name": "Haytham Premium",
+   "name_ar": "\u0647\u064a\u062b\u0645",
+   "quality": "premium",
+   "size": 96356281,
+   "version": "2.0"
+  },
+  "sha256": "3d484e7fa17639fc38ffb3b9e52d9381883f7ae1a4019ee4f1962b8f9cc36fd5",
   "version": "2.0"
  },
  "Huda": {
@@ -114,6 +137,7 @@
    "id": "huda",
    "name": "Huda",
    "name_ar": "\u0647\u062f\u0649",
+   "quality": "compact",
    "size": 12884269,
    "version": "1.3.1"
   },
@@ -129,6 +153,7 @@
    "id": "jamal",
    "name": "Jamal",
    "name_ar": "\u062c\u0645\u0627\u0644",
+   "quality": "compact",
    "size": 17230891,
    "version": "1.3.1"
   },
@@ -144,6 +169,7 @@
    "id": "karim",
    "name": "Karim",
    "name_ar": "\u0643\u0631\u064a\u0645",
+   "quality": "compact",
    "size": 16049099,
    "version": "1.3.1"
   },
@@ -159,6 +185,7 @@
    "id": "lamees",
    "name": "Lamees",
    "name_ar": "\u0644\u0645\u064a\u0633",
+   "quality": "compact",
    "size": 12512477,
    "version": "1.3.1"
   },
@@ -174,6 +201,7 @@
    "id": "nabil",
    "name": "Nabil",
    "name_ar": "\u0646\u0628\u064a\u0644",
+   "quality": "compact",
    "size": 16751505,
    "version": "1.3.1"
   },
@@ -189,6 +217,7 @@
    "id": "nour",
    "name": "Nour",
    "name_ar": "\u0646\u0648\u0631",
+   "quality": "compact",
    "size": 22878137,
    "version": "1.3.1"
   },
@@ -204,6 +233,7 @@
    "id": "rana",
    "name": "Rana",
    "name_ar": "\u0631\u0646\u0627",
+   "quality": "compact",
    "size": 13852817,
    "version": "1.3.1"
   },
@@ -219,6 +249,7 @@
    "id": "reem",
    "name": "Reem",
    "name_ar": "\u0631\u064a\u0645",
+   "quality": "compact",
    "size": 11137134,
    "version": "1.3.1"
   },
@@ -234,6 +265,7 @@
    "id": "rima",
    "name": "Rima",
    "name_ar": "\u0631\u064a\u0645\u0627",
+   "quality": "compact",
    "size": 13847435,
    "version": "1.3.1"
   },
@@ -249,6 +281,7 @@
    "id": "sami",
    "name": "Sami",
    "name_ar": "\u0633\u0627\u0645\u064a",
+   "quality": "compact",
    "size": 6946519,
    "version": "1.3.1"
   },
@@ -264,6 +297,7 @@
    "id": "shahrazad",
    "name": "Shahrazad",
    "name_ar": "\u0634\u0647\u0631\u0632\u0627\u062f",
+   "quality": "compact",
    "size": 5325089,
    "version": "1.3.1"
   },
@@ -279,10 +313,38 @@
    "id": "zayd",
    "name": "Zayd",
    "name_ar": "\u0632\u064a\u062f",
+   "quality": "compact",
    "size": 18398480,
    "version": "1.3.1"
   },
   "sha256": "7666cb79dba60609cf5c2d23742c1264779d66ef867be4672a910f752e59ef5d",
   "version": "1.3.1"
+ },
+ "Zayd Premium": {
+  "entry": {
+   "dataMd5": "QUEjnWVpKW899MFoETfKUw==",
+   "dataUrl": "https://github.com/riadassoum/Fasih/releases/download/voices/Fasih-voice-Zayd-Premium.zip",
+   "description": "A premium voice made of real recorded speech, from the Zayd recordings that PlanetBlindTech shared for Fasih, smoothed by a neural vocoder.",
+   "gender": "male",
+   "id": "zayd-premium",
+   "name": "Zayd Premium",
+   "name_ar": "\u0632\u064a\u062f",
+   "quality": "premium",
+   "sampleUrl": "https://github.com/riadassoum/Fasih/releases/download/voices/Fasih-sample-Zayd-Premium.wav",
+   "size": 175282847,
+   "version": "2.0"
+  },
+  "sha256": "73d73c32b3595aa77ff3fcfaa9b7722cab9c4fb4e02e94e84d35c38eb01139b7",
+  "version": "2.0"
+ },
+ "__vocoder__": {
+  "entry": {
+   "dataMd5": "SQJA+y63+IJgxm9e04Js4A==",
+   "dataUrl": "https://github.com/riadassoum/Fasih/releases/download/voices/Fasih-vocoder.zip",
+   "size": 56556618,
+   "version": "1.0"
+  },
+  "sha256": "bae3a3820dccd0677cd5ee25efa5cf9bc09ec0bd42e59c5dba7fa8140d72452a",
+  "version": "1.0"
  }
 }
