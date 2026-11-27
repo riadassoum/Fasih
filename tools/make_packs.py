@@ -72,7 +72,17 @@ for name in sorted(os.listdir(os.path.join(REPO, "voices"))):
     if os.path.isfile(smp):
         shutil.copy(smp, os.path.join(OUT, "Fasih-sample-%s.wav" % name))
         voices[-1]["sampleUrl"] = BASE + "Fasih-sample-%s.wav" % name
+    elif rec.get("entry", {}).get("sampleUrl"):
+        voices[-1]["sampleUrl"] = rec["entry"]["sampleUrl"]
+    rec["entry"] = voices[-1]
     print("%-8s %6.1f MB" % (name, len(data) / 1e6))
+# Voices whose files live only on the releases page (not in this repository) keep the catalogue
+# entry stored when their pack was last built.
+built = {v["name"] for v in voices}
+for name, rec in sorted(REG.items()):
+    if name not in built and "entry" in rec and name not in CORE and not (ONLY and name not in ONLY):
+        voices.append(rec["entry"])
+voices.sort(key=lambda v: v["name"])
 json.dump(REG, open(REG_PATH, "w", encoding="utf-8"), indent=1, sort_keys=True)
 json.dump({"version": 1, "voices": voices}, open(os.path.join(OUT, "voices.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
 print("voices.json:", len(voices), "voices")
