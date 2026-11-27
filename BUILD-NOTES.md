@@ -30,7 +30,7 @@ The Windows DLLs are cross-compiled with zig (clang for x86_64-windows-gnu); lib
 1. Labels (`make_ssml.py`, RHVoice's label maker), features (`feats.py`: WORLD F0, mel-cepstrum, aperiodicity; `feats2.py`: 40 coefficients).
 2. Alignment (`align.py`), full-context labels (`full_labels.py`), statistics and decision trees (`train.py stats`, `train.py trees`), realignment, larger trees.
 3. Duration cap, separate pause tree, cleaned pitch statistics, pitch trees, and a calibration of spectral detail against held-out recordings (`calib.sh`).
-4. `train.py write OUT/voice.data` writes the voice. Options (environment variables) set the speaking rate, level, tone filter, the heavy lam of الله and other corrections; `addon_src/build_addon.sh` holds the values used for each voice.
+4. `train.py write OUT/voice.data` writes the voice. Options (environment variables) set the speaking rate, level, tone filter, the heavy lam of الله and other corrections; `tools/VOICE-SETTINGS.md` lists the values used for each voice.
 
 For another language set `RHV_LANG`, `RHV_LANG_DIR`, `RHV_DATA`, and `RHV_F0_MIN`/`RHV_F0_MAX` for the voice's pitch range.
 

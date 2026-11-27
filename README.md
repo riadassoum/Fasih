@@ -54,7 +54,7 @@ These are in NVDA's voice settings. The secondary voice, Clarity, Breathiness, S
 - **Secondary voice**: which voice reads non-Arabic text (Automatic, or any installed voice). It cannot be turned off: if no other voice is installed at all, the Arabic voice reads Latin text in a rough Arabic transliteration instead of staying silent.
 - **Clarity**: how strongly the voice is sharpened by the postfilter.
 - **Breathiness**: from natural down to very low breath noise.
-- **Sharpening**: a crisper, more detailed spectrum. To keep the add-on small, it appears only when the voices are written again from their training output with `FASIH_SHARP=1` (`addon_src/build_addon.sh`).
+- **Sharpening**: a crisper, more detailed spectrum. To keep the add-on small, it appears only when the voices are written again from their training output with `FASIH_SHARP=1` (see `tools/VOICE-SETTINGS.md`).
 - **Modulation postfilter**: on by default. It restores part of the natural movement of the voice from moment to moment, measured on each voice's recordings, so the voices sound livelier and less muffled. Turn it off to hear the voices as trained.
 - **Consonant repair**: removes the breathy cough some voices make on ق ط ش, at the cost of a somewhat muffled sound. Off by default.
 - **Read emojis and symbols by name**.
@@ -100,7 +100,7 @@ In NVDA's Tools menu, **Fasih > Pronunciation dictionary** lists the words you w
 - `lang_fr/`: the French language for RHVoice (`French/`) and its generator (`gen_fr.py`, `build_lang.sh`).
 - `scripts/`: corpus download, WORLD feature extraction, alignment, labels and training (`run_voice.sh`), and `fr_prep.py`, the French front end (liaison, abbreviations). The corpora themselves are not included; the scripts download them from their original sources.
 - `engine/`: `rhvoice-world-vocoder.patch` for RHVoice (at the commit in `RHVOICE_BASE_COMMIT`) and the WORLD sources to copy into `src/core/world/`. I cross-built the Windows DLLs with zig.
-- `addon_src/`: the NVDA driver patches, the voice downloader (`globalPlugins/fasihVoices.py`), the Arabic text pipeline and the Rawi helper (`rawi_host/`, C source and Windows build). `build_release.sh VERSION` builds the add-on from a clean checkout of this repository with nothing else installed but bash, python3 and zip. `build_addon.sh` is the development build, which writes the voices from training output.
+- `addon_src/`: the NVDA driver (`synthDrivers/fasih/`), the voice downloader (`globalPlugins/fasihVoices.py`), the Arabic text pipeline and the Rawi helper (`rawi_host/`, C source and Windows build). `build_release.sh VERSION` builds the add-on from a clean checkout of this repository with nothing else installed but bash, python3 and zip.
 - `third_party/`: what the release build packages from other projects: RHVoice's NVDA driver and Windows libraries (built from source with the WORLD patch), RHVoice's English language and the Bdl voice, ClaritySynth's Arabic modules, ONNX Runtime and the Rawi model.
 - `tools/make_packs.py`: builds the voice packs and their list (`voices.json`) for the "voices" release.
 - `tools/`: the training stages (`new_voice.sh`), calibration, `freeze_stats.py`, and `hts_edit.py` / `prebuilt.py`, which match a voice delivered already built.

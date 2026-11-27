@@ -53,11 +53,7 @@ finally:
     shutil.rmtree(tmp)
 
 # script splitting (Arabic -> primary voice, other text -> secondary voice)
-_drv = tempfile.mkdtemp()
-subprocess.run([sys.executable, os.path.join(REPO, "addon_src", "patch_driver.py"),
-                os.path.join(REPO, "third_party", "rhvoice-nvda-driver", "__init__.py"),
-                os.path.join(_drv, "d.py")], check=True, stdout=subprocess.DEVNULL)
-src = open(os.path.join(_drv, "d.py"), encoding="utf-8").read(); shutil.rmtree(_drv)
+src = open(os.path.join(REPO, "addon_src", "synthDrivers", "fasih", "__init__.py"), encoding="utf-8").read()
 a = src.index("_AR_RANGES = "); b = src.index("class SynthDriver(SynthDriver):", a)
 ns = {"unicodedata": unicodedata, "re": re, "_": lambda t: t, "threading": __import__("threading"), "os": os, "log": types.SimpleNamespace(error=print)}; exec(src[a:b], ns)
 # quality settings: a change made while another is being written is never lost
@@ -187,7 +183,7 @@ _lat = {"re": re}; exec(_aps[_aps.index("# -------------------------------------
 check("Latin fallback: a word is spoken", _lat["latin_to_arabic"]("Hello"), "هِلُو")
 check("Latin fallback: acronym spelled", _lat["latin_to_arabic"]("NVDA"), "إِن ڤِي دِي إِيه")
 check("Latin fallback: digits kept", _lat["latin_to_arabic"]("file 2"), "فِيلْ 2")
-_drv = open(os.path.join(REPO, "addon_src", "patch_driver.py"), encoding="utf-8").read()
+_drv = src
 check("secondary voice cannot be turned off", '"none"' in _drv, False)
 
 # French front end (liaison, numbers)

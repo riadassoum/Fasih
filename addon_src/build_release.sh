@@ -12,7 +12,7 @@ trap 'rm -rf "$B"' EXIT
 mkdir -p "$D/lib/x64" "$D/data/languages" "$D/data/voices" "$D/data/variants" "$D/arabic/lib/vowelizers" "$D/arabic/lib/onnxruntime/capi"
 
 # driver: RHVoice's official NVDA driver, patched for Fasih
-python3 "$HERE/patch_driver.py" "$T/rhvoice-nvda-driver/__init__.py" "$D/__init__.py"
+cp "$HERE/synthDrivers/fasih/__init__.py" "$D/__init__.py"
 cp "$HERE/arabic_pipeline.py" "$HERE/loudness.py" "$REPO/scripts/fr_prep.py" "$D/"
 cp -r "$HERE/locale" "$B/"
 # Tools > Fasih > Download voices (catalogue of RHVoice Voice Manager, by Alexander Linkov)
