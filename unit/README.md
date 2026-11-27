@@ -63,7 +63,7 @@ FASIH_PREMIUM="WORKDIR/voice/NAME" python3 tools/make_packs.py VERSION OUTDIR   
 
 ### Size
 
-Nothing that changes the sound is used to make a voice smaller. Join features are stored in half precision, pitch marks as differences, and audio no unit can reach as digital silence. A lower Opus bitrate or dropping the least-used recordings would each save more, but both measurably change the result (higher spectral distortion below 56 kbps; about 14% higher selection cost and 6% more joins with a fifth of the recordings removed), so neither is done.
+Nothing that changes the sound is used to make a voice smaller. `compact_voice.py`, the last training step, stores each boundary between neighbouring units once (99% of unit edges are shared) and the audio frame table as 16-bit packet sizes; the engine produces bit-identical audio from either form. Join features are stored in half precision, pitch marks as differences, and audio no unit can reach as digital silence. A lower Opus bitrate or dropping the least-used recordings would each save more, but both measurably change the result (higher spectral distortion below 56 kbps; about 14% higher selection cost and 6% more joins with a fifth of the recordings removed), so neither is done.
 
 ## Credits
 

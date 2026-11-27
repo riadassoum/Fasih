@@ -43,9 +43,7 @@ def read_units(path):
                 spec=(jl[:, :jd] + jr[:, :jd]) / 2, lf0l=jl[:, jd], lf0r=jr[:, jd])
 
 
-def main():
-    vd = sys.argv[1]
-    pxml = sys.argv[2] if len(sys.argv) > 2 else os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "lang", "Arabic", "phonemes.xml")
+def prepare(vd, pxml):
     U = read_units(os.path.join(vd, "units.bin"))
     layout = [l.rstrip("\n").split("\t") for l in open(os.path.join(vd, "layout.txt"), encoding="utf-8") if l.strip()]
     layout = [(t + ["", "", ""])[:3] for t in layout]
@@ -105,6 +103,14 @@ def main():
                     X[r, j] = {"s": 0, "q": 1, "e": 2}.get(ut, 0)
         return X
 
+    return dict(U=U, vals=vals, qs=qs, names=names, phones=phones, feats=feats, layout=layout)
+
+
+def main():
+    vd = sys.argv[1]
+    pxml = sys.argv[2] if len(sys.argv) > 2 else os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "lang", "Arabic", "phonemes.xml")
+    P = prepare(vd, pxml)
+    U, vals, qs, names, phones, feats, layout = (P[k] for k in ("U", "vals", "qs", "names", "phones", "feats", "layout"))
     rng = np.random.default_rng(1)
     nu = U["nu"]
     dur = np.log(np.maximum(U["b"] - U["a"], 1).astype(np.float64))

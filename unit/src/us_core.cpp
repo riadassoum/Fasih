@@ -9,6 +9,7 @@
 #include <cstring>
 #include <limits>
 #include <map>
+#include <array>
 #include <cstdio>
 #include <cstdlib>
 #ifdef FASIH_US_OPUS
@@ -233,7 +234,10 @@ namespace fasih_us
   {
     auto f=open_in(path,std::ios::binary);
     char magic[8]; f.read(magic,8);
-    if(std::memcmp(magic,"FSUV0002",8)!=0) throw std::runtime_error("fasih_us: bad units.bin");
+    int uver=0;
+    if(std::memcmp(magic,"FSUV0002",8)==0) uver=2;
+    else if(std::memcmp(magic,"FSUV0003",8)==0) uver=3;
+    else throw std::runtime_error("fasih_us: bad units.bin");
     uint32_t hdr[5]; f.read((char*)hdr,sizeof(hdr));
     uint32_t nu=hdr[0], nutt=hdr[1]; jd=hdr[2]; uint32_t nc_file=hdr[3]; sr=hdr[4];
     if(jd>JD_MAX||int(nc_file)!=nc) throw std::runtime_error("fasih_us: units.bin does not match context.txt");
@@ -253,6 +257,34 @@ namespace fasih_us
     };
     u.resize(nu);
     std::vector<uint16_t> hb(jd+1);
+    if(uver==3)
+      {
+        // compact form: a bitmask of shared right edges, the fixed part of every unit, then unshared right edges
+        std::vector<uint8_t> mask((nu+7)/8); f.read((char*)mask.data(),mask.size());
+        const size_t fixed=16+nc+2*(jd+1);
+        std::vector<char> rec(fixed);
+        std::vector<std::array<uint16_t,JD_MAX+1>> left(nu);
+        for(uint32_t i=0;i<nu;++i)
+          {
+            unit& x=u[i]; f.read(rec.data(),fixed);
+            uint16_t p; uint8_t h,pad; uint32_t ut,a,b;
+            std::memcpy(&p,&rec[0],2); h=rec[2]; pad=rec[3]; std::memcpy(&ut,&rec[4],4); std::memcpy(&a,&rec[8],4); std::memcpy(&b,&rec[12],4);
+            x.phone=p; x.half=h; x.utt=ut; x.quality=pad; x.start=utts[ut].first+a; x.end=utts[ut].first+b;
+            x.logdur=float(std::log(double(std::max<uint32_t>(b>a?b-a:1,1))));
+            std::memset(x.ctx,0,sizeof(x.ctx)); std::memcpy(x.ctx,&rec[16],nc);
+            std::memcpy(left[i].data(),&rec[16+nc],2*(jd+1));
+            for(uint32_t k=0;k<jd;++k) x.jl[k]=left[i][k]; x.lf0l=h2f(left[i][jd]);
+          }
+        for(uint32_t i=0;i<nu;++i)
+          {
+            unit& x=u[i];
+            bool shared=(mask[i>>3]>>(i&7))&1;
+            if(shared) for(uint32_t k=0;k<=jd;++k) hb[k]=left[i+1][k];
+            else f.read((char*)hb.data(),2*(jd+1));
+            for(uint32_t k=0;k<jd;++k) x.jr[k]=hb[k]; x.lf0r=h2f(hb[jd]);
+          }
+      }
+    else
     for(auto& x: u)
       {
         uint16_t p; uint8_t h,pad; uint32_t ut,a,b;
@@ -289,13 +321,26 @@ namespace fasih_us
 #endif
     if(!opus){ n_samples=map_size/2; return; }
     opa=(const unsigned char*)pcm; pcm=nullptr;
-    if(map_size<24||std::memcmp(opa,"FSOP0001",8)!=0) throw std::runtime_error("fasih_us: bad audio.opa");
+    if(map_size>=24&&std::memcmp(opa,"FSOP0002",8)==0) opa_version=2;
+    else if(map_size<24||std::memcmp(opa,"FSOP0001",8)!=0) throw std::runtime_error("fasih_us: bad audio.opa");
     uint32_t h[4]; std::memcpy(h,opa+8,16);
     if(h[0]!=utts.size()||int(h[1])!=sr) throw std::runtime_error("fasih_us: audio.opa does not match units.bin");
     opa_frame=h[2]; opa_la=h[3];
     opa_utts.resize(h[0]);
     for(uint32_t i=0;i<h[0];++i){ std::memcpy(&opa_utts[i].off,opa+24+16*i,8); std::memcpy(&opa_utts[i].frames,opa+32+16*i,4); std::memcpy(&opa_utts[i].samples,opa+36+16*i,4);}
     for(auto& x: utts) n_samples=std::max<uint64_t>(n_samples,x.first+x.second);
+    if(opa_version==2)
+      {
+        // packet offsets from the 16-bit sizes, once
+        size_t total=0; for(auto& x: opa_utts) total+=x.frames+1;
+        opa_offs.resize(total); size_t k=0;
+        for(auto& x: opa_utts)
+          {
+            x.first_off=k; const uint16_t* sz=(const uint16_t*)(opa+x.off); uint32_t o=0;
+            for(uint32_t i=0;i<x.frames;++i){ opa_offs[k++]=o; uint16_t z; std::memcpy(&z,sz+i,2); o+=z; }
+            opa_offs[k++]=o;
+          }
+      }
   }
 
   void voice::read(uint32_t utt,uint64_t a,uint64_t b,float* out) const
@@ -317,8 +362,9 @@ namespace fasih_us
     int err=0;
     OpusDecoder* dec=opus_decoder_create(sr,1,&err);
     if(err!=OPUS_OK) throw std::runtime_error("fasih_us: opus decoder");
-    const uint32_t* offs=(const uint32_t*)(opa+U.off);
-    const unsigned char* data=opa+U.off+4*(size_t(U.frames)+1);
+    const uint32_t* offs; const unsigned char* data;
+    if(opa_version==2){ offs=opa_offs.data()+U.first_off; data=opa+U.off+2*size_t(U.frames); }
+    else { offs=(const uint32_t*)(opa+U.off); data=opa+U.off+4*(size_t(U.frames)+1); }
     std::vector<float> fr(FR);
     std::fill(out,out+(b-a),0.0f);
     for(int64_t f=fa;f<fb;++f)

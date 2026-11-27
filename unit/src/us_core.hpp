@@ -139,7 +139,9 @@ namespace fasih_us
     bool opus{false};
     const unsigned char* opa{nullptr};
     uint32_t opa_frame{480}, opa_la{0};
-    struct opa_utt{uint64_t off; uint32_t frames, samples;};
+    struct opa_utt{uint64_t off; uint32_t frames, samples; uint64_t first_off;};
+    int opa_version{1};
+    std::vector<uint32_t> opa_offs;   // compact audio: packet offsets rebuilt at load
     std::vector<opa_utt> opa_utts;
   };
 
