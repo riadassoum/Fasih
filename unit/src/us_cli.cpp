@@ -47,7 +47,17 @@ int main(int argc,char** argv)
     std::cerr<<"halves "<<n<<" runs "<<runs<<" avg run "<<(runs?double(n)/runs:0)<<" cost "<<sel.cost<<"\n";
     std::vector<size_t> J; fasih_us::debug_joins=&J;
     std::vector<size_t> jn;
+    if(v.has_mel())
+      {
+        std::vector<float> frames; auto tm0=std::chrono::steady_clock::now();
+        fasih_us::concatenate_mel(v,sel,frames,jn);
+        auto vc=fasih_us::vocoder::shared(getenv("FASIH_ORT_LIB"),getenv("FASIH_VOCODER_DIR"));
+        vc->process_mel(frames,jn,{},out);
+        std::cerr<<"spectrum voice: "<<frames.size()/100<<" frames, "<<std::chrono::duration<double>(std::chrono::steady_clock::now()-tm0).count()*1000<<"ms\n";
+      }
+    else
     fasih_us::concatenate(v,sel,out,1.0,&jn);
+    if(!v.has_mel())
     if(getenv("FASIH_VOCODER_DIR"))
       {
         auto vc=fasih_us::vocoder::shared(getenv("FASIH_ORT_LIB"),getenv("FASIH_VOCODER_DIR"));

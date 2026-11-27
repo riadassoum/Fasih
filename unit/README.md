@@ -16,6 +16,12 @@ Everything in front of the voice is Fasih's: the Arabic text processing (Rawi or
 
 A voice whose `weights.txt` says `vocoder 1` is, when the vocoder is installed, resynthesized through Vocos (a fast neural vocoder, MIT licence, 24 kHz): for every streamed piece the engine computes the mel spectrum of the concatenated speech, blends it across each join, runs the model through ONNX Runtime and rebuilds the waveform (`src/us_vocoder.cpp`). The sound still comes from the recordings; the vocoder smooths the joins. It runs at about 13 times real time inside NVDA, and the first audio arrives in about 50 ms. In Fasih the vocoder lives in `synthDrivers/fasih/vocoder` (`vocos_core.onnx`, `melfb.f32`, and ONNX Runtime under the private name `fasih_ort.dll`, so it can never clash with another add-on's copy); the setting "Neural smoothing for premium voices" switches it off by creating `vocoder/off`. For tests outside NVDA, set `FASIH_VOCODER_DIR` and `FASIH_ORT_LIB`, or `FASIH_VOCODER=0` to switch it off. `vocoder/export.py` makes the model files from the published Vocos model.
 
+## Spectrum voices
+
+`build_mel.py` stores every recording as the compact mel spectrum the vocoder takes instead of audio: 100 bands at 94 frames a second, kept as 60 DCT coefficients, quantized, delta-coded, varint-packed and deflated per recording (about 22 kbps against 56 for the Opus audio). Measured against the original recordings this is closer than Opus followed by the vocoder (spectral distortion 1.8 dB against 2.5 dB, and less loss above 8 kHz), and a voice pack is less than half the size (Zayd 175 MB against 364 MB, Haytham 96 MB against 207 MB). A voice with `mel.bin` and no audio is assembled directly in the spectral domain (`concatenate_mel`: the units' frames, the recording's own onset and release at phrase edges, spectral blending across joins) and always speaks through the vocoder, which then has to be installed.
+
+The vocoder (the Vocos model, its mel filterbank and ONNX Runtime as `fasih_ort.dll`) is its own add-on, `fasihVocoder`, built by `tools/make_packs.py` as `Fasih-vocoder.zip` and listed in `voices.json`; the download window installs it together with the first premium voice. The engine looks for it in `addons/fasihVocoder/vocoder`, then in a `vocoder` folder inside Fasih.
+
 ## A voice folder
 
 | file | contents |
@@ -27,6 +33,7 @@ A voice whose `weights.txt` says `vocoder 1` is, when the vocoder is installed, 
 | `layout.txt`, `context.txt`, `phones.txt` | how to read RHVoice's labels, and the context vocabulary |
 | `models.bin` | duration, pitch and spectrum trees for the hybrid target cost |
 | `phonesim.txt` | phonetic substitution costs between context phones |
+| `mel.bin` | spectrum voices: the recordings as compressed mel spectra (instead of `audio.opa`) |
 | `weights.txt` | optional cost weights (`join_f0 12`, `max_cands 100`, any context feature by name) |
 
 `audio.pcm` (16-bit, 24 kHz) is the uncompressed audio. The engine uses it when `audio.opa` is absent; it is only needed to re-encode.

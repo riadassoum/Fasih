@@ -58,7 +58,7 @@ for name in sorted(os.listdir(os.path.join(REPO, "voices"))):
                    "dataMd5": base64.b64encode(hashlib.md5(data).digest()).decode(), "size": len(data)})
     print("%-8s %6.1f MB" % (name, len(data) / 1e6))
 # premium voices: the voice folder itself is data/
-PREMIUM_FILES = ("voice.info", "voice.params", "units.bin", "audio.opa", "marks.bin", "models.bin", "phonesim.txt", "layout.txt", "phones.txt", "context.txt", "weights.txt")
+PREMIUM_FILES = ("voice.info", "voice.params", "units.bin", "audio.opa", "mel.bin", "marks.bin", "models.bin", "phonesim.txt", "layout.txt", "phones.txt", "context.txt", "weights.txt")
 for src in os.environ.get("FASIH_PREMIUM", "").split():
     info = dict(l.strip().split("=", 1) for l in open(os.path.join(src, "voice.info"), encoding="utf-8") if "=" in l)
     name = info["name"]
@@ -83,5 +83,20 @@ for src in os.environ.get("FASIH_PREMIUM", "").split():
                    "version": VER, "dataUrl": BASE + os.path.basename(zpath),
                    "dataMd5": base64.b64encode(hashlib.md5(data).digest()).decode(), "size": len(data)})
     print("%-8s %6.1f MB (premium)" % (name, len(data) / 1e6))
-json.dump({"version": 1, "voices": voices}, open(os.path.join(OUT, "voices.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+# the neural vocoder premium voices speak through, installed with the first one (add-on fasihVocoder)
+vocoder = None
+if any(v.get("quality") == "premium" for v in voices):
+    vz = os.path.join(OUT, "Fasih-vocoder.zip")
+    T3 = os.path.join(REPO, "third_party")
+    with zipfile.ZipFile(vz, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
+        for f in ("vocos_core.onnx", "melfb.f32", "LICENSE", "README.txt"):
+            z.write(os.path.join(T3, "vocos", f), "vocoder/" + f)
+        # ONNX Runtime under a private name, so that it never clashes with another add-on's copy
+        z.write(os.path.join(T3, "onnxruntime", "onnxruntime.dll"), "vocoder/fasih_ort.dll")
+        z.write(os.path.join(T3, "onnxruntime", "LICENSE"), "vocoder/ONNXRUNTIME-LICENSE")
+    data = open(vz, "rb").read()
+    vocoder = {"version": os.environ.get("FASIH_VOCODER_VERSION", "1.0"), "dataUrl": BASE + "Fasih-vocoder.zip",
+               "dataMd5": base64.b64encode(hashlib.md5(data).digest()).decode(), "size": len(data)}
+    print("vocoder  %6.1f MB" % (len(data) / 1e6))
+json.dump({"version": 1, "voices": voices, **({"vocoder": vocoder} if vocoder else {})}, open(os.path.join(OUT, "voices.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
 print("voices.json:", len(voices), "voices")

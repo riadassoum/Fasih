@@ -7,6 +7,8 @@
 #include <vector>
 #include <unordered_map>
 #include <memory>
+#include <mutex>
+#include <list>
 
 namespace fasih_us
 {
@@ -79,6 +81,11 @@ namespace fasih_us
       n=mark_off[i+1]-mark_off[i]; return mark_data.data()+mark_off[i];
     }
     bool has_marks() const {return !mark_off.empty();}
+    // spectrum voices (mel.bin): recordings stored as 100-band log-mel frames for the vocoder
+    bool has_mel() const {return mel_map!=nullptr;}
+    // frames [f0,f1) of recording utt into out (100 floats per frame); frames outside the recording repeat its edges
+    void read_mel(uint32_t utt,int64_t f0,int64_t f1,float* out) const;
+    const std::vector<float>& mel_silence() const {return mel_sil;}
     // in its recording, is this unit's phone preceded / followed by a pause?
     bool recorded_after_pause(uint32_t id) const {return k_prev>=0&&pau_prev>=0&&u[id].ctx[k_prev]==pau_prev;}
     bool recorded_before_pause(uint32_t id) const {return k_next>=0&&pau_next>=0&&u[id].ctx[k_next]==pau_next;}
@@ -93,6 +100,13 @@ namespace fasih_us
     void load_marks(const std::string& path);
     void load_models(const std::string& path);
     void load_phonesim(const std::string& path);
+    void load_mel(const std::string& path);
+    const unsigned char* mel_map{nullptr}; size_t mel_size{0}; void* mel_fh{nullptr}; void* mel_mh{nullptr};
+    uint32_t mel_K{0}; float mel_q{0}; std::vector<float> mel_sil, mel_idct;
+    struct mel_rec{uint64_t off; uint32_t T, csize;}; std::vector<mel_rec> mel_recs;
+    mutable std::mutex mel_mutex;
+    mutable std::list<std::pair<uint32_t,std::shared_ptr<std::vector<float>>>> mel_cache;
+    std::shared_ptr<std::vector<float>> decode_mel(uint32_t utt) const;
   public:
     struct question {int type; int field; std::unordered_map<std::string,int> set;};
     struct tree {uint32_t dim; std::vector<float> sd; std::vector<int32_t> feat,left,right; std::vector<float> thr,val;};
@@ -158,6 +172,10 @@ namespace fasih_us
 
   // concatenate the selected units into 16-bit samples (pauses scaled by pause_scale)
   void concatenate(const voice& v,const select_result& sel,std::vector<float>& out,double pause_scale=1.0,std::vector<size_t>* joins=nullptr);
+
+  // spectrum voices: the selected units as 100-band log-mel frames (hop 256) for the vocoder;
+  // joins gets the frame index of every join
+  void concatenate_mel(const voice& v,const select_result& sel,std::vector<float>& frames,std::vector<size_t>& joins,double pause_scale=1.0);
 
   // convenience: labels -> samples
   void synthesize(const voice& v,const std::vector<std::string>& labels,char utt_type,std::vector<float>& out,double pause_scale=1.0);

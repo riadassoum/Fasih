@@ -31,14 +31,16 @@ namespace RHVoice
 
     bool exists(const std::string& p){ struct stat st; return stat(p.c_str(),&st)==0; }
 
-    // the vocoder folder: FASIH_VOCODER_DIR, or "vocoder" two levels above this library (add-on layout:
-    // synthDrivers/fasih/lib/x64/libRHVoice_core.dll -> synthDrivers/fasih/vocoder)
+    // the vocoder folder: FASIH_VOCODER_DIR (tests), else the fasihVocoder add-on installed with the first
+    // premium voice (addons/fasihVocoder/vocoder), else a "vocoder" folder inside Fasih itself.
+    // The library sits in addons/<fasih>/synthDrivers/fasih/lib/x64.
     std::string vocoder_dir(std::string& ort)
     {
       if(const char* d=std::getenv("FASIH_VOCODER_DIR"))
         { const char* o=std::getenv("FASIH_ORT_LIB"); ort=o?o:""; return d; }
       std::string here;
 #ifdef _WIN32
+      const char sep='\\'; const char* lib="fasih_ort.dll";
       HMODULE m=nullptr;
       if(GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,(LPCWSTR)&vocoder_dir,&m))
         {
@@ -46,16 +48,16 @@ namespace RHVoice
           int len=WideCharToMultiByte(CP_UTF8,0,buf,int(n),nullptr,0,nullptr,nullptr);
           here.assign(len,0); WideCharToMultiByte(CP_UTF8,0,buf,int(n),&here[0],len,nullptr,nullptr);
         }
-      for(int up=0;up<3;++up){ size_t s=here.find_last_of("\\/"); if(s==std::string::npos) return ""; here.resize(s); }
-      ort=here+"\\vocoder\\fasih_ort.dll";
-      return here+"\\vocoder";
 #else
+      const char sep='/'; const char* lib="libfasih_ort.so";
       Dl_info info;
       if(dladdr((void*)&vocoder_dir,&info)&&info.dli_fname) here=info.dli_fname;
-      for(int up=0;up<3;++up){ size_t s=here.find_last_of('/'); if(s==std::string::npos) return ""; here.resize(s); }
-      ort=here+"/vocoder/libfasih_ort.so";
-      return here+"/vocoder";
 #endif
+      auto up=[&](std::string p,int k)->std::string{ for(int i=0;i<k;++i){ size_t s=p.find_last_of("\\/"); if(s==std::string::npos) return ""; p.resize(s);} return p; };
+      std::string driver=up(here,3), addons=up(here,6);
+      for(const std::string& d: {addons.empty()?std::string():addons+sep+"fasihVocoder"+sep+"vocoder", driver.empty()?std::string():driver+sep+"vocoder"})
+        if(!d.empty()&&exists(d+sep+"vocos_core.onnx")){ ort=d+sep+lib; return d; }
+      return "";
     }
 
     std::shared_ptr<const fasih_us::voice> open_db(const std::string& dir)
@@ -98,7 +100,7 @@ namespace RHVoice
     db=open_db(data_path);
     sample_rate=static_cast<sample_rate_t>(db->sample_rate());
     // neural smoothing: on for voices that ask for it (weights.txt "vocoder 1"), when the vocoder is installed
-    if(db->get_weights().vocoder>0)
+    if(db->get_weights().vocoder>0||db->has_mel())
       {
         std::string ort, dir=vocoder_dir(ort);
         if(!dir.empty()&&exists(dir+"/vocos_core.onnx")&&!ort.empty()&&exists(ort))
@@ -212,6 +214,7 @@ namespace RHVoice
         cuts.push_back(c1);
         int64_t spoken=-1;
         std::vector<float> spoken_audio;   // context for the vocoder across streamed pieces
+        std::vector<float> spoken_mel;     // the same for spectrum voices
         for(std::size_t ci=0;ok&&ci+1<cuts.size();++ci)
           {
             std::size_t a0=cuts[ci], a1=cuts[ci+1];
@@ -221,9 +224,20 @@ namespace RHVoice
             sel.units.resize(a1-a0); sel.pause_ms.resize(a1-a0);
             for(auto id: sel.units) if(id>=0) spoken=id;
             std::vector<float> out; std::vector<size_t> jn;
+            if(db->has_mel())
+              {
+                // spectrum voice: the units' mel frames, made audible by the vocoder (always on for these voices)
+                std::vector<float> frames;
+                fasih_us::concatenate_mel(*db,sel,frames,jn);
+                if(voc){ try { voc->process_mel(frames,jn,spoken_mel,out); } catch(...) { out.assign(frames.size()/100*256,0.0f); } }
+                else out.assign(frames.size()/100*256,0.0f);   // no vocoder installed: silence rather than noise
+                spoken_mel.insert(spoken_mel.end(),frames.begin(),frames.end());
+                if(spoken_mel.size()>2400) spoken_mel.erase(spoken_mel.begin(),spoken_mel.end()-2400);
+              }
+            else
             fasih_us::concatenate(*db,sel,out,1.0,&jn);
             // neural smoothing (can be switched off without restarting: a file named "off" in the vocoder folder)
-            if(voc&&!vocoder_off())
+            if(!db->has_mel()&&voc&&!vocoder_off())
               {
                 std::vector<float> y;
                 try { voc->process(out,jn,spoken_audio,y); out.swap(y); } catch(...) {}

@@ -221,6 +221,33 @@ namespace fasih_us
       }
   }
 
+  void vocoder::process_mel(const std::vector<float>& frames,const std::vector<size_t>& joins,const std::vector<float>& left,std::vector<float>& out)
+  {
+    const size_t ctxf=std::min<size_t>(left.size()/NM,24);
+    std::vector<float> m(left.end()-ctxf*NM,left.end());
+    m.insert(m.end(),frames.begin(),frames.end());
+    const size_t T=m.size()/NM;
+    const std::vector<float> orig=m;
+    for(size_t j: joins)
+      {
+        long f=long(j+ctxf), fa=f-3, fbk=f+2;
+        if(fa<0||fbk>=long(T)) continue;
+        for(long k=fa+1;k<fbk;++k)
+          {
+            float w=float(k-fa)/float(fbk-fa);
+            for(int b=0;b<NM;++b)
+              {
+                float lin=(1-w)*orig[size_t(fa)*NM+b]+w*orig[size_t(fbk)*NM+b];
+                m[size_t(k)*NM+b]=0.5f*lin+0.5f*orig[size_t(k)*NM+b];
+              }
+          }
+      }
+    std::vector<float> y=p->synth(m,T);
+    const size_t n=frames.size()/NM*H;
+    out.assign(n,0.0f);
+    for(size_t i=0;i<n&&i+ctxf*H<y.size();++i) out[i]=y[i+ctxf*H];
+  }
+
   std::shared_ptr<vocoder> vocoder::shared(const std::string& ort_lib,const std::string& dir)
   {
     static std::mutex m; static std::map<std::string,std::weak_ptr<vocoder>> cache;

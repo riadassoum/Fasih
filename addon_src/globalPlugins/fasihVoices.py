@@ -163,6 +163,54 @@ class FasihVoiceBundle(addonHandler.AddonBundle):
 		return "Fasih %s" % self._voice["name"]
 
 
+VOCODER_ADDON = "fasihVocoder"
+
+
+def _vocoder_installed():
+	"""The neural vocoder premium voices speak through: installed (or waiting for NVDA to restart)."""
+	for a in addonHandler.getAvailableAddons():
+		if a.name == VOCODER_ADDON and not a.isPendingRemove:
+			return True
+	return False
+
+
+class VocoderBundle(addonHandler.AddonBundle):
+	"""Fasih's neural vocoder (Vocos, MIT) as its own add-on: downloaded once, with the first premium
+	voice, and kept when Fasih is updated. The engine finds it in addons/fasihVocoder/vocoder."""
+
+	def __init__(self, entry):
+		self._installExceptions = []
+		self._entry = entry
+		self.files = {}
+		self._conf = ConfigObj(configspec=addonHandler.AddonManifest.configspec, encoding="utf-8", default_encoding="utf-8")
+		self._conf["name"] = VOCODER_ADDON
+		self._conf["summary"] = "Fasih neural vocoder (for premium voices)"
+		self._conf["description"] = "The Vocos neural vocoder (MIT licence) that Fasih's premium voices speak through, with ONNX Runtime."
+		self._conf["author"] = "Riad Assoum"
+		self._conf["version"] = entry["version"]
+		self._conf["minimumNVDAVersion"] = "2026.1.0"
+		self._conf["lastTestedNVDAVersion"] = "2099.4.0"
+		buf = BytesIO()
+		self._conf.write(outfile=buf)
+		buf.seek(0)
+		self._manifest = addonHandler.AddonManifest(buf)
+
+	def extract(self, addonPath=None):
+		path = Path(self.pendingInstallPath)
+		path.mkdir(parents=True, exist_ok=True)
+		with open(path.joinpath(addonHandler.MANIFEST_FILENAME), "wb") as f:
+			self._conf.write(outfile=f)
+		with zipfile.ZipFile(self.files["vocoder"], "r") as z:
+			z.extractall(path)
+
+	@property
+	def manifest(self):
+		return self._manifest
+
+	def __repr__(self):
+		return "Fasih neural vocoder"
+
+
 class _Downloader(threading.Thread):
 	"""Downloads every file of a voice in turn, checking each one; the dialog reads its state."""
 
@@ -428,6 +476,12 @@ class VoicesDialog(wx.Dialog):
 		base.mkdir(parents=True, exist_ok=True)
 		folder = Path(tempfile.mkdtemp(dir=str(base)))     # one folder per download
 		items = [(key, asset["dataUrl"], asset.get("dataMd5")) for key, asset in bundle.assets]
+		# premium voices speak through the neural vocoder: the first one brings it along
+		vocoder = self.pkgData["languages"][self.langChoice.GetSelection()].get("vocoder")
+		need_vocoder = (isinstance(bundle, FasihVoiceBundle) and bundle._voice.get("quality") == "premium"
+			and vocoder and not _vocoder_installed())
+		if need_vocoder:
+			items.append(("vocoder", vocoder["dataUrl"], vocoder.get("dataMd5")))
 		dlg = DownloadDialog(self, _("Downloading {voice}").format(voice=bundle._voice["name"]), items, folder)
 		result = dlg.ShowModal()
 		worker = dlg.worker
@@ -451,6 +505,11 @@ class VoicesDialog(wx.Dialog):
 				# an update: NVDA swaps the old version for the new one at restart
 				addonHandler.Addon(bundle.installPath).requestRemove()
 			addon = addonHandler.installAddonBundle(bundle)
+			if addon is not None and need_vocoder and "vocoder" in bundle.files:
+				vb = VocoderBundle(vocoder)
+				vb.files = {"vocoder": bundle.files["vocoder"]}
+				if addonHandler.installAddonBundle(vb) is None:
+					log.error("Fasih: the neural vocoder could not be installed")
 		except Exception:
 			log.error("Fasih: voice installation failed", exc_info=True)
 			addon = None
@@ -1264,7 +1323,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			try:
 				fv = requests.get(FASIH_URL, timeout=TIMEOUT).json()
 				if fv.get("voices"):
-					langs.append({"lang2code": "ar", "name": "Arabic (Fasih)", "fasih": True, "voices": fv["voices"]})
+					langs.append({"lang2code": "ar", "name": "Arabic (Fasih)", "fasih": True, "voices": fv["voices"], "vocoder": fv.get("vocoder")})
 			except Exception:
 				log.error("Fasih: Fasih voice list unavailable", exc_info=True)
 			try:

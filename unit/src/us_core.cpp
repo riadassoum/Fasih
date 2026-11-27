@@ -12,6 +12,7 @@
 #include <array>
 #include <cstdio>
 #include <cstdlib>
+#include "miniz/miniz.h"
 #ifdef FASIH_US_OPUS
 #include <opus.h>
 #endif
@@ -106,13 +107,18 @@ namespace fasih_us
     }
     load_context(join_path(dir,"context.txt"));
     load_units(join_path(dir,"units.bin"));
+    bool mel=bool(std::ifstream(join_path(dir,"mel.bin"),std::ios::binary));
 #ifdef FASIH_US_OPUS
     {
       std::ifstream t(join_path(dir,"audio.opa"),std::ios::binary);
       opus=bool(t);
     }
 #endif
-    load_audio(join_path(dir,opus?"audio.opa":"audio.pcm"));
+    if(mel) load_mel(join_path(dir,"mel.bin"));
+    // a spectrum voice needs no audio; one with both keeps the audio for speaking without the vocoder
+    if(opus||!mel||bool(std::ifstream(join_path(dir,"audio.pcm"),std::ios::binary)))
+      { try { load_audio(join_path(dir,opus?"audio.opa":"audio.pcm")); } catch(...) { if(!mel) throw; } }
+    for(auto& x: utts) n_samples=std::max<uint64_t>(n_samples,x.first+x.second);
     try{ load_weights(join_path(dir,"weights.txt")); } catch(...) {}
     try{ load_marks(join_path(dir,"marks.bin")); } catch(...) {mark_off.clear();}
     try{ load_models(join_path(dir,"models.bin")); } catch(...) {trees.clear(); questions.clear();}
@@ -382,6 +388,84 @@ namespace fasih_us
       }
     opus_decoder_destroy(dec);
 #endif
+  }
+
+  void voice::load_mel(const std::string& path)
+  {
+#ifdef _WIN32
+    HANDLE fh=CreateFileW(widen(path).c_str(),GENERIC_READ,FILE_SHARE_READ,nullptr,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL|FILE_FLAG_RANDOM_ACCESS,nullptr);
+    if(fh==INVALID_HANDLE_VALUE) throw std::runtime_error("fasih_us: cannot open mel.bin");
+    LARGE_INTEGER sz; GetFileSizeEx(fh,&sz);
+    HANDLE mh=CreateFileMappingW(fh,nullptr,PAGE_READONLY,0,0,nullptr);
+    mel_map=mh?(const unsigned char*)MapViewOfFile(mh,FILE_MAP_READ,0,0,0):nullptr;
+    if(!mel_map){ if(mh) CloseHandle(mh); CloseHandle(fh); throw std::runtime_error("fasih_us: cannot map mel.bin"); }
+    mel_fh=fh; mel_mh=mh; mel_size=size_t(sz.QuadPart);
+#else
+    int fd=::open(path.c_str(),O_RDONLY);
+    if(fd<0) throw std::runtime_error("fasih_us: cannot open mel.bin");
+    struct stat st; fstat(fd,&st);
+    void* p=mmap(nullptr,st.st_size,PROT_READ,MAP_SHARED,fd,0); ::close(fd);
+    if(p==MAP_FAILED) throw std::runtime_error("fasih_us: cannot map mel.bin");
+    mel_map=(const unsigned char*)p; mel_size=st.st_size;
+#endif
+    if(mel_size<28||std::memcmp(mel_map,"FSMEL001",8)!=0) throw std::runtime_error("fasih_us: bad mel.bin");
+    uint32_t n,K,hop; float q;
+    std::memcpy(&n,mel_map+8,4); std::memcpy(&K,mel_map+12,4); std::memcpy(&q,mel_map+16,4); std::memcpy(&hop,mel_map+20,4);
+    if(n!=utts.size()||hop!=256||K>100) throw std::runtime_error("fasih_us: mel.bin does not match units.bin");
+    mel_K=K; mel_q=q;
+    mel_sil.resize(100); std::memcpy(mel_sil.data(),mel_map+24,400);
+    mel_recs.resize(n);
+    for(uint32_t i=0;i<n;++i){ const unsigned char* r=mel_map+424+16*size_t(i); std::memcpy(&mel_recs[i].off,r,8); std::memcpy(&mel_recs[i].T,r+8,4); std::memcpy(&mel_recs[i].csize,r+12,4); }
+    // orthonormal inverse DCT (DCT-III) of the first K coefficients onto 100 bands
+    mel_idct.resize(size_t(K)*100);
+    for(uint32_t k=0;k<K;++k)
+      for(int b=0;b<100;++b)
+        mel_idct[size_t(k)*100+b]=float((k==0?std::sqrt(1.0/100):std::sqrt(2.0/100))*std::cos(3.14159265358979323846*(b+0.5)*k/100));
+  }
+
+  std::shared_ptr<std::vector<float>> voice::decode_mel(uint32_t utt) const
+  {
+    {
+      std::lock_guard<std::mutex> lock(mel_mutex);
+      for(auto it=mel_cache.begin();it!=mel_cache.end();++it)
+        if(it->first==utt){ mel_cache.splice(mel_cache.begin(),mel_cache,it); return mel_cache.front().second; }
+    }
+    const mel_rec& r=mel_recs[utt];
+    const size_t ncoef=size_t(r.T)*mel_K;
+    std::vector<unsigned char> raw(ncoef*5+16);
+    mz_ulong rl=raw.size();
+    if(mz_uncompress(raw.data(),&rl,mel_map+r.off,r.csize)!=MZ_OK) throw std::runtime_error("fasih_us: damaged mel.bin");
+    auto out=std::make_shared<std::vector<float>>(size_t(r.T)*100,0.0f);
+    std::vector<int32_t> prev(mel_K,0);
+    size_t p=0;
+    for(uint32_t t=0;t<r.T;++t)
+      {
+        float* row=out->data()+size_t(t)*100;
+        for(uint32_t k=0;k<mel_K;++k)
+          {
+            uint32_t v=0; int sh=0;
+            while(p<rl){ unsigned char b=raw[p++]; v|=uint32_t(b&127)<<sh; sh+=7; if(!(b&128)) break; }
+            int32_t d=int32_t(v>>1)^-int32_t(v&1);
+            prev[k]+=d;
+            float c=prev[k]*mel_q;
+            const float* basis=&mel_idct[size_t(k)*100];
+            for(int b=0;b<100;++b) row[b]+=c*basis[b];
+          }
+      }
+    std::lock_guard<std::mutex> lock(mel_mutex);
+    mel_cache.emplace_front(utt,out);
+    if(mel_cache.size()>64) mel_cache.pop_back();
+    return out;
+  }
+
+  void voice::read_mel(uint32_t utt,int64_t f0,int64_t f1,float* out) const
+  {
+    auto m=decode_mel(utt); const int64_t T=mel_recs[utt].T;
+    for(int64_t f=f0;f<f1;++f)
+      {
+        int64_t g=std::min<int64_t>(std::max<int64_t>(f,0),T-1);
+        std::memcpy(out+size_t(f-f0)*100,m->data()+size_t(g)*100,400);
+      }
   }
 
   void voice::load_marks(const std::string& path)
@@ -1177,6 +1261,49 @@ namespace fasih_us
       {
         float g=float(std::pow(10.0,v.get_weights().level_db/20.0));
         for(auto& x: out) x*=g;
+      }
+  }
+
+  void concatenate_mel(const voice& v,const select_result& sel,std::vector<float>& frames,std::vector<size_t>& joins,double pause_scale)
+  {
+    const auto& U=v.units();
+    const double hop=256.0;
+    struct run{int64_t first,last; bool after_pause; double pause;};
+    std::vector<run> runs;
+    double pending=0; bool pflag=true;
+    for(size_t i=0;i<sel.units.size();++i)
+      {
+        int64_t id=sel.units[i];
+        if(id<0){ pending+=sel.pause_ms[i]; pflag=true; continue; }
+        if(!runs.empty()&&!pflag&&i>0&&sel.units[i-1]==id-1){ runs.back().last=id; continue; }
+        runs.push_back({id,id,pflag,pending}); pending=0; pflag=false;
+      }
+    const std::vector<float>& sil=v.mel_silence();
+    auto silence=[&](double ms){ size_t n=size_t(std::lround(std::max(0.0,ms*pause_scale)*24000.0/1000.0/hop)); for(size_t k=0;k<n;++k) frames.insert(frames.end(),sil.begin(),sil.end()); };
+    std::vector<float> buf;
+    for(size_t r=0;r<runs.size();++r)
+      {
+        const run& R=runs[r];
+        const unit& a=U[R.first]; const unit& b=U[R.last];
+        const uint64_t base=v.utt_start(a.utt);
+        int64_t fa=std::llround(double(a.start-base)/hop), fb=std::llround(double(b.end-base)/hop);
+        bool ends_phrase=(r+1==runs.size())||runs[r+1].after_pause;
+        if(R.after_pause&&v.recorded_after_pause(R.first)) fa-=1;       // the recording's own onset
+        if(ends_phrase&&v.recorded_before_pause(R.last)) fb+=2;         // and its own release
+        if(fb<=fa) fb=fa+1;
+        if(R.after_pause) silence(R.pause);
+        else joins.push_back(frames.size()/100);
+        buf.resize(size_t(fb-fa)*100);
+        v.read_mel(a.utt,fa,fb,buf.data());
+        frames.insert(frames.end(),buf.begin(),buf.end());
+      }
+    silence(pending);
+    if(frames.empty()) frames.insert(frames.end(),sil.begin(),sil.end());
+    // the voice's level: a gain is a constant added to the log-magnitude spectrum
+    if(v.get_weights().level_db!=0.0)
+      {
+        float g=float(v.get_weights().level_db/20.0*std::log(10.0));
+        for(auto& x: frames) x+=g;
       }
   }
 

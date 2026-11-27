@@ -652,17 +652,31 @@ rep('''    def terminate(self):''', '''    # quality settings: rewrite voice fil
     def _set_modulationPostfilter(self, v):
         self._quality_set("ms", bool(v))
 
-    # premium (unit-selection) voices: the engine resynthesizes them through the Vocos vocoder unless
-    # vocoder/off exists; it checks for every phrase, so no restart is needed
+    # premium (unit-selection) voices: the engine resynthesizes audio-based ones through the Vocos
+    # vocoder unless vocoder/off exists (checked for every phrase, no restart needed). The vocoder is its
+    # own add-on (fasihVocoder), installed with the first premium voice.
+    @staticmethod
+    def _vocoder_dir():
+        here = os.path.dirname(os.path.abspath(__file__))
+        addons = os.path.dirname(os.path.dirname(os.path.dirname(here)))
+        for d in (os.path.join(addons, "fasihVocoder", "vocoder"), os.path.join(here, "vocoder")):
+            if os.path.isfile(os.path.join(d, "vocos_core.onnx")):
+                return d
+        return None
+
     def _get_neuralSmoothing(self):
-        return not os.path.exists(os.path.join(os.path.dirname(__file__), "vocoder", "off"))
+        d = self._vocoder_dir()
+        return d is None or not os.path.exists(os.path.join(d, "off"))
 
     def _set_neuralSmoothing(self, v):
-        flag = os.path.join(os.path.dirname(__file__), "vocoder", "off")
+        d = self._vocoder_dir()
+        if d is None:
+            return
+        flag = os.path.join(d, "off")
         try:
             if v and os.path.exists(flag):
                 os.remove(flag)
-            elif not v and os.path.isdir(os.path.dirname(flag)):
+            elif not v:
                 open(flag, "w").close()
         except OSError:
             log.debugWarning("Fasih: could not switch neural smoothing", exc_info=True)
