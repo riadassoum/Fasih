@@ -19,6 +19,8 @@ The engine is RHVoice at `engine/RHVOICE_BASE_COMMIT` with two patches: `engine/
 
 The Windows DLLs are cross-compiled with zig (clang for x86_64-windows-gnu), using small wrapper scripts as CMAKE_C_COMPILER and CMAKE_CXX_COMPILER (`python3 -m ziglang cc -target x86_64-windows-gnu`, and the same with `c++`), `-DCMAKE_SYSTEM_NAME=Windows -DWITH_DATA=OFF -DBUILD_UTILS=OFF`, `-std=gnu++17` with the Boost submodules' include folders, and these libc++ switches for removed C++17/20 features: `-D_LIBCPP_ENABLE_CXX17_REMOVED_FEATURES -D_LIBCPP_ENABLE_CXX20_REMOVED_FEATURES -D_LIBCPP_ENABLE_CXX17_REMOVED_UNARY_BINARY_FUNCTION -D_LIBCPP_ENABLE_CXX20_REMOVED_NEGATORS -D_LIBCPP_ENABLE_CXX17_REMOVED_BINDERS -D_LIBCPP_ENABLE_CXX17_REMOVED_AUTO_PTR`. With a recent GCC, the old tclap headers also need their copy constructors written without `<T>` (for the label tool). A Linux build of the same tree is what the training tools load (`RHVOICE_LIB`, `RHVOICE_LABELS`).
 
+- the unit-selection backend for premium (concatenative) voices, in `unit/src` and applied by `unit/build_engine.sh`, which also builds sonic and Opus into the core: a voice folder with `units.bin` is a unit voice. See `unit/README.md` for how they are trained and packed.
+
 ## Languages
 
 - `lang/`: the Arabic data-only language. `gen_foma.py` and `gen_rest.py` write the foma sources; `build_lang.sh` compiles them with foma and RHVoice's `att2bin` and `dtree2bin` (set `RH` to an RHVoice source checkout).

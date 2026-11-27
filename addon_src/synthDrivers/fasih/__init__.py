@@ -961,6 +961,7 @@ class SynthDriver(SynthDriver):
         BooleanDriverSetting("sharpening", _("Sharpening (crisper sound)"), defaultVal=False, availableInSettingsRing=True),
         BooleanDriverSetting("consonantRepair", _("Consonant repair (crisper ق ط ش, may sound muffled)"), defaultVal=False, availableInSettingsRing=True),
         BooleanDriverSetting("modulationPostfilter", _("Modulation postfilter (livelier, less muffled)"), defaultVal=True, availableInSettingsRing=True),
+        BooleanDriverSetting("neuralSmoothing", _("Neural smoothing for premium voices"), defaultVal=True, availableInSettingsRing=True),
         BooleanDriverSetting("readEmojis", _("Read emojis and symbols by name"), defaultVal=True),
         BooleanDriverSetting("pausalEnding", _("Pausal ending (waqf) at end of sentences"), defaultVal=True),
         BooleanDriverSetting("fullCaseEndings", _("Full case endings (classical reading)"), defaultVal=False, availableInSettingsRing=True),
@@ -1165,6 +1166,35 @@ class SynthDriver(SynthDriver):
 
     def _set_modulationPostfilter(self, v):
         self._quality_set("ms", bool(v))
+
+    # premium (unit-selection) voices: the engine resynthesizes audio-based ones through the Vocos
+    # vocoder unless vocoder/off exists (checked for every phrase, no restart needed). The vocoder is its
+    # own add-on (fasihVocoder), installed with the first premium voice.
+    @staticmethod
+    def _vocoder_dir():
+        here = os.path.dirname(os.path.abspath(__file__))
+        addons = os.path.dirname(os.path.dirname(os.path.dirname(here)))
+        for d in (os.path.join(addons, "fasihVocoder", "vocoder"), os.path.join(here, "vocoder")):
+            if os.path.isfile(os.path.join(d, "vocos_core.onnx")):
+                return d
+        return None
+
+    def _get_neuralSmoothing(self):
+        d = self._vocoder_dir()
+        return d is None or not os.path.exists(os.path.join(d, "off"))
+
+    def _set_neuralSmoothing(self, v):
+        d = self._vocoder_dir()
+        if d is None:
+            return
+        flag = os.path.join(d, "off")
+        try:
+            if v and os.path.exists(flag):
+                os.remove(flag)
+            elif not v:
+                open(flag, "w").close()
+        except OSError:
+            log.debugWarning("Fasih: could not switch neural smoothing", exc_info=True)
 
     def _get_readEmojis(self):
         return arabic_pipeline.options["read_emojis"]
