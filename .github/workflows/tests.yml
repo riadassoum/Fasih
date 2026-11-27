@@ -3,7 +3,7 @@ on:
   push:
   pull_request:
 jobs:
-  text-tests:
+  build-and-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -13,4 +13,17 @@ jobs:
         with:
           python-version: "3.13"
       - run: pip install numpy
-      - run: python tests/test_arabic.py
+      - name: Every Python file compiles
+        run: python -m compileall -q addon_src scripts tools tests
+      - name: Text and driver tests
+        run: python tests/test_arabic.py
+      - name: Build the add-on from a clean checkout
+        run: bash addon_src/build_release.sh ci build/Fasih-ci.nvda-addon
+      - name: Nothing that silences the engine leaves the text pipeline
+        run: |
+          mkdir -p build/x && cd build/x && unzip -q ../Fasih-ci.nvda-addon
+          cd ../.. && python tests/test_engine_safe.py build/x/synthDrivers/fasih
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Fasih-ci.nvda-addon
+          path: build/Fasih-ci.nvda-addon
