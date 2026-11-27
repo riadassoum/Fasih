@@ -6,6 +6,7 @@ set -euo pipefail
 VER=${1:?version}
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 OUT=$(realpath -m "${2:-$REPO/Fasih-$VER.nvda-addon}")
+mkdir -p "$(dirname "$OUT")"
 HERE=$REPO/addon_src; T=$REPO/third_party
 B=$(mktemp -d); D=$B/synthDrivers/fasih
 trap 'rm -rf "$B"' EXIT
