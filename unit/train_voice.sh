@@ -5,6 +5,8 @@
 #             Arabic text must be fully diacritized (Rawi can do it: see unit/README.md).
 #   OUTDIR:   working folder; the finished voice is written to OUTDIR/voice/NAME
 #   LANGUAGE: Arabic (default), English or French; GENDER: male (default) or female
+# Premium voices are spectrum voices (mel.bin, spoken through the vocoder); AUDIO_VOICE=1 makes an
+# audio-based one instead (audio.opa, Opus).
 # Environment: RHV_BUILD (RHVoice Linux build from build_engine.sh, default ../rhv/b),
 #   RHV_F0_MIN / RHV_F0_MAX (pitch range, default 60-400 Hz), OPUS_KBPS (default 56), WORKERS (2)
 set -euo pipefail
@@ -75,11 +77,18 @@ if [ ! -s "$V/units.bin" ]; then
 fi
 [ -s "$V/marks.bin" ] || { stage "pitch marks"; WORKERS=$W python3 "$HERE/build_units.py" "$R" "$V" marks; }
 [ -s "$V/models.bin" ] || { stage "duration, pitch and spectrum models (hybrid target cost, unit quality)"; python3 "$HERE/build_models.py" "$V" "$LDIR/phonemes.xml" | tail -n 5; }
-if [ ! -s "$V/audio.opa" ]; then
-  stage "audio compression (Opus)"
-  "$HERE/bin/fasih-us-encode" "$V" "${OPUS_KBPS:-56}" 2>&1 | tail -n 1
+if [ "${AUDIO_VOICE:-0}" = 1 ]; then
+  # audio-based voice (Opus): speaks without the vocoder
+  if [ ! -s "$V/audio.opa" ]; then
+    stage "audio compression (Opus)"
+    "$HERE/bin/fasih-us-encode" "$V" "${OPUS_KBPS:-56}" 2>&1 | tail -n 1
+  fi
+elif [ ! -s "$V/mel.bin" ]; then
+  # premium (spectrum) voice: the recordings as compact mel spectra, made audible by the vocoder
+  stage "spectrum (mel.bin)"
+  WORKERS=$W python3 "$HERE/build_mel.py" "$V" | tail -n 1
 fi
 python3 "$HERE/compact_voice.py" "$V" | sed 's/^/   /'   # lossless: shared boundaries, 16-bit frame sizes
 [ -s "$V/weights.txt" ] || printf "join_f0 12\nmax_cands 100\nling 0.5\ndur 0.6\nf0 0.6\nspec 0.4\njoin 1.5\njoin_base_edge 3\nvocoder 1\n" > "$V/weights.txt"
 printf "name=%s\nlanguage=%s\ngender=%s\nformat=3\nrevision=1\n" "$NAME" "$LANG_" "$GENDER" > "$V/voice.info"
-stage "voice ready: $V (audio.pcm is only needed to re-encode; the add-on uses audio.opa)"
+stage "voice ready: $V (audio.pcm and unit_labels.txt are only needed to rebuild; packs leave them out)"
