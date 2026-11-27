@@ -81,7 +81,7 @@ if [ "${SPECTRUM_VOICE:-0}" != 1 ]; then
   # audio-based voice (Opus): the real recordings, no vocoder (the default)
   if [ ! -s "$V/audio.opa" ]; then
     stage "audio compression (Opus)"
-    "$HERE/bin/fasih-us-encode" "$V" "${OPUS_KBPS:-24}" "${OPUS_MODE:-celt}" 2>&1 | tail -n 1
+    "$HERE/bin/fasih-us-encode" "$V" "${OPUS_KBPS:-48}" "${OPUS_MODE:-celt}" "${SIBILANT_BOOST_DB:-0}" 2>&1 | tail -n 1
   fi
 elif [ ! -s "$V/mel.bin" ]; then
   # spectrum voice (SPECTRUM_VOICE=1, experimental): compact mel spectra made audible by the Vocos vocoder

@@ -112,6 +112,23 @@
   "sha256": "c982d5b66118b67edacc3925813c9bfee8a671427fca772c3e1bcbb89ab9ef40",
   "version": "2.0"
  },
+ "Haytham Premium": {
+  "entry": {
+   "dataMd5": "L/lBJEHkVdyyExqSKzNsjw==",
+   "dataUrl": "https://github.com/riadassoum/Fasih/releases/download/voices/Fasih-voice-Haytham-Premium.zip",
+   "description": "Premium concatenative voice.",
+   "gender": "male",
+   "id": "haytham-premium",
+   "name": "Haytham Premium",
+   "name_ar": "Haytham Premium",
+   "quality": "premium",
+   "sampleUrl": "https://github.com/riadassoum/Fasih/releases/download/voices/Fasih-sample-Haytham-Premium.wav",
+   "size": 174176541,
+   "version": "2.0"
+  },
+  "sha256": "8e06c710af1ffce014df465f8cb95f50f60b4fc045dae684f1d25f1f08ae50d7",
+  "version": "2.0"
+ },
  "Huda": {
   "entry": {
    "dataMd5": "gZWAudMRwfF+N+FDbN3H3g==",
@@ -146,7 +163,7 @@
  },
  "Jamal Premium": {
   "entry": {
-   "dataMd5": "2OvfxWh0yKIX++DI+qi5rw==",
+   "dataMd5": "D1MDY5ObZ8fS9X9biW5BaA==",
    "dataUrl": "https://github.com/riadassoum/Fasih/releases/download/voices/Fasih-voice-Jamal-Premium.zip",
    "description": "Premium concatenative voice.",
    "gender": "male",
@@ -155,10 +172,10 @@
    "name_ar": "Jamal Premium",
    "quality": "premium",
    "sampleUrl": "https://github.com/riadassoum/Fasih/releases/download/voices/Fasih-sample-Jamal-Premium.wav",
-   "size": 157846719,
+   "size": 277498388,
    "version": "2.0"
   },
-  "sha256": "dd62b7321c63e4a859e439063c09560f96c315726318fafed3e8821b002269fc",
+  "sha256": "874b520d59900ed6ce76bd1f513ed2044bf3e248c41412c824940d8e1d0bf24c",
   "version": "2.0"
  },
  "Karim": {
@@ -323,7 +340,7 @@
  },
  "Zayd Premium": {
   "entry": {
-   "dataMd5": "OI69Z0ir1WS8ophEFM2+7A==",
+   "dataMd5": "e0ilQNvJqpLXYwRjYm3zfg==",
    "dataUrl": "https://github.com/riadassoum/Fasih/releases/download/voices/Fasih-voice-Zayd-Premium.zip",
    "description": "Premium concatenative voice.",
    "gender": "male",
@@ -332,10 +349,10 @@
    "name_ar": "Zayd Premium",
    "quality": "premium",
    "sampleUrl": "https://github.com/riadassoum/Fasih/releases/download/voices/Fasih-sample-Zayd-Premium.wav",
-   "size": 176081543,
+   "size": 308621154,
    "version": "2.0"
   },
-  "sha256": "e2cf8622ffbd3681b10d9fc0162de4d5dd6692ede6c8af38e4cd827031562114",
+  "sha256": "7ef46b37080113930daa500826e19136945f6a0baeccacc0f1e10f92211a7563",
   "version": "2.0"
  }
 }

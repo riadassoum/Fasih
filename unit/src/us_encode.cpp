@@ -1,4 +1,8 @@
-// fasih-us-encode VOICE_DIR [kbps] [voice|celt]
+#include <cmath>
+// fasih-us-encode VOICE_DIR [kbps] [voice|celt] [sibilant_boost_db]
+// sibilant_boost_db (voice mode): the 4-8 kHz band is raised by this much before encoding, because
+// SILK under-codes it (س ش ص come out about 1.7 dB weak); default 2.2. CELT keeps that band but fills
+// quiet regions with noise (audible hiss) at low bitrates, so voice mode with the boost is the default.
 // celt: Opus's CELT mode, which keeps the 4-8 kHz band (س ش ص) at full strength; voice (SILK/hybrid)
 // weakens it by about 1.7 dB at any bitrate. OPUS_MODE in train_voice.sh chooses.
 // Compresses VOICE_DIR/audio.pcm into VOICE_DIR/audio.opa: every recording becomes an
@@ -13,12 +17,27 @@
 #include <string>
 #include <vector>
 
+
+// zero-phase 4-8 kHz band-pass (two biquads, forward then backward), for the sibilant boost
+static void bandpass_zero_phase(const std::vector<double>& x,std::vector<double>& y,double sr)
+{
+  auto run=[&](std::vector<double>& v,double f0,double q){
+    const double w=2*3.14159265358979*f0/sr, al=std::sin(w)/(2*q), a0=1+al;
+    const double b0=al/a0, b2=-al/a0, a1=-2*std::cos(w)/a0, a2=(1-al)/a0;
+    double x1=0,x2=0,y1=0,y2=0;
+    for(auto& s: v){ double o=b0*s+b2*x2-a1*y1-a2*y2; x2=x1; x1=s; y2=y1; y1=o; s=o; }
+    x1=x2=y1=y2=0;
+    for(auto it=v.rbegin();it!=v.rend();++it){ double s=*it; double o=b0*s+b2*x2-a1*y1-a2*y2; x2=x1; x1=s; y2=y1; y1=o; *it=o; }
+  };
+  y=x; run(y,5657,0.71);   // centre sqrt(4000*8000), about one octave wide
+}
 int main(int argc,char** argv)
 {
   if(argc<2){std::cerr<<"usage: fasih-us-encode VOICE_DIR [kbps]\n";return 1;}
   std::string dir=argv[1];
   int kbps=argc>2?atoi(argv[2]):24;
   const bool celt=argc>3&&std::string(argv[3])=="celt";
+  const double boost_db=argc>4?atof(argv[4]):(celt?0.0:2.2);
   std::ifstream u(dir+"/units.bin",std::ios::binary);
   char magic[8]; u.read(magic,8);
   uint32_t hdr[5]; u.read((char*)hdr,20);
@@ -77,6 +96,12 @@ int main(int argc,char** argv)
         for(size_t p=0;p<x.size();++p) if(!k[p]){ x[p]=0; ++zeroed; }
         totals+=x.size();
       }
+      if(!celt&&boost_db>0)
+        {
+          std::vector<double> d(x.begin(),x.end()), bp; bandpass_zero_phase(d,bp,sr);
+          const double g=std::pow(10.0,boost_db/20.0)-1.0;
+          for(size_t p=0;p<x.size();++p){ double v=d[p]+g*bp[p]; x[p]=int16_t(std::max(-32768.0,std::min(32767.0,std::lround(v)*1.0))); }
+        }
       size_t need=x.size()+la; size_t nf=(need+FR-1)/FR;
       x.resize(nf*FR,0);
       // per-utterance block: u32 frame offsets (relative to the block, nf+1 of them), then packets
