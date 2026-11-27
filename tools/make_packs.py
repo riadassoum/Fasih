@@ -29,7 +29,8 @@ INFO = {
     "Aisha": ("عائشة", "female", "Trained by PlanetBlindTech with Fasih's recipe."),
     "Shahrazad": ("شهرزاد", "female", "A storyteller's voice, trained on Aida Boumaza's LibriVox reading of Alf Layla wa Layla (public domain)."),
 }
-ONLY = os.environ.get("FASIH_ONLY", "").split()
+_only = os.environ.get("FASIH_ONLY", "")
+ONLY = [x.strip() for x in _only.split(",")] if "," in _only else _only.split()   # commas allow names with spaces
 os.makedirs(OUT, exist_ok=True)
 voices = []
 for name in sorted(os.listdir(os.path.join(REPO, "voices"))):
