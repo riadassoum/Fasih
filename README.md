@@ -6,7 +6,7 @@ Developer: Riad Assoum ([github.com/riadassoum](https://github.com/riadassoum)).
 
 ## The voices
 
-The add-on comes with Riad and Aseel, the English voice Bdl and the French voice Elise. The other eighteen Arabic voices are voice packs: in NVDA's Tools menu, choose Fasih > Download voices, then "Arabic: Fasih voices", and install the ones you want (they become available after NVDA restarts). This keeps the add-on small. Besides these compact voices there are premium voices, Haytham Premium and Zayd Premium: they are made of real recorded speech joined together and smoothed by a neural vocoder, so they sound closer to the person but are much larger downloads (about 100 and 175 MB). The vocoder (another 57 MB) is installed as its own add-on with the first premium voice you choose.
+The add-on comes with Riad and Aseel, the English voice Bdl and the French voice Elise. The other eighteen Arabic voices are voice packs: in NVDA's Tools menu, choose Fasih > Download voices, then "Arabic: Fasih voices", and install the ones you want (they become available after NVDA restarts). This keeps the add-on small. Besides these compact voices there are premium voices, Haytham Premium, Jamal Premium and Zayd Premium: they are made of real recorded speech joined together and smoothed by a neural vocoder, so they sound closer to the person but are much larger downloads (100 to 175 MB each). The vocoder (another 57 MB) is installed as its own add-on with the first premium voice you choose.
 
 All the Arabic voices speak at the same pace and the same loudness, and voices of the same gender have been brought close in bass and tone, so you can switch between them without readjusting NVDA.
 
