@@ -216,6 +216,7 @@ namespace fasih_us
         else if(p[0]=="join_vuv") w.join_vuv=v;
         else if(p[0]=="join_base_mid") w.join_base_mid=v;
         else if(p[0]=="join_base_edge") w.join_base_edge=v;
+        else if(p[0]=="join_base_stop") w.join_base_stop=v;
         else if(p[0]=="target") w.target=v;
         else if(p[0]=="join") w.join=v;
         else if(p[0]=="max_cands") w.max_cands=int(v);
@@ -395,12 +396,14 @@ namespace fasih_us
   {
     auto f=open_in(path); std::string a,b; float c;
     std::map<std::pair<std::string,std::string>,float> m;
-    is_vowel.assign(phones.size(),0);
+    is_vowel.assign(phones.size(),0); is_stop.assign(phones.size(),0); is_closure.assign(phones.size(),0);
     std::string line;
     while(std::getline(f,line))
       {
         std::istringstream is(line);
         if(line.rfind("#vowels",0)==0){ is>>a; while(is>>a){ int id=phone_id(a); if(id>=0) is_vowel[id]=1; } continue; }
+        if(line.rfind("#closures",0)==0){ is>>a; while(is>>a){ int id=phone_id(a); if(id>=0) is_closure[id]=1; } continue; }
+        if(line.rfind("#stops",0)==0){ is>>a; while(is>>a){ int id=phone_id(a); if(id>=0) is_stop[id]=1; } continue; }
         if(is>>a>>b>>c) m[{a,b}]=c;
       }
     sim.assign(nc,{}); sim_n.assign(nc,0);
@@ -646,7 +649,7 @@ namespace fasih_us
     }
   }
 
-  select_result select_units(const voice& v,const std::vector<target>& T,int64_t exclude_utt)
+  select_result select_units(const voice& v,const std::vector<target>& T,int64_t exclude_utt,int64_t prev_unit)
   {
     const auto& U=v.units();
     const weights& w=v.get_weights();
@@ -688,6 +691,12 @@ namespace fasih_us
         size_t K=std::min<size_t>(w.max_cands,scored.size());
         std::partial_sort(scored.begin(),scored.begin()+K,scored.end());
         scored.resize(K);
+        if(i==0&&prev_unit>=0)
+          {
+            uint32_t q=uint32_t(prev_unit)+1;
+            if(q<U.size()&&U[q].utt==U[prev_unit].utt&&U[q].phone==uint32_t(t.phone)&&U[q].half==t.half)
+              scored.push_back({target_cost(v,t,U[q]),q});
+          }
         // continuations of the previous step's candidates keep natural runs available
         if(i>0&&T[i-1].phone>=0)
           for(uint32_t p: cand[i-1])
@@ -710,22 +719,43 @@ namespace fasih_us
     // visited cheapest first, and since a join never costs less than nothing, the scan stops as soon as
     // a path is already dearer than the best one found: same result as the full search, much faster.
     const int jd=v.jdim();
-    struct step_feats {std::vector<float> l,r; std::vector<float> lf0l,lf0r,pace,reg; std::vector<uint32_t> utt; std::vector<uint8_t> half;};
+    struct step_feats {std::vector<float> l,r; std::vector<float> lf0l,lf0r,pace,reg; std::vector<uint32_t> utt; std::vector<uint8_t> half,stop;};
     std::vector<step_feats> F(n);
     auto unpack=[&](size_t i){
       step_feats& S=F[i]; size_t c=cand[i].size();
-      S.l.resize(c*jd); S.r.resize(c*jd); S.lf0l.resize(c); S.lf0r.resize(c); S.pace.resize(c); S.reg.resize(c); S.utt.resize(c); S.half.resize(c);
+      S.l.resize(c*jd); S.r.resize(c*jd); S.lf0l.resize(c); S.lf0r.resize(c); S.pace.resize(c); S.reg.resize(c); S.utt.resize(c); S.half.resize(c); S.stop.resize(c);
       for(size_t k=0;k<c;++k)
         {
           const unit& x=U[cand[i][k]];
           for(int d=0;d<jd;++d){ S.l[k*jd+d]=half_to_float(x.jl[d]); S.r[k*jd+d]=half_to_float(x.jr[d]); }
           S.l[k*jd]*=float(w.join_energy); S.r[k*jd]*=float(w.join_energy);
           S.lf0l[k]=x.lf0l; S.lf0r[k]=x.lf0r; S.utt[k]=x.utt; S.half[k]=x.half;
+          S.stop[k]=(!v.is_stop.empty()&&x.phone<v.is_stop.size()&&v.is_stop[x.phone])?1:0;
           S.pace[k]=v.utt_pace[x.utt]; S.reg[k]=v.utt_lf0[x.utt];
         }
     };
     for(size_t i=0;i<n;++i) if(T[i].phone>=0) unpack(i);
     const float inv_jd=1.0f/jd;
+    if(prev_unit>=0&&n>0&&T[0].phone>=0)
+      {
+        // the first step continues from the unit already spoken
+        const unit& x=U[prev_unit];
+        const step_feats& Q=F[0];
+        for(size_t b=0;b<cand[0].size();++b)
+          {
+            double j=0;
+            if(cand[0][b]!=uint32_t(prev_unit)+1)
+              {
+                float d=0;
+                for(int k=0;k<jd;++k){ float xr=half_to_float(x.jr[k])*(k==0?float(w.join_energy):1.0f); float e=xr-Q.l[b*jd+k]; d+=e*e; }
+                j=w.join_spec*std::sqrt(d*inv_jd);
+                if(x.lf0r>0&&Q.lf0l[b]>0) j+=w.join_f0*std::fabs(x.lf0r-Q.lf0l[b])*10.0; else if((x.lf0r>0)!=(Q.lf0l[b]>0)) j+=w.join_vuv;
+                j+=(Q.half[b]==1)?(Q.stop[b]?w.join_base_stop:w.join_base_mid):(Q.stop[b]?w.join_base_mid:w.join_base_edge);
+                j*=w.join;
+              }
+            cost[0][b]+=j;
+          }
+      }
     int prev=-1;
     std::vector<int> order;
     for(size_t i=0;i<n;++i)
@@ -742,7 +772,8 @@ namespace fasih_us
               {
                 double best=INF; int arg=-1;
                 const float* yl=&Q.l[b*jd];
-                const double base=(Q.half[b]==1)?w.join_base_mid:w.join_base_edge;
+                // inside a stop: expensive (two bursts or none); entering a stop's closure: as cheap as a mid-phone join
+                const double base=(Q.half[b]==1)?(Q.stop[b]?w.join_base_stop:w.join_base_mid):(Q.stop[b]?w.join_base_mid:w.join_base_edge);
                 for(int a: order)
                   {
                     double ca=cost[prev][a];

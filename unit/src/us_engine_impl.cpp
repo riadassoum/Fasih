@@ -143,28 +143,51 @@ namespace RHVoice
         std::size_t c1=c0+1;
         while(c1<T.size()&&T[c1].phone>=0) ++c1;
         while(c1<T.size()&&T[c1].phone<0&&c1+1<T.size()&&T[c1+1].phone<0) ++c1; // keep runs of pauses together
-        std::vector<fasih_us::target> sub(T.begin()+c0,T.begin()+c1);
-        fasih_us::select_result sel=fasih_us::select_units(*db,sub);
-        std::vector<float> out;
-        fasih_us::concatenate(*db,sel,out);
-        double tot=0; std::vector<double> len(sub.size());
-        for(std::size_t k=0;k<sub.size();++k)
+        // a long phrase is cut where an unvoiced stop's (silent) closure begins, so it starts playing at once:
+        // a short first piece, then longer ones; each is chosen with a look-ahead and continues from the unit
+        // spoken last, so the choice is practically that of the whole phrase
+        std::vector<std::size_t> cuts{c0};
+        {
+          std::size_t last=c0, minlen=12;
+          for(std::size_t k=c0+1;k+8<c1;++k)
+            {
+              const auto& t=T[k];
+              if(t.phone<0||t.half!=0||db->is_closure.empty()||!db->is_closure[t.phone]) continue;
+              if(k-last<minlen) continue;
+              cuts.push_back(k); last=k; minlen=40;
+            }
+        }
+        cuts.push_back(c1);
+        int64_t spoken=-1;
+        for(std::size_t ci=0;ok&&ci+1<cuts.size();++ci)
           {
-            if(sel.units[k]>=0){ const auto& u=db->units()[sel.units[k]]; len[k]=double(u.end-u.start);}
-            else len[k]=sel.pause_ms[k]*db->sample_rate()/1000.0;
-            tot+=len[k];
+            std::size_t a0=cuts[ci], a1=cuts[ci+1];
+            std::size_t la=std::min<std::size_t>(c1,a1+(ci+2<cuts.size()?10:0));
+            std::vector<fasih_us::target> sub(T.begin()+a0,T.begin()+la);
+            fasih_us::select_result sel=fasih_us::select_units(*db,sub,-1,spoken);
+            sel.units.resize(a1-a0); sel.pause_ms.resize(a1-a0);
+            for(auto id: sel.units) if(id>=0) spoken=id;
+            std::vector<float> out;
+            fasih_us::concatenate(*db,sel,out);
+            double tot=0; std::vector<double> len(sel.units.size());
+            for(std::size_t k=0;k<sel.units.size();++k)
+              {
+                if(sel.units[k]>=0){ const auto& u=db->units()[sel.units[k]]; len[k]=double(u.end-u.start);}
+                else len[k]=sel.pause_ms[k]*db->sample_rate()/1000.0;
+                tot+=len[k];
+              }
+            double scale=(tot>0)?out.size()/tot:1.0;
+            double pos=out_pos;
+            for(std::size_t k=0;k<sel.units.size();++k)
+              {
+                int l=lab_of[a0+k];
+                if(!timed[l]){ labs[l]->set_time(int(pos/speed)); labs[l]->set_duration(0); timed[l]=1;}
+                labs[l]->set_duration(labs[l]->get_duration()+int(len[k]*scale/speed));
+                pos+=len[k]*scale;
+              }
+            out_pos+=out.size();
+            ok=pass(out.data(),out.size(),a1>=T.size());
           }
-        double scale=(tot>0)?out.size()/tot:1.0;
-        double pos=out_pos;
-        for(std::size_t k=0;k<sub.size();++k)
-          {
-            int l=lab_of[c0+k];
-            if(!timed[l]){ labs[l]->set_time(int(pos/speed)); labs[l]->set_duration(0); timed[l]=1;}
-            labs[l]->set_duration(labs[l]->get_duration()+int(len[k]*scale/speed));
-            pos+=len[k]*scale;
-          }
-        out_pos+=out.size();
-        ok=pass(out.data(),out.size(),c1>=T.size());
         c0=c1;
       }
     if(sn) sonicDestroyStream(sn);

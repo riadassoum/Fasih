@@ -195,6 +195,10 @@ def main():
     with open(os.path.join(vd, "phonesim.txt"), "w", encoding="utf-8") as f:
         # vowels are coloured by both neighbours along their whole length
         f.write("#vowels %s\n" % " ".join(p for p in sorted(phones) if phones[p].get("vc") == "+"))
+        # stops and affricates: closure then burst, never cut at their middle
+        f.write("#stops %s\n" % " ".join(p for p in sorted(phones) if phones[p].get("ctype") in ("s", "a")))
+        # unvoiced stops: their closure is near-silence, where the engine may cut a long phrase to stream it
+        f.write("#closures %s\n" % " ".join(p for p in sorted(phones) if phones[p].get("ctype") == "s" and phones[p].get("cvox") == "-"))
         for a in allp:
             for b in allp:
                 if a == b:
