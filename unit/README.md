@@ -12,7 +12,10 @@ Everything in front of the voice is Fasih's: the Arabic text processing (Rawi or
 3. `concatenate` joins the chosen pieces. At each join it searches ±5 ms for the best waveform match and cross-fades over 10 ms. Where the pitch on the two sides differs, both sides are bent towards each other over 45 ms with TD-PSOLA, using the pitch marks stored with the voice.
 4. Pauses cut the search, and a long phrase is also cut where the silent closure of an unvoiced stop (ت ك ق ط ء) begins: a short first piece and longer ones after it, each chosen with a look-ahead and continuing from the unit spoken last. Speech starts within about 30 ms, like Fasih's compact voices. Inside a stop (closure then burst) the engine does not join two recordings, so a stop is never doubled or lost; joining where a stop's closure begins is as cheap as a join inside a vowel. Rate and pitch changes are pitch-synchronous (sonic), and rate boost works as in Fasih.
 
-## Neural smoothing
+## Neural smoothing (experimental, not used by Fasih's voices)
+
+Fasih's premium voices are the real recordings joined directly; Fasih does not ship the vocoder. What follows describes the optional code path, kept for experiments (`vocoder/export.py` rebuilds the model files).
+
 
 A voice whose `weights.txt` says `vocoder 1` is, when the vocoder is installed, resynthesized through Vocos (a fast neural vocoder, MIT licence, 24 kHz): for every streamed piece the engine computes the mel spectrum of the concatenated speech, blends it across each join, runs the model through ONNX Runtime and rebuilds the waveform (`src/us_vocoder.cpp`). The sound still comes from the recordings; the vocoder smooths the joins. It runs at about 13 times real time inside NVDA, and the first audio arrives in about 50 ms. In Fasih the vocoder lives in `synthDrivers/fasih/vocoder` (`vocos_core.onnx`, `melfb.f32`, and ONNX Runtime under the private name `fasih_ort.dll`, so it can never clash with another add-on's copy); a file named `off` in the vocoder folder switches it off for audio-based voices (Fasih has no setting for it while every published premium voice is a spectrum voice, which always needs the vocoder). For tests outside NVDA, set `FASIH_VOCODER_DIR` and `FASIH_ORT_LIB`, or `FASIH_VOCODER=0` to switch it off. `vocoder/export.py` makes the model files from the published Vocos model.
 

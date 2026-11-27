@@ -3,8 +3,8 @@ The Fasih voices that are not bundled in the add-on, one zip each (data/ for the
 variants/ for Fasih's quality settings), and voices.json listing them for Tools > Fasih >
 Download voices. Upload everything in OUTDIR to the "voices" release of the repository.
 Compact voices are the HTS voices in voices/. Premium voices are concatenative (unit-selection)
-voices built with unit/train_voice.sh, too large for the repository: list their folders in
-FASIH_PREMIUM (space separated); a voice's NOTICE.md / README.md / about.txt go in its pack.
+voices of real recordings built with unit/train_voice.sh, too large for the repository: list their
+folders in FASIH_PREMIUM (separated by os.pathsep: ":", or ";" on Windows); a voice's NOTICE.md / README.md / about.txt go in its pack.
 Author: Riad Assoum. License: GPL-3.0."""
 import shutil, base64, hashlib, json, os, sys, zipfile
 
@@ -80,9 +80,20 @@ for name in sorted(os.listdir(os.path.join(REPO, "voices"))):
         voices[-1]["sampleUrl"] = rec["entry"]["sampleUrl"]
     rec["entry"] = voices[-1]
     print("%-8s %6.1f MB" % (name, len(data) / 1e6))
+def transpose_units(path):
+    """units.bin (FSUV0003) with its fixed-size unit records stored column by column (FSUT0003)."""
+    import struct
+    d = open(path, "rb").read()
+    assert d[:8] == b"FSUV0003", "run unit/compact_voice.py on the voice first"
+    nu, nutt, jd, nc, sr = struct.unpack_from("<IIIII", d, 8)
+    rec = 16 + nc + 2 * (jd + 1); h = 28 + 4 * jd + 20 * nutt + (nu + 7) // 8
+    cols = b"".join(d[h + j:h + nu * rec:rec] for j in range(rec))
+    return b"FSUT0003" + d[8:h] + cols + d[h + nu * rec:]
+
+
 # premium voices: the voice folder itself is data/
 PREMIUM_FILES = ("voice.info", "voice.params", "units.bin", "audio.opa", "mel.bin", "marks.bin", "models.bin", "phonesim.txt", "layout.txt", "phones.txt", "context.txt", "weights.txt")
-for src in os.environ.get("FASIH_PREMIUM", "").split():
+for src in [x for x in os.environ.get("FASIH_PREMIUM", "").split(os.pathsep) if x]:   # ":" between folders (";" on Windows), so names may have spaces
     info = dict(l.strip().split("=", 1) for l in open(os.path.join(src, "voice.info"), encoding="utf-8") if "=" in l)
     name = info["name"]
     if ONLY and name not in ONLY:
@@ -91,7 +102,12 @@ for src in os.environ.get("FASIH_PREMIUM", "").split():
     zpath = os.path.join(OUT, "Fasih-voice-%s.zip" % name.replace(" ", "-"))
     with zipfile.ZipFile(zpath, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         for f in PREMIUM_FILES:
-            if os.path.exists(os.path.join(src, f)):
+            if not os.path.exists(os.path.join(src, f)):
+                continue
+            if f == "units.bin":
+                # column by column it compresses about a third better; the installer restores it exactly
+                z.writestr("data/units.bin.t", transpose_units(os.path.join(src, f)))
+            else:
                 # the Opus audio does not compress further: store it
                 z.write(os.path.join(src, f), "data/" + f, compress_type=zipfile.ZIP_STORED if f == "audio.opa" else zipfile.ZIP_DEFLATED)
         for f in ("NOTICE.md", "README.md"):
@@ -126,24 +142,6 @@ for name, rec in sorted(REG.items()):
         continue
     voices.append(rec["entry"])
 voices.sort(key=lambda v: (v.get("quality") == "premium", v["name"]))
-# the neural vocoder premium voices speak through, installed with the first one (add-on fasihVocoder)
-vocoder = None
-if any(v.get("quality") == "premium" for v in voices) and os.path.isfile(os.path.join(REPO, "third_party", "vocos", "vocos_core.onnx")) and os.environ.get("FASIH_PREMIUM"):
-    vz = os.path.join(OUT, "Fasih-vocoder.zip")
-    T3 = os.path.join(REPO, "third_party")
-    with zipfile.ZipFile(vz, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
-        for f in ("vocos_core.onnx", "melfb.f32", "LICENSE", "README.txt"):
-            z.write(os.path.join(T3, "vocos", f), "vocoder/" + f)
-        # ONNX Runtime under a private name, so that it never clashes with another add-on's copy
-        z.write(os.path.join(T3, "onnxruntime", "onnxruntime.dll"), "vocoder/fasih_ort.dll")
-        z.write(os.path.join(T3, "onnxruntime", "LICENSE"), "vocoder/ONNXRUNTIME-LICENSE")
-    data = open(vz, "rb").read()
-    vocoder = {"version": os.environ.get("FASIH_VOCODER_VERSION", "1.0"), "dataUrl": BASE + "Fasih-vocoder.zip",
-               "dataMd5": base64.b64encode(hashlib.md5(data).digest()).decode(), "size": len(data)}
-    REG["__vocoder__"] = {"version": vocoder["version"], "sha256": "", "entry": vocoder}
-    print("vocoder  %6.1f MB" % (len(data) / 1e6))
-elif "__vocoder__" in REG and any(v.get("quality") == "premium" for v in voices):
-    vocoder = REG["__vocoder__"]["entry"]     # built before, still on the releases page
 json.dump(REG, open(REG_PATH, "w", encoding="utf-8"), indent=1, sort_keys=True)
-json.dump({"version": 1, "voices": voices, **({"vocoder": vocoder} if vocoder else {})}, open(os.path.join(OUT, "voices.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+json.dump({"version": 1, "voices": voices}, open(os.path.join(OUT, "voices.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
 print("voices.json:", len(voices), "voices")

@@ -1,4 +1,6 @@
-// fasih-us-encode VOICE_DIR [kbps]
+// fasih-us-encode VOICE_DIR [kbps] [voice|celt]
+// celt: Opus's CELT mode, which keeps the 4-8 kHz band (س ش ص) at full strength; voice (SILK/hybrid)
+// weakens it by about 1.7 dB at any bitrate. OPUS_MODE in train_voice.sh chooses.
 // Compresses VOICE_DIR/audio.pcm into VOICE_DIR/audio.opa: every recording becomes an
 // independent Opus stream of 20 ms frames, with a frame table for random access.
 #include <opus.h>
@@ -15,7 +17,8 @@ int main(int argc,char** argv)
 {
   if(argc<2){std::cerr<<"usage: fasih-us-encode VOICE_DIR [kbps]\n";return 1;}
   std::string dir=argv[1];
-  int kbps=argc>2?atoi(argv[2]):56;
+  int kbps=argc>2?atoi(argv[2]):24;
+  const bool celt=argc>3&&std::string(argv[3])=="celt";
   std::ifstream u(dir+"/units.bin",std::ios::binary);
   char magic[8]; u.read(magic,8);
   uint32_t hdr[5]; u.read((char*)hdr,20);
@@ -49,7 +52,8 @@ int main(int argc,char** argv)
   opus_encoder_ctl(enc,OPUS_SET_BITRATE(kbps*1000));
   opus_encoder_ctl(enc,OPUS_SET_VBR(1));
   opus_encoder_ctl(enc,OPUS_SET_COMPLEXITY(10));
-  opus_encoder_ctl(enc,OPUS_SET_SIGNAL(OPUS_SIGNAL_VOICE));
+  if(celt) opus_encoder_ctl(enc,11002,1002);   // OPUS_SET_FORCE_MODE(MODE_CELT_ONLY)
+  else opus_encoder_ctl(enc,OPUS_SET_SIGNAL(OPUS_SIGNAL_VOICE));
   opus_int32 la=0; opus_encoder_ctl(enc,OPUS_GET_LOOKAHEAD(&la));
   const int FR=sr/50;
   std::FILE* o=std::fopen((dir+"/audio.opa").c_str(),"wb");

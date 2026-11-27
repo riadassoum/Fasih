@@ -112,23 +112,6 @@
   "sha256": "c982d5b66118b67edacc3925813c9bfee8a671427fca772c3e1bcbb89ab9ef40",
   "version": "2.0"
  },
- "Haytham Premium": {
-  "entry": {
-   "dataMd5": "AIZNYxmTi7trWmy/Y+NfoA==",
-   "dataUrl": "https://github.com/riadassoum/Fasih/releases/download/voices/Fasih-voice-Haytham-Premium.zip",
-   "description": "A premium voice made of real recorded speech, from the recordings Haytham was trained on (generated for Fasih with Google's Gemini text-to-speech), smoothed by a neural vocoder.",
-   "gender": "male",
-   "id": "haytham-premium",
-   "name": "Haytham Premium",
-   "name_ar": "\u0647\u064a\u062b\u0645",
-   "quality": "premium",
-   "sampleUrl": "https://github.com/riadassoum/Fasih/releases/download/voices/Fasih-sample-Haytham-Premium.wav",
-   "size": 96356281,
-   "version": "2.0"
-  },
-  "sha256": "3d484e7fa17639fc38ffb3b9e52d9381883f7ae1a4019ee4f1962b8f9cc36fd5",
-  "version": "2.0"
- },
  "Huda": {
   "entry": {
    "dataMd5": "gZWAudMRwfF+N+FDbN3H3g==",
@@ -163,19 +146,19 @@
  },
  "Jamal Premium": {
   "entry": {
-   "dataMd5": "mz1WNGIUJ99tZa3eH29vcQ==",
+   "dataMd5": "2OvfxWh0yKIX++DI+qi5rw==",
    "dataUrl": "https://github.com/riadassoum/Fasih/releases/download/voices/Fasih-voice-Jamal-Premium.zip",
-   "description": "A premium voice made of real recorded speech, from the ClArTTS recordings (MBZUAI) that Jamal was trained on, about 11 hours of Classical Arabic, smoothed by a neural vocoder.",
+   "description": "Premium concatenative voice.",
    "gender": "male",
    "id": "jamal-premium",
    "name": "Jamal Premium",
-   "name_ar": "\u062c\u0645\u0627\u0644",
+   "name_ar": "Jamal Premium",
    "quality": "premium",
    "sampleUrl": "https://github.com/riadassoum/Fasih/releases/download/voices/Fasih-sample-Jamal-Premium.wav",
-   "size": 147852976,
+   "size": 157846719,
    "version": "2.0"
   },
-  "sha256": "04112acc6c7132997259565d9673a36ba218d7dde6311cc0ed5d094e7c1d7847",
+  "sha256": "dd62b7321c63e4a859e439063c09560f96c315726318fafed3e8821b002269fc",
   "version": "2.0"
  },
  "Karim": {
@@ -340,29 +323,19 @@
  },
  "Zayd Premium": {
   "entry": {
-   "dataMd5": "QUEjnWVpKW899MFoETfKUw==",
+   "dataMd5": "OI69Z0ir1WS8ophEFM2+7A==",
    "dataUrl": "https://github.com/riadassoum/Fasih/releases/download/voices/Fasih-voice-Zayd-Premium.zip",
-   "description": "A premium voice made of real recorded speech, from the Zayd recordings that PlanetBlindTech shared for Fasih, smoothed by a neural vocoder.",
+   "description": "Premium concatenative voice.",
    "gender": "male",
    "id": "zayd-premium",
    "name": "Zayd Premium",
-   "name_ar": "\u0632\u064a\u062f",
+   "name_ar": "Zayd Premium",
    "quality": "premium",
    "sampleUrl": "https://github.com/riadassoum/Fasih/releases/download/voices/Fasih-sample-Zayd-Premium.wav",
-   "size": 175282847,
+   "size": 176081543,
    "version": "2.0"
   },
-  "sha256": "73d73c32b3595aa77ff3fcfaa9b7722cab9c4fb4e02e94e84d35c38eb01139b7",
+  "sha256": "e2cf8622ffbd3681b10d9fc0162de4d5dd6692ede6c8af38e4cd827031562114",
   "version": "2.0"
- },
- "__vocoder__": {
-  "entry": {
-   "dataMd5": "SQJA+y63+IJgxm9e04Js4A==",
-   "dataUrl": "https://github.com/riadassoum/Fasih/releases/download/voices/Fasih-vocoder.zip",
-   "size": 56556618,
-   "version": "1.0"
-  },
-  "sha256": "bae3a3820dccd0677cd5ee25efa5cf9bc09ec0bd42e59c5dba7fa8140d72452a",
-  "version": "1.0"
  }
 }

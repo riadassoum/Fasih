@@ -4,10 +4,10 @@ Fasih has two kinds of voices, and anyone can train either from the same recordi
 
 | | Compact | Premium |
 |---|---|---|
-| How it speaks | statistical models (HTS) and the WORLD vocoder | real recorded speech, chosen and joined by unit selection, made audible by a neural vocoder |
+| How it speaks | statistical models (HTS) and the WORLD vocoder | real recorded speech, chosen and joined by unit selection |
 | Size | a few megabytes | about 14 MB per hour of recordings |
 | Recordings needed | two hours or more | five hours or more (ten or more is better) |
-| Neural parts | none | the vocoder (downloaded once, with the first premium voice) |
+| Neural parts | none | none |
 | Script | `train_compact_voice.sh` | `train_premium_voice.sh` |
 
 ## The corpus
@@ -41,6 +41,6 @@ The language can be `Arabic`, `English` or `French`. Set `RHV_F0_MIN` and `RHV_F
 ## Using a voice
 
 - A compact voice goes in `voices/Name` (bundled with the add-on), or into a voice pack: `FASIH_ONLY=Name python3 tools/make_packs.py VERSION OUTDIR`.
-- A premium voice becomes a voice pack: `FASIH_ONLY="Name," FASIH_PREMIUM=~/work/name-premium/voice/Name python3 tools/make_packs.py VERSION OUTDIR`. This also builds the vocoder pack. Upload everything in OUTDIR to the "voices" release; it appears in Tools > Fasih > Download voices.
+- A premium voice becomes a voice pack: `FASIH_ONLY="Name," FASIH_PREMIUM="$HOME/work/name-premium/voice/Name" python3 tools/make_packs.py VERSION OUTDIR` (several voices: separate their folders with `:`). The unit table travels column by column and the add-on restores it exactly, which makes the pack about 14 MB smaller. Upload everything in OUTDIR to the "voices" release; it appears in Tools > Fasih > Download voices.
 
 How the premium engine works, its files and its options: `unit/README.md`. How compact training works: `BUILD-NOTES.md`.
