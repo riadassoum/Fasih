@@ -28,12 +28,17 @@ int main(int argc,char** argv)
   std::vector<std::vector<std::pair<uint32_t,uint32_t>>> keep(nutt);
   {
     const uint32_t M=sr/8;   // 125 ms around every unit: joins, ramps, releases and onsets stay intact
+    // FSUV0002: every unit has both edges (4*(jd+1) bytes after its context); FSUV0003 (a finished,
+    // compacted voice): a bitmap of shared right edges, then records with only the left edge
+    const bool compact=std::string(magic,8)=="FSUV0003";
+    if(compact) u.seekg((nu+7)/8,std::ios::cur);
+    const std::streamoff tail=compact?2*(jd+1):4*(jd+1);
     for(uint32_t i=0;i<nu;++i)
       {
         char rec[16]; u.read(rec,16);
         uint32_t ut,a0,b0; std::memcpy(&ut,rec+4,4); std::memcpy(&a0,rec+8,4); std::memcpy(&b0,rec+12,4);
-        u.seekg(nc+4*(jd+1),std::ios::cur);
-        keep[ut].push_back({a0>M?a0-M:0,b0+M});
+        u.seekg(nc+tail,std::ios::cur);
+        if(ut<nutt) keep[ut].push_back({a0>M?a0-M:0,b0+M});
       }
   }
   std::ifstream a(dir+"/audio.pcm",std::ios::binary);
