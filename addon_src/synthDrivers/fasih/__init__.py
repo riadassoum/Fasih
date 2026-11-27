@@ -269,6 +269,8 @@ class AudioPlayer:
             p.close()
 
     def set_sample_rate(self, sr):
+        if log.isEnabledFor(log.DEBUG):
+            log.debug("Fasih: engine sample rate %s (player %s)" % (sr, self.__sample_rate))
         with self.__lock:
             if self.__closed:
                 return
@@ -1019,6 +1021,12 @@ class SynthDriver(SynthDriver):
         self.__tts_thread = TTSThread(self.__tts_queue)
         self.__tts_thread.start()
         log.info("Using RHVoice version {}".format(self.__lib.RHVoice_get_version().decode()))
+        try:   # for diagnosing problems that depend on NVDA's language (number format, etc.)
+            import locale as _loc
+            log.info("Fasih: NVDA language %s, number format %r, decimal point %r"
+                     % (languageHandler.getLanguage(), _loc.setlocale(_loc.LC_NUMERIC), _loc.localeconv().get("decimal_point")))
+        except Exception:
+            pass
         arabic_pipeline.init_dictionaries(config_path)
         arabic_pipeline.preload()
         self._warm(*[v for v in (self.__profile, self._secondary_profile()) if v])
@@ -1186,6 +1194,14 @@ class SynthDriver(SynthDriver):
                 task.set_pitch(pitch)
                 task.set_volume(volume)
                 task.configure_rate_boost(boost)
+                if log.isEnabledFor(log.DEBUG):   # diagnostics: NVDA's log level set to "debug"
+                    try:
+                        _ui = languageHandler.getLanguage()
+                    except Exception:
+                        _ui = "?"
+                    log.debug("Fasih: voice=%s lang=%s nvda-ui=%s rate=%s pitch=%s volume=%s boost=%s text=%r"
+                              % (voice, langs.get(voice, "?"), _ui, rate, pitch, volume, boost,
+                                 "".join(x for x in items if isinstance(x, str))[:60]))
                 task()
                 spoke[0] = True
 
