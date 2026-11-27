@@ -530,6 +530,3 @@ msgstr "ممتاز"
 
 msgid "compact"
 msgstr "مدمج"
-
-msgid "Neural smoothing for premium voices"
-msgstr "تنعيم عصبي للأصوات الممتازة"

@@ -44,7 +44,8 @@ if [ "$TARGET" = linux ]; then
   make -j"$(nproc)" RHVoice_core RHVoice-make-hts-labels RHVoice-test
   # the unit tools: test client and Opus encoder
   mkdir -p "$HERE/bin"
-  g++ -O2 -std=c++17 -DFASIH_US_OPUS -I"$HERE/src" -I"$OPUS/include" -o "$HERE/bin/fasih-us-cli" "$HERE/src/us_cli.cpp" "$HERE/src/us_core.cpp" "$HERE/src/us_vocoder.cpp" "$OPUS/bl/libopus.a" -lm -ldl -lpthread
+  gcc -O2 -c -o "$HERE/bin/miniz.o" "$HERE/src/miniz/miniz.c"
+  g++ -O2 -std=c++17 -DFASIH_US_OPUS -I"$HERE/src" -I"$OPUS/include" -o "$HERE/bin/fasih-us-cli" "$HERE/src/us_cli.cpp" "$HERE/src/us_core.cpp" "$HERE/src/us_vocoder.cpp" "$HERE/bin/miniz.o" "$OPUS/bl/libopus.a" -lm -ldl -lpthread
   g++ -O2 -std=c++17 -I"$OPUS/include" -o "$HERE/bin/fasih-us-encode" "$HERE/src/us_encode.cpp" "$OPUS/bl/libopus.a" -lm
   exit 0
 fi
