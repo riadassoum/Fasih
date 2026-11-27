@@ -269,8 +269,10 @@ class AudioPlayer:
             p.close()
 
     def set_sample_rate(self, sr):
-        if log.isEnabledFor(log.DEBUG):
-            log.debug("Fasih: engine sample rate %s (player %s)" % (sr, self.__sample_rate))
+        _ds = globals().setdefault("_fasih_srdiag", [0])
+        if _ds[0] < 20 or log.isEnabledFor(log.DEBUG):
+            _ds[0] += 1
+            log.info("Fasih: engine sample rate %s (player %s)" % (sr, self.__sample_rate))
         with self.__lock:
             if self.__closed:
                 return
@@ -1194,12 +1196,14 @@ class SynthDriver(SynthDriver):
                 task.set_pitch(pitch)
                 task.set_volume(volume)
                 task.configure_rate_boost(boost)
-                if log.isEnabledFor(log.DEBUG):   # diagnostics: NVDA's log level set to "debug"
+                _dg = globals().setdefault("_fasih_diag", [0])
+                if _dg[0] < 20 or log.isEnabledFor(log.DEBUG):   # diagnostics: first 20 utterances, or always at debug level
+                    _dg[0] += 1
                     try:
                         _ui = languageHandler.getLanguage()
                     except Exception:
                         _ui = "?"
-                    log.debug("Fasih: voice=%s lang=%s nvda-ui=%s rate=%s pitch=%s volume=%s boost=%s text=%r"
+                    log.info("Fasih: voice=%s lang=%s nvda-ui=%s rate=%s pitch=%s volume=%s boost=%s text=%r"
                               % (voice, langs.get(voice, "?"), _ui, rate, pitch, volume, boost,
                                  "".join(x for x in items if isinstance(x, str))[:60]))
                 task()
