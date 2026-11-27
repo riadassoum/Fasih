@@ -38,8 +38,7 @@ for src, want in [("مِنْ الْبَيْتِ", "مِنَ ٱلْبَيْتِ")
 tmp = tempfile.mkdtemp()
 try:
     g2p = os.path.join(tmp, "ar_g2p.py")
-    shutil.copy(os.path.join(REPO, "third_party", "claritysynth", "ar_g2p.py"), g2p)
-    subprocess.run([sys.executable, os.path.join(REPO, "addon_src", "patch_g2p.py"), g2p], check=True, stdout=subprocess.DEVNULL)
+    shutil.copy(os.path.join(REPO, "addon_src", "arabic", "ar_g2p.py"), g2p)
     spec = importlib.util.spec_from_file_location("ar_g2p_t", g2p); m = importlib.util.module_from_spec(spec)
     try:
         spec.loader.exec_module(m)
@@ -145,11 +144,7 @@ _b = array.array("h"); _b.frombytes(_o.process(_a.tobytes()) + _o.flush())
 check("limiter onset under ceiling", max(_b) <= int(loudness.CEIL), True)
 
 # long-sentence splitter: lossless, and no piece longer than the limit
-_at = tempfile.mkdtemp(); _p = os.path.join(_at, "t.py")
-shutil.copy(os.path.join(REPO, "third_party", "claritysynth", "ar_tashkeel.py"), _p)
-subprocess.run([sys.executable, os.path.join(REPO, "addon_src", "patch_tashkeel.py"), _p,
-                os.path.join(REPO, "addon_src", "rawi_client.py")], check=True)
-_s = open(_p, encoding="utf-8").read(); shutil.rmtree(_at)
+_s = open(os.path.join(REPO, "addon_src", "arabic", "ar_tashkeel.py"), encoding="utf-8").read()
 _ns = {}; exec(_s[_s.index("def _split_sentences"):_s.index("def _diac_run_chunked")], _ns)
 for _t in ["كلمة " * 300, "ب" * 900 + " نص", "أ، " * 500]:
     _o = _ns["_split_sentences"](_t, 800)

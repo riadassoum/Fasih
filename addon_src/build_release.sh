@@ -52,8 +52,7 @@ printf 'clarity=50\nbreathiness=b0\nsharpening=0\nrepair=0\nms=1\n' > "$D/data/q
 # Arabic text pipeline: ClaritySynth modules (Riad Assoum) with Fasih's patches, PBT components
 cp "$T"/claritysynth/*.py "$D/arabic/"; cp -r "$T/claritysynth/lib_pure" "$D/arabic/"
 cp "$REPO/scripts/ar_prep.py" "$D/arabic/"; touch "$D/arabic/__init__.py"
-python3 "$HERE/patch_tashkeel.py" "$D/arabic/ar_tashkeel.py" "$HERE/rawi_client.py"
-python3 "$HERE/patch_g2p.py" "$D/arabic/ar_g2p.py"
+cp "$HERE"/arabic/*.py "$D/arabic/"      # Fasih's versions of ClaritySynth's diacritizer and letter-to-sound modules
 cp -r "$HERE/pbt" "$D/pbt"; touch "$D/pbt/__init__.py"
 
 # Rawi diacritizer: separate helper process + ONNX Runtime + model
