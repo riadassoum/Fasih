@@ -217,7 +217,7 @@ class _R:
     def raise_for_status(self): pass
     def iter_content(self, chunk_size=1): return iter([])
 _stubs = {}
-for _m in ["wx", "addonHandler", "globalPluginHandler", "globalVars", "gui", "gui.message", "gui.addonGui", "languageHandler", "logHandler", "configobj", "requests"]:
+for _m in ["wx", "addonHandler", "globalPluginHandler", "globalVars", "gui", "gui.message", "gui.addonGui", "languageHandler", "logHandler", "configobj", "requests", "ui"]:
     _stubs[_m] = sys.modules.get(_m); sys.modules[_m] = _types.ModuleType(_m)
 sys.modules["gui.message"].messageBox = None; sys.modules["gui.addonGui"].promptUserForRestart = None
 sys.modules["logHandler"].log = _types.SimpleNamespace(error=lambda *a, **k: None)
