@@ -43,7 +43,7 @@ namespace fasih_us
   struct weights
   {
     double ctx[NC_MAX];
-    double join_base_stop=4.0, join_spec=1.0, join_energy=1.0, join_pace=3.0, join_register=4.0, level_db=0.0, join_f0=6.0, join_vuv=2.0, join_base_mid=0.6, join_base_edge=1.2;
+    double join_base_stop=4.0, join_creak=2.5, join_spec=1.0, join_energy=1.0, join_pace=3.0, join_register=4.0, level_db=0.0, join_f0=6.0, join_vuv=2.0, join_base_mid=0.6, join_base_edge=1.2;
     double target=1.0, join=1.0;
     int max_cands=60;
     double ling=0.5, dur=1.0, f0=1.0, spec=1.0, quality=1.0;   // hybrid target cost
@@ -103,7 +103,8 @@ namespace fasih_us
     std::vector<int> ctx_side;
     std::vector<char> is_vowel;  // by phone id
     std::vector<char> is_stop;   // by phone id
-    std::vector<char> is_closure;// unvoiced stops: silent closure, safe place to cut for streaming   // -1 previous side, +1 next side, 0 other
+    std::vector<char> is_closure;
+    float creak_lf0{0};          // log F0 below which a unit counts as creaky (speaker's 10th percentile)// unvoiced stops: silent closure, safe place to cut for streaming   // -1 previous side, +1 next side, 0 other
     const float* predict(int t,const std::vector<std::string>& v,int half,char utt_type) const;
   private:
     std::vector<uint32_t> mark_data;

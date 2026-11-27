@@ -217,6 +217,7 @@ namespace fasih_us
         else if(p[0]=="join_base_mid") w.join_base_mid=v;
         else if(p[0]=="join_base_edge") w.join_base_edge=v;
         else if(p[0]=="join_base_stop") w.join_base_stop=v;
+        else if(p[0]=="join_creak") w.join_creak=v;
         else if(p[0]=="target") w.target=v;
         else if(p[0]=="join") w.join=v;
         else if(p[0]=="max_cands") w.max_cands=int(v);
@@ -448,6 +449,11 @@ namespace fasih_us
 
   void voice::build_index()
   {
+    {
+      std::vector<float> f;
+      for(size_t i=0;i<u.size();i+=7) if(u[i].lf0l>0&&u[i].lf0r>0) f.push_back(0.5f*(u[i].lf0l+u[i].lf0r));
+      if(!f.empty()){ std::nth_element(f.begin(),f.begin()+f.size()/10,f.end()); creak_lf0=f[f.size()/10]; }
+    }
     for(uint32_t i=0;i<u.size();++i)
       {
         const unit& x=u[i];
@@ -719,11 +725,11 @@ namespace fasih_us
     // visited cheapest first, and since a join never costs less than nothing, the scan stops as soon as
     // a path is already dearer than the best one found: same result as the full search, much faster.
     const int jd=v.jdim();
-    struct step_feats {std::vector<float> l,r; std::vector<float> lf0l,lf0r,pace,reg; std::vector<uint32_t> utt; std::vector<uint8_t> half,stop;};
+    struct step_feats {std::vector<float> l,r; std::vector<float> lf0l,lf0r,pace,reg; std::vector<uint32_t> utt; std::vector<uint8_t> half,stop,creakl,creakr;};
     std::vector<step_feats> F(n);
     auto unpack=[&](size_t i){
       step_feats& S=F[i]; size_t c=cand[i].size();
-      S.l.resize(c*jd); S.r.resize(c*jd); S.lf0l.resize(c); S.lf0r.resize(c); S.pace.resize(c); S.reg.resize(c); S.utt.resize(c); S.half.resize(c); S.stop.resize(c);
+      S.l.resize(c*jd); S.r.resize(c*jd); S.lf0l.resize(c); S.lf0r.resize(c); S.pace.resize(c); S.reg.resize(c); S.utt.resize(c); S.half.resize(c); S.stop.resize(c); S.creakl.resize(c); S.creakr.resize(c);
       for(size_t k=0;k<c;++k)
         {
           const unit& x=U[cand[i][k]];
@@ -731,6 +737,7 @@ namespace fasih_us
           S.l[k*jd]*=float(w.join_energy); S.r[k*jd]*=float(w.join_energy);
           S.lf0l[k]=x.lf0l; S.lf0r[k]=x.lf0r; S.utt[k]=x.utt; S.half[k]=x.half;
           S.stop[k]=(!v.is_stop.empty()&&x.phone<v.is_stop.size()&&v.is_stop[x.phone])?1:0;
+          S.creakl[k]=(x.lf0l>0&&x.lf0l<v.creak_lf0)?1:0; S.creakr[k]=(x.lf0r>0&&x.lf0r<v.creak_lf0)?1:0;
           S.pace[k]=v.utt_pace[x.utt]; S.reg[k]=v.utt_lf0[x.utt];
         }
     };
@@ -786,7 +793,11 @@ namespace fasih_us
                         float d=0; for(int k=0;k<jd;++k){ float e=xr[k]-yl[k]; d+=e*e; }
                         j=w.join_spec*std::sqrt(d*inv_jd);
                         bool va=P.lf0r[a]>0, vb=Q.lf0l[b]>0;
-                        if(va&&vb) j+=w.join_f0*std::fabs(P.lf0r[a]-Q.lf0l[b])*10.0;
+                        if(va&&vb)
+                          {
+                            j+=w.join_f0*std::fabs(P.lf0r[a]-Q.lf0l[b])*10.0;
+                            if(P.creakr[a]!=Q.creakl[b]) j+=w.join_creak;   // creaky against clear voice: heard as a stutter
+                          }
                         else if(va!=vb) j+=w.join_vuv;
                         j+=base;
                         if(P.utt[a]!=Q.utt[b])

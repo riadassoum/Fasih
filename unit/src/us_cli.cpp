@@ -40,7 +40,7 @@ int main(int argc,char** argv)
     auto ts1=std::chrono::steady_clock::now();
     std::cerr<<"select "<<std::chrono::duration<double>(ts1-ts0).count()*1000<<"ms\n";
     if(getenv("DIAG")) for(size_t k=0;k<T.size();++k){ if(sel.units[k]<0) continue; const auto& u=v.units()[sel.units[k]];
-      fprintf(stderr,"%zu ph%d h%d dur %.0fms pred %.0fms q %.2f utt %u at %.3f id %lld\n",k,T[k].phone,T[k].half,(u.end-u.start)/24.0,T[k].pred?std::exp(T[k].pdur)/24.0:0.0,u.quality/20.0,u.utt,(u.start-v.utt_start(u.utt))/24000.0,(long long)sel.units[k]);}
+      fprintf(stderr,"%zu ph%d h%d dur %.0fms pred %.0fms f0 %.0f pred %.0f q %.2f utt %u at %.3f id %lld\n",k,T[k].phone,T[k].half,(u.end-u.start)/24.0,T[k].pred?std::exp(T[k].pdur)/24.0:0.0,(u.lf0l>0&&u.lf0r>0)?std::exp(0.5*(u.lf0l+u.lf0r)):0.0,T[k].pred?std::exp(T[k].plf0):0.0,u.quality/20.0,u.utt,(u.start-v.utt_start(u.utt))/24000.0,(long long)sel.units[k]);}
     int n=0,runs=0; int64_t prev=-2;
     for(auto id: sel.units){ if(id<0){prev=-2;continue;} ++n; if(id!=prev+1) ++runs; prev=id; }
     std::cerr<<"halves "<<n<<" runs "<<runs<<" avg run "<<(runs?double(n)/runs:0)<<" cost "<<sel.cost<<"\n";
