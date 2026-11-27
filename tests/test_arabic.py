@@ -271,6 +271,7 @@ check("no shadda on mi'a", _tsn["_restore_hamza"]("مئة", "مِئَّةُ"), "
 _ap2 = open(os.path.join(REPO, "addon_src", "arabic_pipeline.py"), encoding="utf-8").read()
 _k = "return _engine_safe(s).translate(_PUNCT) if s else s"
 _apn2 = {"re": re}; exec(_ap2[_ap2.index("_PUNCT ="):_ap2.index(_k) + len(_k)], _apn2)
+check("engine thread uses the standard number format", "_use_c_numbers_in_this_thread()\n        while True" in src and "with _CNumbers():" in src, True)
 check("Arabic question mark reaches the engine as ?", _apn2["_engine_punct"]("هل ذهبت؟ نعم؛ ثم"), "هل ذهبت? نعم; ثم")
 check("no wasl after a bare letter reaches the engine", _apn2["_engine_punct"]("تركنا پٱلجبوب"), "تركنا پالجبوب")
 # user pronunciation dictionary: whole words, also after attached prefixes

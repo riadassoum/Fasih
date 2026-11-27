@@ -547,6 +547,62 @@ class SpeakText:
             self.__lib.RHVoice_delete_message(msg)
 
 
+
+# NVDA sets the program's number format to the interface language, so under French (and other
+# languages that write 0,5) the C library reads the engine's settings such as 0.42 as 0: the voices
+# then sound high and fast ("chipmunk"). The engine's own threads get the standard number format,
+# per thread, so NVDA's own formatting is left as it is.
+_LC_NUMERIC = 4
+_ENABLE_PER_THREAD_LOCALE = 1
+
+
+def _ucrt():
+    try:
+        u = ctypes.cdll.ucrtbase
+        u.setlocale.restype = ctypes.c_char_p
+        u.setlocale.argtypes = (ctypes.c_int, ctypes.c_char_p)
+        return u
+    except Exception:
+        return None
+
+
+def _use_c_numbers_in_this_thread():
+    """For a thread that only runs the engine: standard number format for the rest of its life."""
+    u = _ucrt()
+    if u:
+        try:
+            u._configthreadlocale(_ENABLE_PER_THREAD_LOCALE)
+            u.setlocale(_LC_NUMERIC, b"C")
+            log.info("Fasih: engine thread number format %r" % u.setlocale(_LC_NUMERIC, None))
+        except Exception:
+            log.debugWarning("Fasih: could not set the engine thread's number format", exc_info=True)
+
+
+class _CNumbers:
+    """Standard number format in the current thread for the duration of a block, then restored."""
+
+    def __enter__(self):
+        self.u = _ucrt(); self.mode = None; self.old = None
+        if self.u:
+            try:
+                self.mode = self.u._configthreadlocale(_ENABLE_PER_THREAD_LOCALE)
+                self.old = self.u.setlocale(_LC_NUMERIC, None)
+                self.u.setlocale(_LC_NUMERIC, b"C")
+            except Exception:
+                pass
+        return self
+
+    def __exit__(self, *a):
+        if self.u and self.mode is not None:
+            try:
+                if self.old:
+                    self.u.setlocale(_LC_NUMERIC, self.old)
+                self.u._configthreadlocale(self.mode)
+            except Exception:
+                pass
+        return False
+
+
 class TTSThread(threading.Thread):
     def __init__(self, tts_queue):
         self.__queue = tts_queue
@@ -554,6 +610,7 @@ class TTSThread(threading.Thread):
         self.daemon = True
 
     def run(self):
+        _use_c_numbers_in_this_thread()
         while True:
             try:
                 task = self.__queue.get()
@@ -984,7 +1041,8 @@ class SynthDriver(SynthDriver):
             ),
             0
         )
-        self.__tts_engine = self.__lib.RHVoice_new_tts_engine(byref(init_params))
+        with _CNumbers():
+            self.__tts_engine = self.__lib.RHVoice_new_tts_engine(byref(init_params))
         if not self.__tts_engine:
             raise RuntimeError("RHVoice: initialization error")
         nvda_language = languageHandler.getLanguage()
