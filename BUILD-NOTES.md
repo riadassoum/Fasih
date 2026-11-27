@@ -4,7 +4,7 @@ How Fasih is put together, for anyone rebuilding or retraining it. The README ex
 
 ## Building the add-on
 
-`addon_src/build_release.sh VERSION OUT.nvda-addon` builds the add-on from this repository alone: the voices in `voices/`, the languages in `lang/Arabic` and `lang_fr/French`, the engine DLLs in `third_party/rhvoice-win-x64`, Rawi, the driver patches and the documentation. Set `FASIH_SHARP=1` to keep Sharpening patches when the voices have them.
+`addon_src/build_release.sh VERSION OUT.nvda-addon` builds the add-on from this repository alone: the voices in `voices/`, the languages in `lang/Arabic` and `lang_fr/French`, the engine DLLs in `third_party/rhvoice-win-x64`, Rawi, the driver and the documentation (help pages generated from the READMEs). Set `FASIH_SHARP=1` to keep Sharpening patches when the voices have them.
 
 `tests/test_arabic.py` runs the text tests (Arabic pipeline, French front end, patches, limiter, downloader). The full Rawi tests also need `RAWI_ORT_LIB` (an ONNX Runtime library) and `FASIH_ADDON_DIR` (a built driver folder).
 
