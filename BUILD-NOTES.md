@@ -15,7 +15,9 @@ RHVoice with two changes, in `engine/rhvoice-world-vocoder.patch` (against the c
 - the WORLD vocoder (sources in `engine/world`), used by voices whose label format contains `WORLD`;
 - the modulation spectrum postfilter: when a voice has `ms_gain.txt` next to its `voice.data`, every mel-cepstral trajectory of each generation window is filtered in the modulation-frequency domain with those gains. `tools/ms_estimate.py` measures them from a voice's recordings.
 
-The Windows DLLs are cross-compiled with zig (clang for x86_64-windows-gnu); libc++ needs `-D_LIBCPP_ENABLE_CXX17_REMOVED_FEATURES -D_LIBCPP_ENABLE_CXX20_REMOVED_FEATURES`. A Linux build of the same tree is what the training tools load (`RHVOICE_LIB`, `RHVOICE_LABELS`).
+The engine is RHVoice at `engine/RHVOICE_BASE_COMMIT` with two patches: `engine/rhvoice-world-vocoder.patch` (plus `engine/world` copied to `src/core/world`) and `engine/rhvoice-skip-bad-words.patch` (since 2.0: a word the rules cannot tokenize, pronounce or divide into syllables is left out, instead of silencing the whole sentence; also an invalid question pattern keeps the default sentence type).
+
+The Windows DLLs are cross-compiled with zig (clang for x86_64-windows-gnu), using small wrapper scripts as CMAKE_C_COMPILER and CMAKE_CXX_COMPILER (`python3 -m ziglang cc -target x86_64-windows-gnu`, and the same with `c++`), `-DCMAKE_SYSTEM_NAME=Windows -DWITH_DATA=OFF -DBUILD_UTILS=OFF`, `-std=gnu++17` with the Boost submodules' include folders, and these libc++ switches for removed C++17/20 features: `-D_LIBCPP_ENABLE_CXX17_REMOVED_FEATURES -D_LIBCPP_ENABLE_CXX20_REMOVED_FEATURES -D_LIBCPP_ENABLE_CXX17_REMOVED_UNARY_BINARY_FUNCTION -D_LIBCPP_ENABLE_CXX20_REMOVED_NEGATORS -D_LIBCPP_ENABLE_CXX17_REMOVED_BINDERS -D_LIBCPP_ENABLE_CXX17_REMOVED_AUTO_PTR`. With a recent GCC, the old tclap headers also need their copy constructors written without `<T>` (for the label tool). A Linux build of the same tree is what the training tools load (`RHVOICE_LIB`, `RHVOICE_LABELS`).
 
 ## Languages
 

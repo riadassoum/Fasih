@@ -1,0 +1,93 @@
+diff --git a/src/core/language.cpp b/src/core/language.cpp
+index dcdfdcf..ac7af36 100644
+--- a/src/core/language.cpp
++++ b/src/core/language.cpp
+@@ -854,7 +854,17 @@ cfg.register_setting(lcfg.tok_sent);
+         u.get_relation("TokIn", true).append(parent_token);
+         return parent_token.as("Token");
+       }
+-    return append_token(u, parent_token, text, eos);
++    try
++      {
++        return append_token(u, parent_token, text, eos);
++      }
++    catch(const tokenization_error&)
++      {
++        // Fasih: drop this token only; the rest of the sentence is still spoken
++        while(parent_token.has_children())
++          parent_token.first_child().remove();
++        return parent_token.as("Token");
++      }
+   }
+ 
+   item& language::append_token(utterance& u,item& parent_token,const std::string& text, bool eos) const
+@@ -1624,6 +1634,7 @@ void language::on_token_break(utterance& u) const
+         std::vector<std::string> qst;
+         if(!qst_fst->translate(words.begin(),words.end(),std::back_inserter(qst)))
+           return;
++        try {
+         if(qst.empty())
+           return;
+         std::vector<std::string>::const_iterator qst_it=qst.begin();
+@@ -1657,6 +1668,7 @@ void language::on_token_break(utterance& u) const
+         if(qst_it==qst.end())
+           throw fst_error();
+         utt.set_utt_type(*qst_it);
++        } catch(const fst_error&) {}   // Fasih: keep the default sentence type
+ }
+ 
+   void language::set_pitch_modifications(utterance& u) const
+@@ -1860,19 +1872,46 @@ if(!pg2p_fst->translate(in_syms.begin(), in_syms.end(), std::back_inserter(out_s
+     relation& word_rel=u.get_relation("Word");
+     relation& seg_rel=u.add_relation("Segment");
+     relation& trans_rel=u.add_relation("Transcription");
+-    for(relation::iterator word_iter=word_rel.begin();word_iter!=word_rel.end();++word_iter)
++    for(relation::iterator word_iter=word_rel.begin();word_iter!=word_rel.end();)
+       {
+         const bool ph=(word_iter->as("TokStructure").parent().get("pos").as<std::string>()=="ph");
+         if(!ph)
+           before_g2p(*word_iter);
+         item& word=trans_rel.append(*word_iter);
+-        if(ph)
+-          set_user_phones(word);
+-        else
+-          assign_pronunciation(word);
+-        if(!word.has_children())
+-          throw g2p_error(word);
++        try
++          {
++            if(ph)
++              set_user_phones(word);
++            else
++              assign_pronunciation(word);
++          }
++        catch(const std::exception&)
++          {
++            word.clear();
++          }
++        bool syl_ok=word.has_children();
++        if(syl_ok)
++          {
++            std::vector<std::string> syl_test;
++            item::iterator b=word.begin(), e=word.end();
++            syl_ok=syl_fst.translate(b,e,std::back_inserter(syl_test));
++          }
++        if(!syl_ok)
++          {
++            // Fasih: a word the rules cannot pronounce (or divide into syllables) is left out;
++            // the sentence is still spoken
++            item& bad=*word_iter;
++            ++word_iter;
++            static const char* rels[]={"Transcription","Phrase","Token","TokStructure","Word"};
++            for(const char* r: rels)
++              if(bad.in(r))
++                bad.as(r).remove();
++            continue;
++          }
++        ++word_iter;
+       }
++    if(word_rel.begin()==word_rel.end())
++      throw language_error("G2p failed: no word could be pronounced");
+     post_g2p(u);
+     for(relation::iterator word_iter=trans_rel.begin();word_iter!=trans_rel.end();++word_iter)
+       {
