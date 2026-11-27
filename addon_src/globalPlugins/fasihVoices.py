@@ -18,6 +18,7 @@ from io import BytesIO
 from pathlib import Path
 
 import wx
+import ui
 import requests
 from configobj import ConfigObj
 
@@ -322,7 +323,38 @@ def _sample(bundle):
 		return None
 	import os
 	path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "samples", bundle._voice.get("name", "") + ".wav")
-	return path if os.path.isfile(path) else None
+	if os.path.isfile(path):
+		return path
+	# voices added after the add-on was built keep their recording online, next to their pack
+	url = bundle._voice.get("sampleUrl")
+	return url if url and url.startswith("https://") else None
+
+
+def _play_sample(path):
+	"""Plays a bundled sample, or fetches an online one (cached in the temp folder) and plays it."""
+	import nvwave, os, tempfile, threading
+	if not path.startswith("https://"):
+		nvwave.playWaveFile(path, asynchronous=True)
+		return
+	cache = os.path.join(tempfile.gettempdir(), "fasih-sample-" + os.path.basename(path.split("?")[0]))
+
+	def run():
+		try:
+			if not os.path.isfile(cache):
+				import urllib.request
+				req = urllib.request.Request(path, headers={"User-Agent": "Fasih NVDA add-on"})
+				with urllib.request.urlopen(req, timeout=20) as r:
+					data = r.read()
+				if data[:4] != b"RIFF":
+					raise ValueError("not a WAV file")
+				with open(cache + ".tmp", "wb") as f:
+					f.write(data)
+				os.replace(cache + ".tmp", cache)
+			nvwave.playWaveFile(cache, asynchronous=True)
+		except Exception:
+			log.error("Fasih: could not fetch the online sample", exc_info=True)
+			wx.CallAfter(ui.message, _("The sample could not be downloaded. Check your internet connection."))
+	threading.Thread(target=run, daemon=True).start()
 
 
 class VoicesDialog(wx.Dialog):
@@ -413,9 +445,8 @@ class VoicesDialog(wx.Dialog):
 		_i, b = self.selected()
 		path = _sample(b) if b else None
 		if path:
-			import nvwave
 			try:
-				nvwave.playWaveFile(path, asynchronous=True)
+				_play_sample(path)
 			except Exception:
 				log.error("Fasih: could not play the sample", exc_info=True)
 

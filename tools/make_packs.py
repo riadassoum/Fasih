@@ -3,7 +3,7 @@ The Fasih voices that are not bundled in the add-on, one zip each (data/ for the
 variants/ for Fasih's quality settings), and voices.json listing them for Tools > Fasih >
 Download voices. Upload everything in OUTDIR to the "voices" release of the repository.
 Author: Riad Assoum. License: GPL-3.0."""
-import base64, hashlib, json, os, sys, zipfile
+import shutil, base64, hashlib, json, os, sys, zipfile
 
 VER, OUT = sys.argv[1], sys.argv[2]
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -27,6 +27,7 @@ INFO = {
     "Hadi": ("هادي", "male", "Trained on speech cloned with OmniVoice (k2-fsa, Apache-2.0) from Yahya Alnwsany's Arabic professional voice dataset (NightPrince, CC0)."),
     "Bassel": ("باسل", "male", "Trained on about 5.9 hours read for Fasih by speaker 1 of nipponjo's Arabic FastPitch (tts_arabic), the voice family Sami and Nour come from."),
     "Rana": ("رنا", "female", "Trained on about 7 hours read for Fasih by speaker 2 of nipponjo's Arabic FastPitch (tts_arabic), the voice family Sami and Nour come from."),
+    "Haytham": ("هيثم", "male", "Trained on about 7.5 hours generated for Fasih with Google's Gemini text-to-speech and prepared by Riad Assoum: the most natural, widest-ranging Fasih voice."),
     "Shahrazad": ("شهرزاد", "female", "A storyteller's voice, trained on Aida Boumaza's LibriVox reading of Alf Layla wa Layla (public domain)."),
 }
 ONLY = os.environ.get("FASIH_ONLY", "").split()
@@ -66,6 +67,11 @@ for name in sorted(os.listdir(os.path.join(REPO, "voices"))):
     voices.append({"id": name.lower(), "name": name, "name_ar": ar, "gender": gender, "description": desc,
                    "version": rec["version"], "dataUrl": BASE + os.path.basename(zpath),
                    "dataMd5": base64.b64encode(hashlib.md5(data).digest()).decode(), "size": len(data)})
+    # voices newer than the add-on's bundled samples get an online one, uploaded next to the packs
+    smp = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "samples_online", name + ".wav")
+    if os.path.isfile(smp):
+        shutil.copy(smp, os.path.join(OUT, "Fasih-sample-%s.wav" % name))
+        voices[-1]["sampleUrl"] = BASE + "Fasih-sample-%s.wav" % name
     print("%-8s %6.1f MB" % (name, len(data) / 1e6))
 json.dump(REG, open(REG_PATH, "w", encoding="utf-8"), indent=1, sort_keys=True)
 json.dump({"version": 1, "voices": voices}, open(os.path.join(OUT, "voices.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
