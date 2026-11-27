@@ -122,6 +122,7 @@
    "name": "Haytham Premium",
    "name_ar": "\u0647\u064a\u062b\u0645",
    "quality": "premium",
+   "sampleUrl": "https://github.com/riadassoum/Fasih/releases/download/voices/Fasih-sample-Haytham-Premium.wav",
    "size": 96356281,
    "version": "2.0"
   },
