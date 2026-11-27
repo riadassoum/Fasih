@@ -58,7 +58,7 @@ E
 echo 'set(CMAKE_SHARED_LINKER_FLAGS "-Wl,--export-all-symbols")' >> tc.cmake
 (mkdir -p "$OPUS/bwin" && cd "$OPUS/bwin" && cmake .. -DCMAKE_TOOLCHAIN_FILE="$RH/bw/tc.cmake" -DCMAKE_BUILD_TYPE=Release -DOPUS_BUILD_PROGRAMS=OFF -DOPUS_BUILD_TESTING=OFF -DOPUS_STACK_PROTECTOR=OFF -DOPUS_FORTIFY_SOURCE=OFF >/dev/null && make -j"$(nproc)" opus)
 cmake .. -DCMAKE_TOOLCHAIN_FILE=tc.cmake -DCMAKE_BUILD_TYPE=Release -DENABLE_SONIC=OFF -DWITH_DATA=OFF -DFASIH_OPUS_DIR="$OPUS" -DFASIH_OPUS_LIB="$OPUS/bwin/libopus.a" >/dev/null
-make -j"$(nproc)" RHVoice_core
+make -j"$(nproc)" RHVoice_core || true    # the first link may fail on an outdated export list; it is rebuilt below
 # zig's linker ignores --export-all-symbols: export the core's symbols with a .def file
 cd src/core
 for f in $(find CMakeFiles/RHVoice_core.dir -name "*.obj"); do nm -g --defined-only "$f" 2>/dev/null; done \

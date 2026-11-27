@@ -73,6 +73,27 @@ namespace fasih_us
     }
   }
 
+  namespace
+  {
+    struct half_table
+    {
+      float t[65536];
+      half_table()
+      {
+        for(uint32_t h=0;h<65536;++h)
+          {
+            uint32_t sg=(h&0x8000u)<<16, e=(h>>10)&0x1f, m=h&0x3ff, r;
+            if(e==0){ if(m==0) r=sg; else { e=127-15+1; while(!(m&0x400)){m<<=1;--e;} m&=0x3ff; r=sg|(e<<23)|(m<<13);} }
+            else if(e==31) r=sg|0x7f800000u|(m<<13);
+            else r=sg|((e+112)<<23)|(m<<13);
+            std::memcpy(&t[h],&r,4);
+          }
+      }
+    };
+    const half_table& halves(){ static const half_table t; return t; }
+  }
+  float half_to_float(uint16_t h){ return halves().t[h]; }
+
   voice::voice(const std::string& dir)
   {
     for(int i=0;i<NC_MAX;++i) w.ctx[i]=0;
@@ -140,6 +161,12 @@ namespace fasih_us
         ctxdefs.push_back(d);
       }
     nc=ctxdefs.size();
+    for(int k=0;k<int(ctxdefs.size());++k)
+      {
+        auto it=ctxdefs[k].vals.find("pau");
+        if(ctxdefs[k].name=="prev_name"){k_prev=k; pau_prev=(it==ctxdefs[k].vals.end())?-1:it->second;}
+        if(ctxdefs[k].name=="next_name"){k_next=k; pau_next=(it==ctxdefs[k].vals.end())?-1:it->second;}
+      }
     if(nc>NC_MAX) throw std::runtime_error("fasih_us: too many context features");
     // default target weights
     for(int k=0;k<nc;++k)
@@ -173,6 +200,9 @@ namespace fasih_us
         if(p[0]=="join_spec") w.join_spec=v;
         else if(p[0]=="join_f0") w.join_f0=v;
         else if(p[0]=="join_energy") w.join_energy=v;
+        else if(p[0]=="join_pace") w.join_pace=v;
+        else if(p[0]=="level_db") w.level_db=v;
+        else if(p[0]=="join_register") w.join_register=v;
         else if(p[0]=="join_vuv") w.join_vuv=v;
         else if(p[0]=="join_base_mid") w.join_base_mid=v;
         else if(p[0]=="join_base_edge") w.join_base_edge=v;
@@ -186,23 +216,35 @@ namespace fasih_us
   {
     auto f=open_in(path,std::ios::binary);
     char magic[8]; f.read(magic,8);
-    if(std::memcmp(magic,"FSUV0001",8)!=0) throw std::runtime_error("fasih_us: bad units.bin");
+    if(std::memcmp(magic,"FSUV0002",8)!=0) throw std::runtime_error("fasih_us: bad units.bin");
     uint32_t hdr[5]; f.read((char*)hdr,sizeof(hdr));
     uint32_t nu=hdr[0], nutt=hdr[1]; jd=hdr[2]; uint32_t nc_file=hdr[3]; sr=hdr[4];
     if(jd>JD_MAX||int(nc_file)!=nc) throw std::runtime_error("fasih_us: units.bin does not match context.txt");
     std::vector<float> sd(jd); f.read((char*)sd.data(),4*jd);
-    utts.resize(nutt);
-    for(auto& x: utts){ uint64_t b; uint32_t n; f.read((char*)&b,8); f.read((char*)&n,4); x={b,n}; }
+    utts.resize(nutt); utt_pace.resize(nutt); utt_lf0.resize(nutt);
+    for(uint32_t i=0;i<nutt;++i)
+      {
+        uint64_t b; uint32_t n; float pace,lf; f.read((char*)&b,8); f.read((char*)&n,4); f.read((char*)&pace,4); f.read((char*)&lf,4);
+        utts[i]={b,n}; utt_pace[i]=std::log(std::max(pace,1.0f)); utt_lf0[i]=lf;
+      }
+    auto h2f=[](uint16_t h)->float{
+      uint32_t s=(h&0x8000u)<<16, e=(h>>10)&0x1f, m=h&0x3ff, r;
+      if(e==0){ if(m==0) r=s; else { e=127-15+1; while(!(m&0x400)){m<<=1;--e;} m&=0x3ff; r=s|(e<<23)|(m<<13);} }
+      else if(e==31) r=s|0x7f800000u|(m<<13);
+      else r=s|((e+112)<<23)|(m<<13);
+      float x; std::memcpy(&x,&r,4); return x;
+    };
     u.resize(nu);
+    std::vector<uint16_t> hb(jd+1);
     for(auto& x: u)
       {
-        uint16_t p; uint8_t h,pad; uint32_t ut; uint64_t a,b;
-        f.read((char*)&p,2); f.read((char*)&h,1); f.read((char*)&pad,1); f.read((char*)&ut,4); f.read((char*)&a,8); f.read((char*)&b,8);
-        x.phone=p; x.half=h; x.utt=ut; x.start=a; x.end=b;
+        uint16_t p; uint8_t h,pad; uint32_t ut,a,b;
+        f.read((char*)&p,2); f.read((char*)&h,1); f.read((char*)&pad,1); f.read((char*)&ut,4); f.read((char*)&a,4); f.read((char*)&b,4);
+        x.phone=p; x.half=h; x.utt=ut; x.start=utts[ut].first+a; x.end=utts[ut].first+b;
         std::memset(x.ctx,0,sizeof(x.ctx));
         f.read((char*)x.ctx,nc);
-        f.read((char*)x.jl,4*jd); f.read((char*)&x.lf0l,4);
-        f.read((char*)x.jr,4*jd); f.read((char*)&x.lf0r,4);
+        f.read((char*)hb.data(),2*(jd+1)); for(uint32_t i=0;i<jd;++i) x.jl[i]=hb[i]; x.lf0l=h2f(hb[jd]);
+        f.read((char*)hb.data(),2*(jd+1)); for(uint32_t i=0;i<jd;++i) x.jr[i]=hb[i]; x.lf0r=h2f(hb[jd]);
       }
     if(!f) throw std::runtime_error("fasih_us: truncated units.bin");
   }
@@ -281,15 +323,22 @@ namespace fasih_us
   {
     auto f=open_in(path,std::ios::binary);
     char magic[8]; f.read(magic,8);
-    if(std::memcmp(magic,"FSPM0001",8)!=0) throw std::runtime_error("bad marks");
+    if(std::memcmp(magic,"FSPM0002",8)!=0) throw std::runtime_error("bad marks");
     uint32_t n; f.read((char*)&n,4);
     if(n!=utts.size()) throw std::runtime_error("marks do not match");
     mark_off.assign(1,0);
+    std::vector<uint16_t> d;
     for(uint32_t i=0;i<n;++i)
       {
         uint32_t c; f.read((char*)&c,4);
         size_t o=mark_data.size(); mark_data.resize(o+c);
-        f.read((char*)(mark_data.data()+o),4*size_t(c));
+        if(c)
+          {
+            uint32_t first; f.read((char*)&first,4);
+            d.resize(c-1); f.read((char*)d.data(),2*std::streamsize(d.size()));
+            uint32_t v=first; mark_data[o]=v;
+            for(uint32_t j=1;j<c;++j){ v+=d[j-1]; mark_data[o+j]=v; }
+          }
         mark_off.push_back(mark_data.size());
       }
     if(!f) throw std::runtime_error("truncated marks");
@@ -417,18 +466,23 @@ namespace fasih_us
       const unit& x=U[a]; const unit& y=U[b];
       const weights& w=v.get_weights();
       double d=0;
-      { double e=(x.jr[0]-y.jl[0])*w.join_energy; d+=e*e; }
-      for(int i=1;i<v.jdim();++i){ double e=x.jr[i]-y.jl[i]; d+=e*e;}
+      { double e=(half_to_float(x.jr[0])-half_to_float(y.jl[0]))*w.join_energy; d+=e*e; }
+      for(int i=1;i<v.jdim();++i){ double e=half_to_float(x.jr[i])-half_to_float(y.jl[i]); d+=e*e;}
       double c=w.join_spec*std::sqrt(d/v.jdim());
       bool va=x.lf0r>0, vb=y.lf0l>0;
       if(va&&vb) c+=w.join_f0*std::fabs(x.lf0r-y.lf0l)*10.0;
       else if(va!=vb) c+=w.join_vuv;
       c+=(y.half==1)?w.join_base_mid:w.join_base_edge;
+      if(x.utt!=y.utt)
+        {
+          c+=w.join_pace*std::fabs(v.utt_pace[x.utt]-v.utt_pace[y.utt]);
+          if(v.utt_lf0[x.utt]>0&&v.utt_lf0[y.utt]>0) c+=w.join_register*std::fabs(v.utt_lf0[x.utt]-v.utt_lf0[y.utt]);
+        }
       return c;
     }
   }
 
-  select_result select_units(const voice& v,const std::vector<target>& T)
+  select_result select_units(const voice& v,const std::vector<target>& T,int64_t exclude_utt)
   {
     const auto& U=v.units();
     const weights& w=v.get_weights();
@@ -445,7 +499,7 @@ namespace fasih_us
         const auto& pool=v.candidates(t.phone,t.half,t.neighbour);
         std::vector<std::pair<double,uint32_t>> scored;
         scored.reserve(pool.size()+64);
-        for(uint32_t id: pool) scored.push_back({target_cost(v,t,U[id]),id});
+        for(uint32_t id: pool) if(int64_t(U[id].utt)!=exclude_utt) scored.push_back({target_cost(v,t,U[id]),id});
         size_t K=std::min<size_t>(w.max_cands,scored.size());
         std::partial_sort(scored.begin(),scored.begin()+K,scored.end());
         scored.resize(K);
@@ -600,40 +654,83 @@ namespace fasih_us
   }
 
   std::vector<size_t>* debug_joins=nullptr;
+
+  namespace
+  {
+    double rms(const piece& s,int64_t a,int64_t b)
+    {
+      double e=0; int64_t n=0;
+      for(int64_t p=a;p<b;++p){ double x=s.at(uint64_t(p)); e+=x*x; ++n;}
+      return n?std::sqrt(e/n):0.0;
+    }
+
+    // multiply buf by a gain going from g (at edge) to 1 over r samples
+    void gain_ramp(piece& s,int64_t edge,int64_t r,double g,bool head)
+    {
+      int64_t n=int64_t(s.buf.size());
+      if(head)
+        {
+          for(int64_t i=0;i<n;++i)
+            {
+              int64_t d=i-edge; double w=(d<=0)?1.0:(d>=r?0.0:0.5+0.5*std::cos(3.14159265358979323846*d/r));
+              s.buf[i]*=float(std::pow(g,w));
+            }
+        }
+      else
+        {
+          for(int64_t i=0;i<n;++i)
+            {
+              int64_t d=edge-i; double w=(d<=0)?1.0:(d>=r?0.0:0.5+0.5*std::cos(3.14159265358979323846*d/r));
+              s.buf[i]*=float(std::pow(g,w));
+            }
+        }
+    }
+  }
+
   void concatenate(const voice& v,const select_result& sel,std::vector<float>& out,double pause_scale)
   {
     const auto& U=v.units();
     const int sr=v.sample_rate();
-    const int L=sr/100;          // 10 ms cross-fade
-    const int M=sr/200;          // +-5 ms search for the best match
-    const int F=sr/400;          // 2.5 ms fades at pauses
-    const int R=sr*45/1000;      // pitch ramp length on each side of a join
-    const int PAD=L+M+2*sr/100;
+    const int H_MID=sr/100;      // half cross-fade inside a phone: 10 ms (20 ms fade)
+    const int H_EDGE=sr/250;     // at a phone boundary: 4 ms (8 ms fade)
+    const int H_MIN=sr/1000;     // never shorter than 1 ms on each side
+    const int M=sr/200;          // +-5 ms search for the best waveform match
+    const int R=sr*45/1000;      // pitch / loudness ramps on each side of a join
+    const int EXT_OUT=sr*35/1000;// a phrase ends with the recording's own release (up to 35 ms)
+    const int EXT_IN=sr*15/1000; // and starts with its own onset (up to 15 ms)
+    const int PAD=H_MID+M+EXT_OUT+sr/100;
     std::vector<piece> segs;
+    std::vector<uint32_t> first_u,last_u;
     double pending_pause=0; bool pause_flag=true;
     for(size_t i=0;i<sel.units.size();++i)
       {
         int64_t id=sel.units[i];
         if(id<0){pending_pause+=sel.pause_ms[i]; pause_flag=true; continue;}
         const unit& x=U[id];
-        if(!segs.empty()&&!pause_flag&&i>0&&sel.units[i-1]==id-1) {segs.back().b=x.end; segs.back().f0b=x.lf0r>0?std::exp(x.lf0r):0; continue;}
+        if(!segs.empty()&&!pause_flag&&i>0&&sel.units[i-1]==id-1)
+          {segs.back().b=x.end; segs.back().f0b=x.lf0r>0?std::exp(x.lf0r):0; last_u.back()=id; continue;}
         piece p; p.a=x.start; p.b=x.end; p.utt=x.utt; p.after_pause=pause_flag; p.pause=pending_pause;
         p.f0a=x.lf0l>0?std::exp(x.lf0l):0; p.f0b=x.lf0r>0?std::exp(x.lf0r):0; p.A=0;
-        segs.push_back(p);
+        segs.push_back(p); first_u.push_back(id); last_u.push_back(id);
         pending_pause=0; pause_flag=false;
       }
     double tail_pause=pending_pause;
-    // pitch meeting points at the joins
-    for(size_t i=1;i<segs.size();++i)
+    const size_t n=segs.size();
+    // which joins are inside a phone (next piece starts with a right half)
+    std::vector<char> mid(n,0), joined(n,0);
+    for(size_t i=1;i<n;++i){ joined[i]=!segs[i].after_pause; mid[i]=joined[i]&&U[first_u[i]].half==1; }
+    // pitch meeting points
+    for(size_t i=1;i<n;++i)
       {
+        if(!joined[i]) continue;
         piece& p=segs[i-1]; piece& q=segs[i];
-        if(q.after_pause||p.f0b<=0||q.f0a<=0) continue;
+        if(p.f0b<=0||q.f0a<=0) continue;
         double r=std::log(q.f0a/p.f0b);
-        if(std::fabs(r)<0.015||std::fabs(r)>0.45) continue;   // tiny, or an octave error
+        if(std::fabs(r)<0.015||std::fabs(r)>0.45) continue;
         double m=std::sqrt(p.f0b*q.f0a);
         p.gb=m/p.f0b; q.ga=m/q.f0a;
       }
-    // fill the buffers and bend the pitch near the joins
+    // buffers with margins, pitch bent near the joins
     for(piece& s: segs)
       {
         uint64_t us=v.utt_start(s.utt), ue=v.utt_end(s.utt);
@@ -642,80 +739,118 @@ namespace fasih_us
         s.buf.resize(B-s.A);
         v.read(s.utt,s.A,B,s.buf.data());
         if(!v.has_marks()) continue;
-        int64_t la=int64_t(s.a-s.A), lb=int64_t(s.b-s.A), n=int64_t(s.buf.size());
+        int64_t la=int64_t(s.a-s.A), lb=int64_t(s.b-s.A), nb=int64_t(s.buf.size());
         int64_t r=std::min<int64_t>(R,(lb-la)/2);
         if(r<sr/200) continue;
         if(s.ga!=1.0)
-          {
-            double g=s.ga;
-            psola(v,s,0,std::min(n,la+r+sr/200),[&](int64_t i){ if(i<=la) return g; if(i>=la+r) return 1.0; return std::pow(g,double(la+r-i)/r);});
-          }
+          { double g=s.ga; psola(v,s,0,std::min(nb,la+r+sr/200),[&](int64_t i){ if(i<=la) return g; if(i>=la+r) return 1.0; return std::pow(g,double(la+r-i)/r);}); }
         if(s.gb!=1.0)
-          {
-            double g=s.gb;
-            psola(v,s,std::max<int64_t>(0,lb-r-sr/200),n,[&](int64_t i){ if(i>=lb) return g; if(i<=lb-r) return 1.0; return std::pow(g,double(i-(lb-r))/r);});
-          }
+          { double g=s.gb; psola(v,s,std::max<int64_t>(0,lb-r-sr/200),nb,[&](int64_t i){ if(i>=lb) return g; if(i<=lb-r) return 1.0; return std::pow(g,double(i-(lb-r))/r);}); }
       }
-    bool open=false; const piece* prev=nullptr; uint64_t held=0;
-    auto flush_tail=[&](){
-      if(!open) return;
-      uint64_t a=held-L/2;
-      for(uint64_t p=a;p<held;++p)
-        {
-          double g=(held-p<=uint64_t(F))?double(held-p)/F:1.0;
-          out.push_back(float(prev->at(p)*g));
-        }
-      open=false;
-    };
-    for(const piece& s: segs)
+    // loudness: inside a phone both sides meet at the same level
+    for(size_t i=1;i<n;++i)
       {
-        if(s.after_pause||!open)
-          {
-            flush_tail();
-            size_t np=size_t(s.pause*pause_scale*sr/1000.0);
-            out.insert(out.end(),np,0.0f);
-            uint64_t a=s.a;
-            uint64_t end=(s.b>a+L)?s.b-L/2:s.b;
-            for(uint64_t p=a;p<end;++p)
-              {
-                double g=(p-a<uint64_t(F))?double(p-a)/F:1.0;
-                out.push_back(float(s.at(p)*g));
-              }
-            held=s.b; prev=&s; open=(s.b>a+L);
-            continue;
-          }
-        int h=L/2;
-        uint64_t r0=held-h;
-        bool can_ext=(held+h<=prev->A+prev->buf.size());
-        int bestk=0; double bestc=-1e30;
-        if(can_ext)
-          for(int k=-M;k<=M;++k)
-            {
-              int64_t q0=int64_t(s.a)+k-h;
-              if(q0<int64_t(s.A)||uint64_t(q0+L)>s.A+s.buf.size()) continue;
-              double xy=0,yy=1e-9;
-              for(int j=0;j<L;j+=2){ double x=prev->at(r0+j), y=s.at(q0+j); xy+=x*y; yy+=y*y; }
-              double c=xy/std::sqrt(yy);
-              if(c>bestc){bestc=c;bestk=k;}
-            }
-        int64_t q0=int64_t(s.a)+bestk-h;
-        if(q0<int64_t(s.A)) q0=s.A;
-        if(debug_joins) debug_joins->push_back(out.size()+h);
-        for(int j=0;j<L;++j)
-          {
-            double wgt=0.5-0.5*std::cos(3.14159265358979323846*(j+0.5)/L);
-            double x=prev->at(r0+j);
-            if(!can_ext&&r0+j>=held) x=0;
-            double y=s.at(q0+j);
-            out.push_back(float(x*(1-wgt)+y*wgt));
-          }
-        uint64_t a=uint64_t(q0+L);
-        uint64_t end=(s.b>a+L)?s.b-h:s.b;
-        for(uint64_t p=a;p<end;++p) out.push_back(s.at(p));
-        held=s.b; prev=&s; open=(s.b>a+L);
+        if(!mid[i]) continue;
+        piece& p=segs[i-1]; piece& q=segs[i];
+        int w=sr/50;
+        double ep=rms(p,int64_t(p.b)-w,int64_t(p.b)), eq=rms(q,int64_t(q.a),int64_t(q.a)+w);
+        if(ep<1e-4||eq<1e-4) continue;
+        double r=eq/ep;
+        if(r<0.5||r>2.0) continue;
+        double gp=std::sqrt(r), gq=1.0/std::sqrt(r);   // p's end up, q's start down (or the reverse)
+        int64_t rp=std::min<int64_t>(R,int64_t(p.b-p.a)), rq=std::min<int64_t>(R,int64_t(q.b-q.a));
+        gain_ramp(p,int64_t(p.b-p.A),rp,gp,false);
+        gain_ramp(q,int64_t(q.a-q.A),rq,gq,true);
       }
-    flush_tail();
-    out.insert(out.end(),size_t(tail_pause*pause_scale*sr/1000.0),0.0f);
+    // join geometry: half cross-fade h and lag k for every join
+    std::vector<int> h(n,0), k(n,0);
+    for(size_t i=1;i<n;++i)
+      {
+        if(!joined[i]) continue;
+        const piece& p=segs[i-1]; const piece& q=segs[i];
+        int64_t lp=int64_t(p.b-p.a), lq=int64_t(q.b-q.a);
+        int hi=mid[i]?H_MID:H_EDGE;
+        hi=int(std::min<int64_t>(hi,std::min(lp,lq)/2));
+        if(hi<H_MIN) hi=H_MIN;
+        h[i]=hi;
+        int Mi=int(std::min<int64_t>(M,std::max<int64_t>(lq/4,1)));
+        double best=-1e30; int bk=0;
+        uint64_t r0=p.b-hi;
+        for(int kk=-Mi;kk<=Mi;++kk)
+          {
+            int64_t q0=int64_t(q.a)+kk-hi;
+            double xy=0,yy=1e-9,xx=1e-9;
+            for(int j=0;j<2*hi;j+=2){ double x=p.at(r0+j), y=q.at(uint64_t(q0+j)); xy+=x*y; yy+=y*y; xx+=x*x;}
+            double c=xy/std::sqrt(xx*yy);
+            if(c>best){best=c;bk=kk;}
+          }
+        k[i]=bk;
+      }
+    // render
+    const double PI=3.14159265358979323846;
+    for(size_t i=0;i<n;++i)
+      {
+        const piece& s=segs[i];
+        bool jn=(i+1<n)&&joined[i+1];
+        int64_t begin=joined[i]?int64_t(s.a)+k[i]+h[i]:int64_t(s.a);
+        int64_t end=jn?int64_t(s.b)-h[i+1]:int64_t(s.b);
+        if(!joined[i])
+          {
+            // phrase start: pause, then the recording's own onset when it had a pause there
+            int64_t ext=0;
+            if(v.recorded_after_pause(first_u[i])) ext=std::min<int64_t>(EXT_IN,int64_t(s.a-s.A));
+            double ms=s.pause*pause_scale;
+            int64_t np=int64_t(ms*sr/1000.0)-ext; if(np<0){ext=std::max<int64_t>(0,ext+np); np=0;}
+            out.insert(out.end(),size_t(np),0.0f);
+            int64_t f=std::max<int64_t>(ext,sr/400);
+            begin=int64_t(s.a)-ext;
+            for(int64_t p=begin;p<end;++p)
+              {
+                double g=(p-begin<f)?0.5-0.5*std::cos(PI*double(p-begin)/f):1.0;
+                out.push_back(float(s.at(uint64_t(p))*g));
+              }
+          }
+        else
+          for(int64_t p=begin;p<end;++p) out.push_back(s.at(uint64_t(p)));
+        if(jn)
+          {
+            const piece& q=segs[i+1];
+            int hh=h[i+1];
+            int64_t r0=int64_t(s.b)-hh, q0=int64_t(q.a)+k[i+1]-hh;
+            if(debug_joins) debug_joins->push_back(out.size()+hh);
+            for(int j=0;j<2*hh;++j)
+              {
+                double w=0.5-0.5*std::cos(PI*(j+0.5)/(2*hh));
+                out.push_back(float(s.at(uint64_t(r0+j))*(1-w)+q.at(uint64_t(q0+j))*w));
+              }
+          }
+        else
+          {
+            // phrase end: the recording's own release when a pause followed it there
+            int64_t ext=v.recorded_before_pause(last_u[i])?std::min<int64_t>(EXT_OUT,int64_t(s.A+s.buf.size()-s.b)):0;
+            int64_t f=std::max<int64_t>(ext,sr/400);
+            int64_t a=int64_t(s.b)-(ext?0:f);
+            if(ext==0)
+              { // no release available: fade the last 2.5 ms already written
+                size_t m=std::min<size_t>(out.size(),size_t(f));
+                for(size_t j=0;j<m;++j){ double g=0.5+0.5*std::cos(PI*double(j+1)/m); out[out.size()-m+j]*=float(g);} }
+            else
+              for(int64_t p=a;p<int64_t(s.b)+ext;++p)
+                {
+                  double g=0.5+0.5*std::cos(PI*double(p-a)/ext);
+                  out.push_back(float(s.at(uint64_t(p))*g));
+                }
+            // the release counts towards the following pause
+            if(i+1<n) segs[i+1].pause=std::max(0.0,segs[i+1].pause-1000.0*ext/sr/std::max(pause_scale,1e-3));
+            else tail_pause=std::max(0.0,tail_pause-1000.0*ext/sr/std::max(pause_scale,1e-3));
+          }
+      }
+    out.insert(out.end(),size_t(std::max(0.0,tail_pause*pause_scale)*sr/1000.0),0.0f);
+    if(v.get_weights().level_db!=0.0)
+      {
+        float g=float(std::pow(10.0,v.get_weights().level_db/20.0));
+        for(auto& x: out) x*=g;
+      }
   }
 
   void synthesize(const voice& v,const std::vector<std::string>& labels,char utt_type,std::vector<float>& out,double pause_scale)

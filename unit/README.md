@@ -1,6 +1,6 @@
 # Fasih Unit: concatenative (unit-selection) voices
 
-A non-neural, concatenative speech synthesizer of the same family as Vocalizer and Acapela, built into Fasih's RHVoice engine. A unit voice speaks with pieces of real recordings: every phone of the corpus is cut into two half-phones, and for each sentence a Viterbi search chooses the sequence of half-phones that best fits the context (target cost) and joins most smoothly (join cost). Pieces that were next to each other in the recordings join for free, so whole syllables and words often come from one recording.
+Fasih's premium voices: a non-neural, concatenative speech synthesizer of the same family as Vocalizer and Acapela, built into Fasih's RHVoice engine. A unit voice speaks with pieces of real recordings: every phone of the corpus is cut into two half-phones, and for each sentence a Viterbi search chooses the sequence of half-phones that best fits the context (target cost) and joins most smoothly (join cost). Pieces that were next to each other in the recordings join for free, so whole syllables and words often come from one recording.
 
 Everything in front of the voice is Fasih's: the Arabic text processing (Rawi or Barq diacritization, numbers, abbreviations, punctuation, the pronunciation dictionary, wasl rules), RHVoice's language switching, and the NVDA driver with its rate, rate boost, pitch and volume. A unit voice is an ordinary RHVoice voice folder, so it can be the primary voice, a secondary voice, or both (an Arabic unit voice with an English unit voice).
 
@@ -45,14 +45,22 @@ RHV_BUILD=~/rhv/b RHV_F0_MIN=60 RHV_F0_MAX=300 unit/train_voice.sh NAME CORPUS W
 
 The context features are read from each language's `labelling.xml`, so nothing else changes. With an Arabic unit voice as the primary voice and an English unit voice as the secondary, RHVoice switches between them by script, exactly as Fasih does.
 
-## Building the engine and the add-on
+## In Fasih
+
+Fasih has two kinds of Arabic voices. The compact voices are the HTS voices (a few megabytes each): Riad, Aseel and Elise come with the add-on, and the others are voice packs. The premium voices are unit voices (a few hundred megabytes each), offered only as voice packs in Tools > Fasih > Download voices, from the "voices" release. Both kinds run in the same engine, so any of them can be paired with Fasih's English and French voices.
 
 ```
-OPUS_SRC=~/opus unit/build_engine.sh ~/rhv windows                # RHVoice.dll + libRHVoice_core.dll (zig 0.13)
-RHV_WIN=~/rhv/bw unit/build_addon.sh 0.1 FasihUnit-0.1.nvda-addon WORKDIR/voice/NAME [more voices]
+OPUS_SRC=~/opus unit/build_engine.sh ~/rhv windows      # RHVoice.dll + libRHVoice_core.dll (zig 0.13)
+cp ~/rhv/bw/src/lib/libRHVoice.dll third_party/rhvoice-win-x64/RHVoice.dll
+cp ~/rhv/bw/src/core/libRHVoice_core.dll third_party/rhvoice-win-x64/
+FASIH_PREMIUM="WORKDIR/voice/NAME" python3 tools/make_packs.py VERSION OUTDIR   # packs + voices.json for the release
 ```
 
-`build_engine.sh` applies Fasih's engine patch (`engine/rhvoice-world-vocoder.patch`, against `engine/RHVOICE_BASE_COMMIT`) and the unit backend (`src/us_*`) to an RHVoice checkout, with sonic and Opus built into the core. The resulting DLLs still run every HTS voice, Fasih's included. `build_addon.sh` takes Fasih's driver and text pipeline, swaps in these DLLs, adds the unit voices and keeps Bdl (English) and Elise (French) for language switching. `ADDON_ID` and `ADDON_NAME` set the driver id and the name shown in NVDA.
+`build_engine.sh` applies Fasih's engine patch (`engine/rhvoice-world-vocoder.patch`, against `engine/RHVOICE_BASE_COMMIT`) and the unit backend (`src/us_*`) to an RHVoice checkout, with sonic and Opus built into the core. The DLLs run every HTS voice as before. A premium voice folder may also hold `about.txt` (`name_ar=` and `description=` for the catalogue) and a `NOTICE.md` for its pack.
+
+### Size
+
+Nothing that changes the sound is used to make a voice smaller. Join features are stored in half precision, pitch marks as differences, and audio no unit can reach as digital silence. A lower Opus bitrate or dropping the least-used recordings would each save more, but both measurably change the result (higher spectral distortion below 56 kbps; about 14% higher selection cost and 6% more joins with a fifth of the recordings removed), so neither is done.
 
 ## Credits
 

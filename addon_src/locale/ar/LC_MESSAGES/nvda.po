@@ -524,3 +524,9 @@ msgstr "عرض النسخ التجريبية من فصيح أيضًا"
 
 msgid "Start speaking without leading silence"
 msgstr "بدء النطق دون صمت في أوله"
+
+msgid "premium"
+msgstr "ممتاز"
+
+msgid "compact"
+msgstr "مدمج"

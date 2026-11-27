@@ -17,6 +17,8 @@ RHVoice with two changes, in `engine/rhvoice-world-vocoder.patch` (against the c
 
 The Windows DLLs are cross-compiled with zig (clang for x86_64-windows-gnu); libc++ needs `-D_LIBCPP_ENABLE_CXX17_REMOVED_FEATURES -D_LIBCPP_ENABLE_CXX20_REMOVED_FEATURES`. A Linux build of the same tree is what the training tools load (`RHVOICE_LIB`, `RHVOICE_LABELS`).
 
+- the unit-selection backend for premium (concatenative) voices, in `unit/src` and applied by `unit/build_engine.sh`, which also builds sonic and Opus into the core: a voice folder with `units.bin` is a unit voice. See `unit/README.md` for how they are trained and packed.
+
 ## Languages
 
 - `lang/`: the Arabic data-only language. `gen_foma.py` and `gen_rest.py` write the foma sources; `build_lang.sh` compiles them with foma and RHVoice's `att2bin` and `dtree2bin` (set `RH` to an RHVoice source checkout).

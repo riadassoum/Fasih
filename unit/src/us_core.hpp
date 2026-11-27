@@ -10,8 +10,9 @@
 
 namespace fasih_us
 {
-  constexpr int JD_MAX=16;
-  constexpr int NC_MAX=32;
+  constexpr int JD_MAX=14;
+  constexpr int NC_MAX=24;
+  float half_to_float(uint16_t h);
 
   struct unit
   {
@@ -20,8 +21,9 @@ namespace fasih_us
     uint32_t utt;
     uint64_t start, end;      // global sample positions
     uint8_t ctx[NC_MAX];
-    float jl[JD_MAX]; float lf0l;   // join features at the start
-    float jr[JD_MAX]; float lf0r;   // and at the end
+    uint16_t jl[JD_MAX];            // join features at the start (half precision)
+    uint16_t jr[JD_MAX];            // and at the end
+    float lf0l, lf0r;               // log F0 at the edges (<=0: unvoiced)
   };
 
   struct target
@@ -37,7 +39,7 @@ namespace fasih_us
   struct weights
   {
     double ctx[NC_MAX];
-    double join_spec=1.0, join_energy=1.0, join_f0=6.0, join_vuv=2.0, join_base_mid=0.6, join_base_edge=1.2;
+    double join_spec=1.0, join_energy=1.0, join_pace=3.0, join_register=4.0, level_db=0.0, join_f0=6.0, join_vuv=2.0, join_base_mid=0.6, join_base_edge=1.2;
     double target=1.0, join=1.0;
     int max_cands=60;
   };
@@ -69,6 +71,9 @@ namespace fasih_us
       n=mark_off[i+1]-mark_off[i]; return mark_data.data()+mark_off[i];
     }
     bool has_marks() const {return !mark_off.empty();}
+    // in its recording, is this unit's phone preceded / followed by a pause?
+    bool recorded_after_pause(uint32_t id) const {return k_prev>=0&&pau_prev>=0&&u[id].ctx[k_prev]==pau_prev;}
+    bool recorded_before_pause(uint32_t id) const {return k_next>=0&&pau_next>=0&&u[id].ctx[k_next]==pau_next;}
     ~voice();
   private:
     void load_units(const std::string& path);
@@ -84,6 +89,9 @@ namespace fasih_us
     int sr{24000}, jd{13}, nc{0};
     std::vector<unit> u;
     std::vector<std::pair<uint64_t,uint32_t>> utts;
+  public:
+    std::vector<float> utt_pace, utt_lf0;   // log phones per second, log median F0
+  private:
     std::vector<std::string> phones;
     std::unordered_map<std::string,int> phone_ids;
     struct field {std::string name,left,right;};
@@ -91,6 +99,7 @@ namespace fasih_us
     struct ctxdef {std::string name; int clip; std::unordered_map<std::string,int> vals; int field;};
     std::vector<ctxdef> ctxdefs;
     int f_name{-1}, f_prev{-1}, f_next{-1};
+    int k_prev{-1}, k_next{-1}, pau_prev{-1}, pau_next{-1};
     std::unordered_map<uint64_t,std::vector<uint32_t>> index;      // phone,half,neighbour
     std::unordered_map<uint64_t,std::vector<uint32_t>> index_wide; // phone,half (sampled)
     std::vector<uint32_t> empty;
@@ -116,7 +125,7 @@ namespace fasih_us
     double cost{0};
   };
 
-  select_result select_units(const voice& v,const std::vector<target>& t);
+  select_result select_units(const voice& v,const std::vector<target>& t,int64_t exclude_utt=-1);
 
   // concatenate the selected units into 16-bit samples (pauses scaled by pause_scale)
   void concatenate(const voice& v,const select_result& sel,std::vector<float>& out,double pause_scale=1.0);

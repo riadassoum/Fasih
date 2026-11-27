@@ -132,7 +132,7 @@ class FasihVoiceBundle(addonHandler.AddonBundle):
 		self.files = {}
 		self._conf = ConfigObj(configspec=addonHandler.AddonManifest.configspec, encoding="utf-8", default_encoding="utf-8")
 		self._conf["name"] = "RHVoice-voice-fasih-%s" % voice["id"]
-		self._conf["summary"] = "Fasih %s (Arabic voice)" % voice["name"]
+		self._conf["summary"] = ("Fasih %s (premium Arabic voice)" if voice.get("quality") == "premium" else "Fasih %s (Arabic voice)") % voice["name"]
 		self._conf["description"] = voice.get("description", self._conf["summary"])
 		self._conf["author"] = voice.get("author", "Riad Assoum")
 		self._conf["version"] = voice["version"]
@@ -388,7 +388,8 @@ class VoicesDialog(wx.Dialog):
 				status = _("Will be installed after restart") if b.isPendingInstall else _("Not installed")
 			label = voice["name"]
 			if lang.get("fasih"):
-				label = "%s (%s)" % (voice.get("name_ar", voice["name"]) if (languageHandler.getLanguage() or "").startswith("ar") else voice["name"],
+				label = "%s (%s, %s)" % (voice.get("name_ar", voice["name"]) if (languageHandler.getLanguage() or "").startswith("ar") else voice["name"],
+					_("premium") if voice.get("quality") == "premium" else _("compact"),
 					_("female") if voice.get("gender") == "female" else _("male"))
 			self.voiceList.Append((label, status, b.version))
 		if self.bundles:

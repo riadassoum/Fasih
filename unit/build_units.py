@@ -31,7 +31,7 @@ CTX = [
     ("word_pos_in_phrase_bw", 3), ("phrase_pos_in_utt_fw", 3), ("phrase_pos_in_utt_bw", 3),
     ("pos_in_word_fw", 3), ("pos_in_word_bw", 3), ("next_syl_stress", None), ("prev_syl_stress", None),
 ]
-MAGIC = b"FSUV0001"
+MAGIC = b"FSUV0002"
 
 
 def utt_type(text):
@@ -66,6 +66,9 @@ def main():
         texts[u] = t
     # utterance order: work/mono.ssml order == sorted mono names (full_labels.py)
     mono = sorted(n[:-4] for n in os.listdir(os.path.join(W, "mono")) if n.endswith(".lab"))
+    if os.environ.get("KEEP_UTTS"):     # pruned voice: only these recordings (unit/prune.py)
+        keep = set(l.strip() for l in open(os.environ["KEEP_UTTS"]) if l.strip())
+        mono = [m for m in mono if m in keep]
     full_dir = os.path.join(W, "full")
 
     phones = {"pau": 0}
@@ -109,7 +112,10 @@ def main():
 
         base = pos
         audio.write(x.tobytes())
-        utt_tab.append((base, len(x)))
+        nph = sum(1 for (_s, _e, l) in labs if parse.match(l) and parse.match(l).groups()[ni] != "pau")
+        sp = sum((e - s) * 1e-7 for (s, e, l) in labs if parse.match(l) and parse.match(l).groups()[ni] != "pau")
+        lv = lf0[lf0 > -1e9]
+        utt_tab.append((base, len(x), nph / max(sp, 0.1), float(np.median(lv)) if len(lv) else 0.0))
         pos += len(x)
         for (s, e, lab) in labs:
             g = parse.match(lab)
@@ -151,13 +157,15 @@ def main():
         f.write(MAGIC)
         f.write(struct.pack("<IIIII", len(units), len(utt_tab), JD, NC, SR))
         f.write(sd.astype(np.float32).tobytes())
-        for b, n in utt_tab:
-            f.write(struct.pack("<QI", b, n))
+        for b, n, rate, f0m in utt_tab:
+            f.write(struct.pack("<QIff", b, n, rate, f0m))
+        # units: positions relative to their recording, join features in half precision
         for (p, h, u, a, b, ctx, ma, la, mb, lb) in units:
-            f.write(struct.pack("<HBBIQQ", p, h, 0, u, a, b))
+            ub = utt_tab[u][0]
+            f.write(struct.pack("<HBBIII", p, h, 0, u, a - ub, b - ub))
             f.write(np.array(ctx, dtype=np.uint8).tobytes())
-            f.write((ma / sd).astype(np.float32).tobytes()); f.write(struct.pack("<f", la))
-            f.write((mb / sd).astype(np.float32).tobytes()); f.write(struct.pack("<f", lb))
+            f.write((ma / sd).astype(np.float16).tobytes()); f.write(np.float16(la).tobytes())
+            f.write((mb / sd).astype(np.float16).tobytes()); f.write(np.float16(lb).tobytes())
     with open(os.path.join(out, "phones.txt"), "w", encoding="utf-8") as f:
         for p, i in sorted(phones.items(), key=lambda t: t[1]):
             f.write(p + "\n")
@@ -214,13 +222,22 @@ def build_marks(root, out):
     """marks.bin: per utterance (same order as units.bin) uint32 count + uint32 (pos*2+voiced)."""
     W = os.path.join(root, "work")
     mono = sorted(n[:-4] for n in os.listdir(os.path.join(W, "mono")) if n.endswith(".lab"))
+    if os.environ.get("KEEP_UTTS"):
+        keep = set(l.strip() for l in open(os.environ["KEEP_UTTS"]) if l.strip())
+        mono = [m for m in mono if m in keep]
     from multiprocessing import Pool
     with Pool(int(os.environ.get("WORKERS", "2"))) as p:
         res = p.map(_marks_one, [(root, u) for u in mono], 32)
     with open(os.path.join(out, "marks.bin"), "wb") as f:
-        f.write(b"FSPM0001"); f.write(struct.pack("<I", len(res)))
+        f.write(b"FSPM0002"); f.write(struct.pack("<I", len(res)))
         for m in res:
-            f.write(struct.pack("<I", len(m))); f.write(m.astype(np.uint32).tobytes())
+            # value = pos*2+voiced; stored as the first value (u32) then u16 differences
+            m = m.astype(np.int64)
+            d = np.diff(m)
+            assert len(m) == 0 or (d.min() > 0 and d.max() < 65536), "mark gap too large"
+            f.write(struct.pack("<I", len(m)))
+            if len(m):
+                f.write(struct.pack("<I", int(m[0]))); f.write(d.astype(np.uint16).tobytes())
     print("marks", sum(len(m) for m in res))
 
 

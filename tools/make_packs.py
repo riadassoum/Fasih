@@ -2,6 +2,9 @@
 The Fasih voices that are not bundled in the add-on, one zip each (data/ for the engine,
 variants/ for Fasih's quality settings), and voices.json listing them for Tools > Fasih >
 Download voices. Upload everything in OUTDIR to the "voices" release of the repository.
+Compact voices are the HTS voices in voices/. Premium voices are concatenative (unit-selection)
+voices built with unit/train_voice.sh, too large for the repository: list their folders in
+FASIH_PREMIUM (space separated); a voice's NOTICE.md / README.md / about.txt go in its pack.
 Author: Riad Assoum. License: GPL-3.0."""
 import base64, hashlib, json, os, sys, zipfile
 
@@ -49,9 +52,34 @@ for name in sorted(os.listdir(os.path.join(REPO, "voices"))):
             z.writestr("variants/gain.txt", "0.7\n")
     data = open(zpath, "rb").read()
     ar, gender, desc = INFO.get(name, (name, "male", ""))
-    voices.append({"id": name.lower(), "name": name, "name_ar": ar, "gender": gender, "description": desc,
+    voices.append({"id": name.lower(), "name": name, "name_ar": ar, "gender": gender, "description": desc, "quality": "compact",
                    "version": VER, "dataUrl": BASE + os.path.basename(zpath),
                    "dataMd5": base64.b64encode(hashlib.md5(data).digest()).decode(), "size": len(data)})
     print("%-8s %6.1f MB" % (name, len(data) / 1e6))
+# premium voices: the voice folder itself is data/
+PREMIUM_FILES = ("voice.info", "voice.params", "units.bin", "audio.opa", "marks.bin", "layout.txt", "phones.txt", "context.txt", "weights.txt")
+for src in os.environ.get("FASIH_PREMIUM", "").split():
+    info = dict(l.strip().split("=", 1) for l in open(os.path.join(src, "voice.info"), encoding="utf-8") if "=" in l)
+    name = info["name"]
+    if ONLY and name not in ONLY:
+        continue
+    zpath = os.path.join(OUT, "Fasih-voice-%s.zip" % name)
+    with zipfile.ZipFile(zpath, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
+        for f in PREMIUM_FILES:
+            if os.path.exists(os.path.join(src, f)):
+                # the Opus audio does not compress further: store it
+                z.write(os.path.join(src, f), "data/" + f, compress_type=zipfile.ZIP_STORED if f == "audio.opa" else zipfile.ZIP_DEFLATED)
+        for f in ("NOTICE.md", "README.md"):
+            if os.path.exists(os.path.join(src, f)):
+                z.write(os.path.join(src, f), f)
+    data = open(zpath, "rb").read()
+    about = {}
+    if os.path.exists(os.path.join(src, "about.txt")):
+        about = dict(l.rstrip("\n").split("=", 1) for l in open(os.path.join(src, "about.txt"), encoding="utf-8") if "=" in l)
+    voices.append({"id": name.lower(), "name": name, "name_ar": about.get("name_ar", name), "gender": info.get("gender", "male"),
+                   "description": about.get("description", "Premium concatenative voice."), "quality": "premium",
+                   "version": VER, "dataUrl": BASE + os.path.basename(zpath),
+                   "dataMd5": base64.b64encode(hashlib.md5(data).digest()).decode(), "size": len(data)})
+    print("%-8s %6.1f MB (premium)" % (name, len(data) / 1e6))
 json.dump({"version": 1, "voices": voices}, open(os.path.join(OUT, "voices.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
 print("voices.json:", len(voices), "voices")

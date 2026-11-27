@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <cstdint>
 #include <cstring>
+#include <algorithm>
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -21,8 +22,22 @@ int main(int argc,char** argv)
   uint32_t nutt=hdr[1], jd=hdr[2], sr=hdr[4];
   u.seekg(4*jd,std::ios::cur);
   std::vector<std::pair<uint64_t,uint32_t>> utts(nutt);
-  for(auto& x: utts){u.read((char*)&x.first,8);u.read((char*)&x.second,4);}
+  for(auto& x: utts){u.read((char*)&x.first,8);u.read((char*)&x.second,4); float pf[2]; u.read((char*)pf,8);}
+  // audio no unit can reach (pauses, leading and trailing silence) is encoded as digital silence
+  uint32_t nu=hdr[0], nc=hdr[3];
+  std::vector<std::vector<std::pair<uint32_t,uint32_t>>> keep(nutt);
+  {
+    const uint32_t M=sr/8;   // 125 ms around every unit: joins, ramps, releases and onsets stay intact
+    for(uint32_t i=0;i<nu;++i)
+      {
+        char rec[16]; u.read(rec,16);
+        uint32_t ut,a0,b0; std::memcpy(&ut,rec+4,4); std::memcpy(&a0,rec+8,4); std::memcpy(&b0,rec+12,4);
+        u.seekg(nc+4*(jd+1),std::ios::cur);
+        keep[ut].push_back({a0>M?a0-M:0,b0+M});
+      }
+  }
   std::ifstream a(dir+"/audio.pcm",std::ios::binary);
+  uint64_t zeroed=0, totals=0;
   int err=0;
   OpusEncoder* enc=opus_encoder_create(sr,1,OPUS_APPLICATION_AUDIO,&err);
   if(err!=OPUS_OK){std::cerr<<"encoder: "<<opus_strerror(err)<<"\n";return 1;}
@@ -47,6 +62,12 @@ int main(int argc,char** argv)
       x.assign(utts[i].second,0);
       a.seekg(std::streamoff(utts[i].first*2));
       a.read((char*)x.data(),2*std::streamsize(x.size()));
+      {
+        std::vector<char> k(x.size(),0);
+        for(auto& r: keep[i]) for(uint32_t p=r.first;p<std::min<uint32_t>(r.second,x.size());++p) k[p]=1;
+        for(size_t p=0;p<x.size();++p) if(!k[p]){ x[p]=0; ++zeroed; }
+        totals+=x.size();
+      }
       size_t need=x.size()+la; size_t nf=(need+FR-1)/FR;
       x.resize(nf*FR,0);
       // per-utterance block: u32 frame offsets (relative to the block, nf+1 of them), then packets
@@ -69,5 +90,6 @@ int main(int argc,char** argv)
   for(uint32_t i=0;i<nutt;++i){ std::fwrite(&uoff[i],8,1,o); std::fwrite(&ufr[i],4,1,o); std::fwrite(&utts[i].second,4,1,o);}
   std::fclose(o);
   opus_encoder_destroy(enc);
+  std::cerr<<"silenced "<<100.0*zeroed/std::max<uint64_t>(totals,1)<<"% of the audio (never used)\n";
   std::cerr<<"done: "<<total/1048576.0<<" MB of packets, lookahead "<<la<<"\n";
 }
