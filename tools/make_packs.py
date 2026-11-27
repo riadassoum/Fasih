@@ -63,7 +63,8 @@ for src in os.environ.get("FASIH_PREMIUM", "").split():
     name = info["name"]
     if ONLY and name not in ONLY:
         continue
-    zpath = os.path.join(OUT, "Fasih-voice-%s.zip" % name)
+    slug = name.lower().replace(" ", "-")
+    zpath = os.path.join(OUT, "Fasih-voice-%s.zip" % name.replace(" ", "-"))
     with zipfile.ZipFile(zpath, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         for f in PREMIUM_FILES:
             if os.path.exists(os.path.join(src, f)):
@@ -76,7 +77,7 @@ for src in os.environ.get("FASIH_PREMIUM", "").split():
     about = {}
     if os.path.exists(os.path.join(src, "about.txt")):
         about = dict(l.rstrip("\n").split("=", 1) for l in open(os.path.join(src, "about.txt"), encoding="utf-8") if "=" in l)
-    voices.append({"id": name.lower(), "name": name, "name_ar": about.get("name_ar", name), "gender": info.get("gender", "male"),
+    voices.append({"id": slug, "name": name, "name_ar": about.get("name_ar", name), "gender": info.get("gender", "male"),
                    "description": about.get("description", "Premium concatenative voice."), "quality": "premium",
                    "version": VER, "dataUrl": BASE + os.path.basename(zpath),
                    "dataMd5": base64.b64encode(hashlib.md5(data).digest()).decode(), "size": len(data)})
