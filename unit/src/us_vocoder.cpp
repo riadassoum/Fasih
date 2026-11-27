@@ -186,7 +186,7 @@ namespace fasih_us
     if(p->env) p->api->ReleaseEnv(p->env);
   }
 
-  void vocoder::process(const std::vector<float>& x,const std::vector<size_t>& joins,const std::vector<float>& left,std::vector<float>& out)
+  void vocoder::process(const std::vector<float>& x,const std::vector<size_t>& joins,const std::vector<float>& left,std::vector<float>& out,bool join_only)
   {
     // left context so that a streamed piece continues seamlessly from what was already spoken
     const size_t ctx=std::min<size_t>(left.size(),size_t(H)*24);
@@ -214,6 +214,24 @@ namespace fasih_us
     std::vector<float> y=p->synth(m,T);
     out.assign(x.size(),0.0f);
     for(size_t i=0;i<x.size()&&i+ctx<y.size();++i) out[i]=y[i+ctx];
+    // join-only smoothing (voice weight "vocoder 2", or FASIH_VOCODER_JOINS=1): the real recording is kept
+    // everywhere except about 20 ms around each join, where the vocoder's version takes over with short
+    // ramps, so the joins are smoothed and the rest of the sound is untouched
+    if(join_only)
+      {
+        const long R=24000L*20/1000, F=24000L*6/1000, n=long(x.size());
+        std::vector<float> w(x.size(),0.0f);
+        for(size_t j: joins)
+          {
+            long c=long(j);
+            for(long i=std::max(0L,c-R-F);i<std::min(n,c+R+F);++i)
+              {
+                long d=std::labs(i-c); float v=(d<=R)?1.0f:float(R+F-d)/float(F);
+                w[size_t(i)]=std::max(w[size_t(i)],v);
+              }
+          }
+        for(size_t i=0;i<x.size();++i) out[i]=w[i]*out[i]+(1.0f-w[i])*x[i];
+      }
     // where the original is digital silence (pauses), keep it silent: the vocoder may leave faint noise
     const size_t W=H;
     for(size_t s=0;s+W<=x.size();s+=W)

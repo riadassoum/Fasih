@@ -240,7 +240,7 @@ namespace RHVoice
             if(!db->has_mel()&&voc&&!vocoder_off())
               {
                 std::vector<float> y;
-                try { voc->process(out,jn,spoken_audio,y); out.swap(y); } catch(...) {}
+                try { voc->process(out,jn,spoken_audio,y,db->get_weights().vocoder>=2||(std::getenv("FASIH_VOCODER_JOINS")&&std::string(std::getenv("FASIH_VOCODER_JOINS"))=="1")); out.swap(y); } catch(...) {}
               }
             spoken_audio.insert(spoken_audio.end(),out.begin(),out.end());
             if(spoken_audio.size()>8192) spoken_audio.erase(spoken_audio.begin(),spoken_audio.end()-8192);
