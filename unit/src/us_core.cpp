@@ -221,6 +221,7 @@ namespace fasih_us
         else if(p[0]=="join_pace") w.join_pace=v;
         else if(p[0]=="level_db") w.level_db=v;
         else if(p[0]=="join_smooth") w.join_smooth=v;
+        else if(p[0]=="rate") w.rate=v;
         else if(p[0]=="join_register") w.join_register=v;
         else if(p[0]=="join_vuv") w.join_vuv=v;
         else if(p[0]=="join_base_mid") w.join_base_mid=v;

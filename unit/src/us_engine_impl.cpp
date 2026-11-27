@@ -155,7 +155,8 @@ namespace RHVoice
       for(int k=first_target[l];k<first_target[l+1];++k) lab_of[k]=l;
     std::vector<label_sequence::iterator> labs;
     for(auto it=input->lbegin();it!=input->lend();++it) labs.push_back(it);
-    const double speed=(rate>0)?rate:1.0;
+    // the voice's own rate factor (weights.txt "rate"), so premium voices speak at the same pace as the others
+    const double speed=((rate>0)?rate:1.0)*(db->get_weights().rate>0?db->get_weights().rate:1.0);
     const double pitch=std::exp(pitch_shift);
     const bool mod=std::fabs(speed-1.0)>1e-3||std::fabs(pitch-1.0)>1e-3;
     sonicStream sn=nullptr;

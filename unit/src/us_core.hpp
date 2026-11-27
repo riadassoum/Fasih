@@ -45,7 +45,7 @@ namespace fasih_us
   struct weights
   {
     double ctx[NC_MAX];
-    double join_base_stop=4.0, join_creak=2.5, join_spec=1.0, join_energy=1.0, join_pace=3.0, join_register=4.0, level_db=0.0, join_smooth=1.0, join_f0=6.0, join_vuv=2.0, join_base_mid=0.6, join_base_edge=1.2;
+    double join_base_stop=4.0, join_creak=2.5, join_spec=1.0, join_energy=1.0, join_pace=3.0, join_register=4.0, level_db=0.0, join_smooth=1.0, rate=1.0, join_f0=6.0, join_vuv=2.0, join_base_mid=0.6, join_base_edge=1.2;
     double target=1.0, join=1.0;
     int max_cands=60;
     double vocoder=0;   // 1: neural smoothing when installed
