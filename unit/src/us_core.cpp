@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstring>
 #include <limits>
+#include <map>
 #include <cstdio>
 #include <cstdlib>
 #ifdef FASIH_US_OPUS
@@ -114,6 +115,7 @@ namespace fasih_us
     try{ load_weights(join_path(dir,"weights.txt")); } catch(...) {}
     try{ load_marks(join_path(dir,"marks.bin")); } catch(...) {mark_off.clear();}
     try{ load_models(join_path(dir,"models.bin")); } catch(...) {trees.clear(); questions.clear();}
+    try{ load_phonesim(join_path(dir,"phonesim.txt")); } catch(...) {sim.clear();}
     build_index();
   }
 
@@ -167,6 +169,13 @@ namespace fasih_us
         auto it=ctxdefs[k].vals.find("pau");
         if(ctxdefs[k].name=="prev_name"){k_prev=k; pau_prev=(it==ctxdefs[k].vals.end())?-1:it->second;}
         if(ctxdefs[k].name=="next_name"){k_next=k; pau_next=(it==ctxdefs[k].vals.end())?-1:it->second;}
+      }
+    ctx_side.assign(nc,0);
+    for(int k=0;k<nc;++k)
+      {
+        const std::string& n=ctxdefs[k].name;
+        if(n=="prev_name"||n=="prev_prev_name"||n=="prev_syl_stress") ctx_side[k]=-1;
+        if(n=="next_name"||n=="next_next_name"||n=="next_syl_stress") ctx_side[k]=1;
       }
     if(nc>NC_MAX) throw std::runtime_error("fasih_us: too many context features");
     // default target weights
@@ -246,7 +255,8 @@ namespace fasih_us
       {
         uint16_t p; uint8_t h,pad; uint32_t ut,a,b;
         f.read((char*)&p,2); f.read((char*)&h,1); f.read((char*)&pad,1); f.read((char*)&ut,4); f.read((char*)&a,4); f.read((char*)&b,4);
-        x.phone=p; x.half=h; x.utt=ut; x.quality=pad; x.start=utts[ut].first+a; x.end=utts[ut].first+b;
+        x.phone=p; x.half=h; x.utt=ut; x.quality=pad;
+        x.logdur=float(std::log(double(std::max<uint32_t>(b>a?b-a:1,1)))); x.start=utts[ut].first+a; x.end=utts[ut].first+b;
         std::memset(x.ctx,0,sizeof(x.ctx));
         f.read((char*)x.ctx,nc);
         f.read((char*)hb.data(),2*(jd+1)); for(uint32_t i=0;i<jd;++i) x.jl[i]=hb[i]; x.lf0l=h2f(hb[jd]);
@@ -381,6 +391,36 @@ namespace fasih_us
     if(!f) throw std::runtime_error("truncated models");
   }
 
+  void voice::load_phonesim(const std::string& path)
+  {
+    auto f=open_in(path); std::string a,b; float c;
+    std::map<std::pair<std::string,std::string>,float> m;
+    is_vowel.assign(phones.size(),0);
+    std::string line;
+    while(std::getline(f,line))
+      {
+        std::istringstream is(line);
+        if(line.rfind("#vowels",0)==0){ is>>a; while(is>>a){ int id=phone_id(a); if(id>=0) is_vowel[id]=1; } continue; }
+        if(is>>a>>b>>c) m[{a,b}]=c;
+      }
+    sim.assign(nc,{}); sim_n.assign(nc,0);
+    for(int k=0;k<nc;++k)
+      {
+        const std::string& n=ctxdefs[k].name;
+        if(n!="prev_name"&&n!="next_name"&&n!="prev_prev_name"&&n!="next_next_name") continue;
+        int N=ctxdefs[k].vals.size(); sim_n[k]=N;
+        std::vector<std::string> inv(N);
+        for(auto& kv: ctxdefs[k].vals) inv[kv.second]=kv.first;
+        sim[k].assign(size_t(N)*N,1.0f);
+        for(int i=0;i<N;++i) for(int j=0;j<N;++j)
+          {
+            if(i==j){sim[k][size_t(i)*N+j]=0; continue;}
+            auto it=m.find({inv[i],inv[j]});
+            if(it!=m.end()) sim[k][size_t(i)*N+j]=it->second;
+          }
+      }
+  }
+
   const float* voice::predict(int ti,const std::vector<std::string>& v,int half,char utt_type) const
   {
     const tree& t=trees[ti];
@@ -422,7 +462,7 @@ namespace fasih_us
         auto& wide=index_wide[key3(x.phone,x.half,-2)];
         wide.push_back(i);
       }
-    // keep the wide lists short: an even sample
+    // keep the wide lists short: an even sample (contiguous context copies are made below)
     for(auto& kv: index_wide)
       {
         auto& v=kv.second;
@@ -433,6 +473,17 @@ namespace fasih_us
             v.swap(s);
           }
       }
+    for(auto* m: {&index,&index_wide})
+      for(auto& kv: *m)
+        {
+          auto& c=pool_ctx[&kv.second]; c.resize(kv.second.size()*size_t(nc));
+          for(size_t i=0;i<kv.second.size();++i) std::memcpy(&c[i*nc],u[kv.second[i]].ctx,nc);
+        }
+  }
+  const uint8_t* voice::candidate_ctx(const std::vector<uint32_t>& pool) const
+  {
+    auto it=pool_ctx.find(&pool);
+    return it==pool_ctx.end()?nullptr:it->second.data();
   }
 
   int voice::phone_id(const std::string& p) const
@@ -513,7 +564,23 @@ namespace fasih_us
 
   namespace
   {
-    double target_cost(const voice& v,const target& t,const unit& x)
+    // cost of one context feature of a unit (value val) against a target whose feature k is known
+    double feature_cost(const voice& v,const target& t,int k,uint8_t val)
+    {
+      const weights& w=v.get_weights();
+      if(w.ctx[k]==0||t.ctx[k]==val) return 0;
+      double side=1.0;
+      if(v.ctx_side[k])
+        {
+          bool vowel=!v.is_vowel.empty()&&t.phone>=0&&t.phone<int(v.is_vowel.size())&&v.is_vowel[t.phone];
+          side=vowel?1.25:(((v.ctx_side[k]<0)==(t.half==0))?1.5:0.5);
+        }
+      double m=1.0;
+      if(!v.sim.empty()&&v.sim_n[k]&&t.ctx[k]<v.sim_n[k]&&val<v.sim_n[k]) m=v.sim[k][size_t(t.ctx[k])*v.sim_n[k]+val];
+      return w.ctx[k]*side*m;
+    }
+
+    double target_cost(const voice& v,const target& t,const unit& x,bool ling_only=false)
     {
       const weights& w=v.get_weights();
       double c=0;
@@ -521,14 +588,20 @@ namespace fasih_us
       for(int k=0;k<nc;++k)
         {
           if(w.ctx[k]==0) continue;
-          if(!t.known[k]||t.ctx[k]!=x.ctx[k]) c+=w.ctx[k];
+          if(!t.known[k])
+            {
+              double side=1.0;
+              if(v.ctx_side[k]){ bool vowel=!v.is_vowel.empty()&&t.phone>=0&&t.phone<int(v.is_vowel.size())&&v.is_vowel[t.phone];
+                side=vowel?1.25:(((v.ctx_side[k]<0)==(t.half==0))?1.5:0.5);}
+              c+=w.ctx[k]*side; continue;
+            }
+          c+=feature_cost(v,t,k,x.ctx[k]);
         }
-      if(!t.pred) return c;
+      if(!t.pred||ling_only) return c;
       // hybrid: distance to the statistical predictions, in units of the models' own spread
       const auto& T=v.trees;
       double d=c*w.ling;
-      double du=std::log(double(std::max<uint64_t>(x.end-x.start,1)));
-      d+=w.dur*std::fabs(du-t.pdur)/T[0].sd[0];
+      d+=w.dur*std::fabs(x.logdur-t.pdur)/T[0].sd[0];
       if(x.lf0l>0&&x.lf0r>0) d+=w.f0*std::fabs(0.5*(x.lf0l+x.lf0r)-t.plf0)/T[1].sd[0];
       double e=0; int n=std::min<int>(v.jdim(),T[2].dim);
       for(int i=0;i<n;++i){ double z=(0.5*(half_to_float(x.jl[i])+half_to_float(x.jr[i]))-t.pspec[i])/T[2].sd[i]; e+=z*z; }
@@ -560,6 +633,19 @@ namespace fasih_us
     }
   }
 
+  namespace
+  {
+    double target_cost_base(const voice& v,const target& t)
+    {
+      const weights& w=v.get_weights(); double c=0;
+      for(int k=0;k<v.nctx();++k) if(w.ctx[k]!=0&&!t.known[k]){ double side=1.0;
+          if(v.ctx_side[k]){ bool vowel=!v.is_vowel.empty()&&t.phone>=0&&t.phone<int(v.is_vowel.size())&&v.is_vowel[t.phone];
+            side=vowel?1.25:(((v.ctx_side[k]<0)==(t.half==0))?1.5:0.5);}
+          c+=w.ctx[k]*side; }
+      return c;
+    }
+  }
+
   select_result select_units(const voice& v,const std::vector<target>& T,int64_t exclude_utt)
   {
     const auto& U=v.units();
@@ -577,7 +663,28 @@ namespace fasih_us
         const auto& pool=v.candidates(t.phone,t.half,t.neighbour);
         std::vector<std::pair<double,uint32_t>> scored;
         scored.reserve(pool.size()+64);
-        for(uint32_t id: pool) if(int64_t(U[id].utt)!=exclude_utt) scored.push_back({target_cost(v,t,U[id]),id});
+        // stage 1: context only, over the whole pool; stage 2: full acoustic cost for the best few hundred
+        // the context cost depends only on the target: one table per half-phone, then lookups per candidate
+        static thread_local std::vector<float> tab; tab.assign(size_t(v.nctx())*256,0.0f);
+        for(int k=0;k<v.nctx();++k)
+          if(t.known[k]) for(int val=0;val<256;++val) tab[size_t(k)*256+val]=float(feature_cost(v,t,k,uint8_t(val)));
+        const int NCX=v.nctx();
+        const uint8_t* pc=v.candidate_ctx(pool);
+        for(size_t pi=0;pi<pool.size();++pi)
+          {
+            uint32_t id=pool[pi];
+            if(exclude_utt>=0&&int64_t(U[id].utt)==exclude_utt) continue;
+            const uint8_t* cx=pc?pc+pi*NCX:U[id].ctx; float c=0;
+            for(int k=0;k<NCX;++k) c+=tab[size_t(k)*256+cx[k]];
+            scored.push_back({double(c)+target_cost_base(v,t),id});
+          }
+        const size_t PRE=400;
+        if(t.pred&&scored.size()>PRE)
+          {
+            std::nth_element(scored.begin(),scored.begin()+PRE,scored.end());
+            scored.resize(PRE);
+          }
+        if(t.pred) for(auto& sc: scored) sc.first=target_cost(v,t,U[sc.second]);
         size_t K=std::min<size_t>(w.max_cands,scored.size());
         std::partial_sort(scored.begin(),scored.begin()+K,scored.end());
         scored.resize(K);
@@ -599,20 +706,66 @@ namespace fasih_us
         for(auto& s: scored){cand[i].push_back(s.second); cost[i].push_back(s.first*w.target);}
         back[i].assign(cand[i].size(),-1);
       }
-    // Viterbi
+    // Viterbi. Join features of every candidate are unpacked once per step; previous candidates are
+    // visited cheapest first, and since a join never costs less than nothing, the scan stops as soon as
+    // a path is already dearer than the best one found: same result as the full search, much faster.
+    const int jd=v.jdim();
+    struct step_feats {std::vector<float> l,r; std::vector<float> lf0l,lf0r,pace,reg; std::vector<uint32_t> utt; std::vector<uint8_t> half;};
+    std::vector<step_feats> F(n);
+    auto unpack=[&](size_t i){
+      step_feats& S=F[i]; size_t c=cand[i].size();
+      S.l.resize(c*jd); S.r.resize(c*jd); S.lf0l.resize(c); S.lf0r.resize(c); S.pace.resize(c); S.reg.resize(c); S.utt.resize(c); S.half.resize(c);
+      for(size_t k=0;k<c;++k)
+        {
+          const unit& x=U[cand[i][k]];
+          for(int d=0;d<jd;++d){ S.l[k*jd+d]=half_to_float(x.jl[d]); S.r[k*jd+d]=half_to_float(x.jr[d]); }
+          S.l[k*jd]*=float(w.join_energy); S.r[k*jd]*=float(w.join_energy);
+          S.lf0l[k]=x.lf0l; S.lf0r[k]=x.lf0r; S.utt[k]=x.utt; S.half[k]=x.half;
+          S.pace[k]=v.utt_pace[x.utt]; S.reg[k]=v.utt_lf0[x.utt];
+        }
+    };
+    for(size_t i=0;i<n;++i) if(T[i].phone>=0) unpack(i);
+    const float inv_jd=1.0f/jd;
     int prev=-1;
+    std::vector<int> order;
     for(size_t i=0;i<n;++i)
       {
         if(T[i].phone<0) continue;
         if(prev>=0&&size_t(prev)==i-1)
           {
+            const step_feats& P=F[prev]; const step_feats& Q=F[i];
+            order.resize(cand[prev].size());
+            for(size_t a=0;a<order.size();++a) order[a]=a;
+            std::sort(order.begin(),order.end(),[&](int x,int y){return cost[prev][x]<cost[prev][y];});
             std::vector<double> nc(cand[i].size(),INF);
             for(size_t b=0;b<cand[i].size();++b)
               {
                 double best=INF; int arg=-1;
-                for(size_t a=0;a<cand[prev].size();++a)
+                const float* yl=&Q.l[b*jd];
+                const double base=(Q.half[b]==1)?w.join_base_mid:w.join_base_edge;
+                for(int a: order)
                   {
-                    double c=cost[prev][a]+w.join*join_cost(v,cand[prev][a],cand[i][b]);
+                    double ca=cost[prev][a];
+                    if(ca>=best) break;
+                    double j;
+                    if(cand[i][b]==cand[prev][a]+1) j=0;
+                    else
+                      {
+                        const float* xr=&P.r[a*jd];
+                        float d=0; for(int k=0;k<jd;++k){ float e=xr[k]-yl[k]; d+=e*e; }
+                        j=w.join_spec*std::sqrt(d*inv_jd);
+                        bool va=P.lf0r[a]>0, vb=Q.lf0l[b]>0;
+                        if(va&&vb) j+=w.join_f0*std::fabs(P.lf0r[a]-Q.lf0l[b])*10.0;
+                        else if(va!=vb) j+=w.join_vuv;
+                        j+=base;
+                        if(P.utt[a]!=Q.utt[b])
+                          {
+                            j+=w.join_pace*std::fabs(P.pace[a]-Q.pace[b]);
+                            if(P.reg[a]>0&&Q.reg[b]>0) j+=w.join_register*std::fabs(P.reg[a]-Q.reg[b]);
+                          }
+                        j*=w.join;
+                      }
+                    double c=ca+j;
                     if(c<best){best=c;arg=a;}
                   }
                 nc[b]=best+cost[i][b]; back[i][b]=arg;
@@ -621,7 +774,6 @@ namespace fasih_us
           }
         else if(prev>=0)
           {
-            // after a pause: start from the best path so far
             double best=*std::min_element(cost[prev].begin(),cost[prev].end());
             for(auto& c: cost[i]) c+=best;
           }

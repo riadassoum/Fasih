@@ -22,6 +22,7 @@ from labels import make_parser
 
 PHONE_FIELDS = ["prev_prev_name", "prev_name", "name", "next_name", "next_next_name"]
 MAGIC = b"FSUM0001"
+UVULAR_EMPH = {"q"}
 
 
 def read_units(path):
@@ -136,6 +137,30 @@ def main():
         zs = np.sqrt((((spec[idx] - ps) / models[2][2]) ** 2).mean(1))
         # only what is beyond normal variation counts: z above 1.5
         score[idx] = np.maximum(zd - 1.5, 0) + np.maximum(zp - 1.5, 0) + np.maximum(zs - 1.5, 0)
+    # acoustic vowel check: is a vowel closer to another vowel than to its own label?
+    rows_ph = np.array([g[names.index("name")] for _, g in vals])
+    vowels = [p for p, at in phones.items() if at.get("vc") == "+"]
+    stats = {}
+    for p in vowels:
+        m = rows_ph == p
+        if m.sum() < 50:
+            continue
+        X = spec[m]; stats[p] = (X.mean(0), X.var(0) + 1e-3)
+    def ll(X, st):
+        mu, var = st
+        return -0.5 * (((X - mu) ** 2) / var + np.log(var)).sum(1)
+    flagged = 0
+    for p, st in stats.items():
+        m = np.where(rows_ph == p)[0]
+        same_len = [o for o in stats if o != p and phones[o].get("vlng") == phones[p].get("vlng")]
+        if not same_len:
+            continue
+        own = ll(spec[m], st)
+        best_other = np.max(np.stack([ll(spec[m], stats[o]) for o in same_len]), 0)
+        margin = own - best_other           # negative: sounds more like another vowel
+        pen = np.clip(-margin / 4.0, 0, 3)  # up to 3, growing with how clearly it sounds like another vowel
+        score[m] += pen.astype(np.float32); flagged += int((margin < 0).sum())
+    print("vowel check: %d vowel units sound closer to another vowel" % flagged)
     print("quality cost: median %.2f, 95%% %.2f, 99%% %.2f" % tuple(np.percentile(score, [50, 95, 99])))
     q = np.clip(np.round(score * 20), 0, 255).astype(np.uint8)     # stored as cost*20 in the unit's spare byte
     with open(os.path.join(vd, "units.bin"), "r+b") as f:
@@ -164,7 +189,33 @@ def main():
             f.write(T.children_left.astype(np.int32).tobytes())
             f.write(T.children_right.astype(np.int32).tobytes())
             f.write(T.value.reshape(T.node_count, dim).astype(np.float32).tobytes())
-    print("models.bin written")
+    # phonetic substitution costs between context phones (used when a unit's recorded neighbour differs)
+    feats_ = ["vc", "cplace", "ctype", "cvox", "emph", "vheight", "vfront", "vlng"]
+    allp = sorted(phones) + ["pau"]
+    with open(os.path.join(vd, "phonesim.txt"), "w", encoding="utf-8") as f:
+        # vowels are coloured by both neighbours along their whole length
+        f.write("#vowels %s\n" % " ".join(p for p in sorted(phones) if phones[p].get("vc") == "+"))
+        for a in allp:
+            for b in allp:
+                if a == b:
+                    continue
+                if "pau" in (a, b):
+                    c = 1.5
+                else:
+                    A, B = phones[a], phones[b]
+                    keys = [k for k in feats_ if k in A or k in B]
+                    diff = sum(A.get(k) != B.get(k) for k in keys) / max(len(keys), 1)
+                    c = 0.35 + 0.65 * diff
+                    # pharyngealised consonants colour neighbouring vowels strongly (emphasis spreading);
+                    # q is marked emphatic in the phoneme set but, being uvular, colours far less
+                    pa = A.get("emph") == "+" and a not in UVULAR_EMPH
+                    pb = B.get("emph") == "+" and b not in UVULAR_EMPH
+                    if pa != pb:
+                        c += 1.0
+                    elif A.get("emph", "-") != B.get("emph", "-"):
+                        c += 0.3
+                f.write("%s %s %.3f\n" % (a, b, c))
+    print("models.bin and phonesim.txt written")
 
 
 if __name__ == "__main__":

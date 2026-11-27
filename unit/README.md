@@ -8,6 +8,7 @@ Everything in front of the voice is Fasih's: the Arabic text processing (Rawi or
 
 1. RHVoice turns the text into full-context phone labels, exactly as for Fasih's other voices.
 2. `select_units` (in `src/us_core.cpp`) finds candidates for every half-phone: units of the same phone whose neighbouring phone matches, scored on the context (neighbours two phones away, stress, position in syllable, word and phrase, phrase-final position, question or exclamation), plus the natural continuations of the previous step's candidates. A Viterbi search then minimises target cost plus join cost (spectral distance, pitch step, voicing change and energy at the join).
+   With `models.bin` the search is hybrid, like the HMM-guided unit selection of the best non-neural systems (USTC's Blizzard Challenge entries from 2007, MaryTTS): context-clustering regression trees trained on the voice's own units predict every half-phone's duration, pitch and spectrum, and candidates are scored against those predictions. Every unit also carries a quality cost (how far it is from what its own context predicts, plus an acoustic check that a vowel really sounds like its label), so theatrical lengthening, misreadings and alignment errors are avoided. When a unit's recorded neighbour differs from the target's, the cost depends on how differently that neighbour colours the sound (`phonesim.txt`), with emphasis spreading from ص ض ط ظ weighed most. Joins at phone boundaries cost much more than joins inside a phone, so nearly every transition between two sounds is one real recorded transition, as in diphone synthesis. Candidates are pre-selected on context (from contiguous per-pool context tables) before the acoustic scoring, and the Viterbi search prunes exactly, which keeps a five-second sentence under about 100 ms.
 3. `concatenate` joins the chosen pieces. At each join it searches ±5 ms for the best waveform match and cross-fades over 10 ms. Where the pitch on the two sides differs, both sides are bent towards each other over 45 ms with TD-PSOLA, using the pitch marks stored with the voice.
 4. Pauses cut the search, so each phrase is played as soon as it is ready. Rate and pitch changes are pitch-synchronous (sonic), and rate boost works as in Fasih.
 
@@ -20,6 +21,8 @@ Everything in front of the voice is Fasih's: the Arabic text processing (Rawi or
 | `audio.opa` | the recordings, Opus 56 kbps, one independent stream per recording with a frame table for random access |
 | `marks.bin` | pitch marks (epochs) of every recording |
 | `layout.txt`, `context.txt`, `phones.txt` | how to read RHVoice's labels, and the context vocabulary |
+| `models.bin` | duration, pitch and spectrum trees for the hybrid target cost |
+| `phonesim.txt` | phonetic substitution costs between context phones |
 | `weights.txt` | optional cost weights (`join_f0 12`, `max_cands 100`, any context feature by name) |
 
 `audio.pcm` (16-bit, 24 kHz) is the uncompressed audio. The engine uses it when `audio.opa` is absent; it is only needed to re-encode.

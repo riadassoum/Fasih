@@ -25,6 +25,7 @@ namespace fasih_us
     uint16_t jl[JD_MAX];            // join features at the start (half precision)
     uint16_t jr[JD_MAX];            // and at the end
     float lf0l, lf0r;               // log F0 at the edges (<=0: unvoiced)
+    float logdur;                   // log length in samples
   };
 
   struct target
@@ -57,6 +58,8 @@ namespace fasih_us
     bool parse_label(const std::string& lab, char utt_type, target& left, target& right) const;
     const std::vector<unit>& units() const {return u;}
     const std::vector<uint32_t>& candidates(int phone,int half,int neighbour) const;
+    // the context bytes of a candidate list, contiguous (nctx per candidate), for fast scanning
+    const uint8_t* candidate_ctx(const std::vector<uint32_t>& pool) const;
     int16_t sample(uint64_t pos) const;
     // samples [a,b) (global positions inside recording utt) as floats in [-1,1)
     void read(uint32_t utt,uint64_t a,uint64_t b,float* out) const;
@@ -88,12 +91,17 @@ namespace fasih_us
     void build_index();
     void load_marks(const std::string& path);
     void load_models(const std::string& path);
+    void load_phonesim(const std::string& path);
   public:
     struct question {int type; int field; std::unordered_map<std::string,int> set;};
     struct tree {uint32_t dim; std::vector<float> sd; std::vector<int32_t> feat,left,right; std::vector<float> thr,val;};
     std::vector<question> questions;
     std::vector<tree> trees;      // duration, pitch, spectrum
     bool has_models() const {return trees.size()==3;}
+    // phonetic substitution cost for phone-name context features: sim[k] is n*n over that feature's vocabulary
+    std::vector<std::vector<float>> sim; std::vector<int> sim_n;
+    std::vector<int> ctx_side;
+    std::vector<char> is_vowel;  // by phone id   // -1 previous side, +1 next side, 0 other
     const float* predict(int t,const std::vector<std::string>& v,int half,char utt_type) const;
   private:
     std::vector<uint32_t> mark_data;
@@ -116,6 +124,7 @@ namespace fasih_us
     std::unordered_map<uint64_t,std::vector<uint32_t>> index;      // phone,half,neighbour
     std::unordered_map<uint64_t,std::vector<uint32_t>> index_wide; // phone,half (sampled)
     std::vector<uint32_t> empty;
+    std::unordered_map<const std::vector<uint32_t>*,std::vector<uint8_t>> pool_ctx;
     weights w;
     // audio: memory-mapped or read into memory
     const int16_t* pcm{nullptr};
