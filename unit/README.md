@@ -46,8 +46,9 @@ The vocoder (the Vocos model, its mel filterbank and ONNX Runtime as `fasih_ort.
 A corpus is `metadata.csv` (`id|text` per line) plus `wavs/ID.wav`, from one speaker, recorded consistently. Five hours is a minimum and ten or more is better. Arabic text must be fully diacritized; for a corpus without tashkeel, run it through Fasih's text pipeline (Rawi) first.
 
 ```
-OPUS_SRC=~/opus unit/build_engine.sh ~/rhv linux                  # RHVoice + backend, label maker, tools
-RHV_BUILD=~/rhv/b unit/train_voice.sh NAME CORPUS WORKDIR Arabic male
+bash unit/build_engine.sh                      # RHVoice + backend, label maker, tools, in build/
+unit/train_voice.sh NAME CORPUS WORKDIR Arabic male
+bash unit/prune_voice.sh WORKDIR NAME          # optional: drop the units the voice never chooses
 ```
 
 `train_voice.sh` resamples to 24 kHz, makes the labels with Fasih's Arabic language, extracts pitch and spectrum, aligns the phones with Fasih's own HMM aligner (`scripts/align.py`), builds the unit database, the pitch marks and the Opus audio, and writes the voice to `WORKDIR/voice/NAME`. Every stage is resumable. Set `RHV_F0_MIN` and `RHV_F0_MAX` for the speaker's pitch range (defaults 60–400 Hz).
@@ -57,7 +58,7 @@ RHV_BUILD=~/rhv/b unit/train_voice.sh NAME CORPUS WORKDIR Arabic male
 Use the same script with `English` (RHVoice's English language, as for Evan and Bdl) or `French` (Fasih's French language):
 
 ```
-RHV_BUILD=~/rhv/b RHV_F0_MIN=60 RHV_F0_MAX=300 unit/train_voice.sh NAME CORPUS WORKDIR English male
+RHV_F0_MIN=60 RHV_F0_MAX=300 unit/train_voice.sh NAME CORPUS WORKDIR English male
 ```
 
 The context features are read from each language's `labelling.xml`, so nothing else changes. With an Arabic unit voice as the primary voice and an English unit voice as the secondary, RHVoice switches between them by script, exactly as Fasih does.
@@ -67,9 +68,9 @@ The context features are read from each language's `labelling.xml`, so nothing e
 Fasih has two kinds of Arabic voices. The compact voices are the HTS voices (a few megabytes each): Riad, Aseel and Elise come with the add-on, and the others are voice packs. The premium voices are unit voices (a few hundred megabytes each), offered only as voice packs in Tools > Fasih > Download voices, from the "voices" release. Both kinds run in the same engine, so any of them can be paired with Fasih's English and French voices.
 
 ```
-OPUS_SRC=~/opus unit/build_engine.sh ~/rhv windows      # RHVoice.dll + libRHVoice_core.dll (zig 0.13)
-cp ~/rhv/bw/src/lib/libRHVoice.dll third_party/rhvoice-win-x64/RHVoice.dll
-cp ~/rhv/bw/src/core/libRHVoice_core.dll third_party/rhvoice-win-x64/
+bash unit/build_engine.sh "" windows      # RHVoice.dll + libRHVoice_core.dll (zig 0.13)
+cp build/rhvoice/bw/src/lib/libRHVoice.dll third_party/rhvoice-win-x64/RHVoice.dll
+cp build/rhvoice/bw/src/core/libRHVoice_core.dll third_party/rhvoice-win-x64/
 FASIH_PREMIUM="WORKDIR/voice/NAME" python3 tools/make_packs.py VERSION OUTDIR   # packs + voices.json for the release
 ```
 
@@ -77,7 +78,7 @@ FASIH_PREMIUM="WORKDIR/voice/NAME" python3 tools/make_packs.py VERSION OUTDIR   
 
 ### Size
 
-Nothing that changes the sound is used to make a voice smaller. `compact_voice.py`, the last training step, stores each boundary between neighbouring units once (99% of unit edges are shared) and the audio frame table as 16-bit packet sizes; the engine produces bit-identical audio from either form. Join features are stored in half precision, pitch marks as differences, and audio no unit can reach as digital silence. A lower Opus bitrate or dropping the least-used recordings would each save more, but both measurably change the result (higher spectral distortion below 56 kbps; about 14% higher selection cost and 6% more joins with a fifth of the recordings removed), so neither is done.
+Nothing that audibly changes the sound is used to make a voice smaller. `compact_voice.py`, the last training step, stores each boundary between neighbouring units once (99% of unit edges are shared) and the audio frame table as 16-bit packet sizes; the engine produces bit-identical audio from either form. Join features are stored in half precision, pitch marks as differences, and audio no unit can reach as digital silence. Audio is stored at 48 kbps (Opus CELT mode). `prune_voice.sh` then marks the units the voice itself never chooses as removed and drops the audio no kept unit can reach, which makes the shipped voices a quarter to a third smaller with no audible difference; dropping whole recordings instead was measured to raise the selection cost, so it is not done.
 
 ## Credits
 

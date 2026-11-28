@@ -1,4 +1,5 @@
 #!/bin/bash
+REPO=${REPO:-$(cd "$(dirname "$0")/.." && pwd)}
 # One spectrum-model experiment with held-out test.
 # usage: exp.sh ROOT NAME DIM FEATDIR MINOCC MDL [GV]   (GV=1 keeps spectral global variance on)
 set -e
@@ -18,7 +19,7 @@ for f in $B/tree_dur* $B/tree_lf0* $B/tree_bap* $B/leafof_dur* $B/leafof_lf0* $B
 RHV_TRAIN_DIR=$NAME RHV_ONLY_STREAMS=mgc RHV_MIN_OCC_MGC=$MO python3 scripts/train.py trees $MDL | grep "tree mgc" | awk '{s+=$4} END {print "mgc leaves", s}'
 if [ "$GV" = 1 ] && [ ! -s $T/gv.npz ]; then RHV_TRAIN_DIR=$NAME python3 scripts/train.py gv >/dev/null; fi
 V=data/voices/$NAME; mkdir -p $V/24000
-cp ../rhv/voice/bpf.txt $V/24000/
+cp "$REPO/engine/bpf.txt" $V/24000/
 printf "name=$NAME\nlanguage=Arabic\ngender=male\nformat=4\nrevision=1\n" > $V/voice.info
 printf "beta=0.300\ngain=0.7\n" > $V/voice.params
 RHV_TRAIN_DIR=$NAME RHV_VOCODER=world python3 scripts/train.py write $V/24000/voice.data >/dev/null

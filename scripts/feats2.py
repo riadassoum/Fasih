@@ -50,7 +50,8 @@ def harmonic_bap(x, f0, nfft=2048):
 
 def main():
     out, a, b = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
-    ids = [l.strip() for l in open(os.path.join(ROOT, "work", "ids.txt")) if l.strip()][a:b]
+    # the same split as feats.py (sorted file names), so each process only reads pitch it has made itself
+    ids = sorted(l.strip() for l in open(os.path.join(ROOT, "work", "ids.txt")) if l.strip())[a:b]
     for d in ("mgc", "bap", "vuv"):
         os.makedirs(os.path.join(out, d), exist_ok=True)
     for uid in ids:
