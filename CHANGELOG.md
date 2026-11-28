@@ -15,7 +15,7 @@
 ### Reading
 
 - **Normal voices with NVDA in French**: with NVDA's interface in French, and other languages that write decimals with a comma, every voice sounded high-pitched and fast. They now sound as they should.
-- **No more silent sentences**: a sentence that contained a word the voices could not pronounce (for example پ before الـ, as in پِالجبوب, or some rarely used letters) was not spoken at all. Now such a word is left out and the rest of the sentence is read; پ چ ژ ڤ ڨ گ ک ی are read as letters, with their vowels.
+- **No more silent sentences**: a sentence that contained a word the voices could not pronounce (for example one with a rarely used letter) was not spoken at all. Now such a word is left out and the rest of the sentence is read; پ چ ژ ڤ ڨ گ ک ی are read as letters, with their vowels.
 - **Barq 3**: Fasih now uses Barq 3, the newest version of PlanetBlindTech's engine by Shamseddin. In my tests it makes fewer mistakes than 1.3.1's Barq on classical text, Rawi's own test, news and the independent SadeedDiac-25 benchmark, and about as many on modern sentences.
 
 ### Help
