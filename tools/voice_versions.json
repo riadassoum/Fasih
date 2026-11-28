@@ -33,7 +33,7 @@
  },
  "Aseel Premium": {
   "entry": {
-   "dataMd5": "P49amDvDej0MJAEnRfH5sw==",
+   "dataMd5": "/DQbhftTOEF8PHy/RdEARQ==",
    "dataUrl": "https://github.com/riadassoum/Fasih/releases/download/voices/Fasih-voice-Aseel-Premium.zip",
    "description": "A premium voice of real recorded speech: the Aseel Arabic Dataset (MIT) from PlanetBlindTech's BayanTTS, 10,000 sentences.",
    "gender": "male",
@@ -131,7 +131,7 @@
  },
  "Haytham Premium": {
   "entry": {
-   "dataMd5": "tJx7IxFx+ekW4dXmlt3P/g==",
+   "dataMd5": "VZLxZS3+iZAsT/U8pTAFyQ==",
    "dataUrl": "https://github.com/riadassoum/Fasih/releases/download/voices/Fasih-voice-Haytham-Premium.zip",
    "description": "A premium voice of real recorded speech: the recordings Haytham was trained on (generated for Fasih with Google's Gemini text-to-speech), about 7.5 hours.",
    "gender": "male",
@@ -180,7 +180,7 @@
  },
  "Jamal Premium": {
   "entry": {
-   "dataMd5": "yq4KgB1fYShLhHnf0jSO1Q==",
+   "dataMd5": "QWGZiexXx9rNABjR9okS8Q==",
    "dataUrl": "https://github.com/riadassoum/Fasih/releases/download/voices/Fasih-voice-Jamal-Premium.zip",
    "description": "A premium voice of real recorded speech: the ClArTTS recordings (MBZUAI) that Jamal was trained on, about 11 hours of Classical Arabic.",
    "gender": "male",
@@ -229,7 +229,7 @@
  },
  "Leen": {
   "entry": {
-   "dataMd5": "UTm4QOfFbzzSjsKuBPfVuQ==",
+   "dataMd5": "XEoox+gretLDv7QIqW3s0g==",
    "dataUrl": "https://github.com/riadassoum/Fasih/releases/download/voices/Fasih-voice-Leen.zip",
    "description": "Trained on the Leen Arabic Dataset from PlanetBlindTech's BayanTTS (10,000 sentences), with Shamseddin's permission.",
    "gender": "female",
@@ -246,7 +246,7 @@
  },
  "Leen Premium": {
   "entry": {
-   "dataMd5": "xM5ZD2PdpZvieh3BX2htmw==",
+   "dataMd5": "aQ0s4exX2z6YUuWsrzTfew==",
    "dataUrl": "https://github.com/riadassoum/Fasih/releases/download/voices/Fasih-voice-Leen-Premium.zip",
    "description": "A premium voice of real recorded speech: the Leen Arabic Dataset from PlanetBlindTech's BayanTTS, 10,000 sentences.",
    "gender": "female",
@@ -391,7 +391,7 @@
  },
  "Zayd Premium": {
   "entry": {
-   "dataMd5": "5oG/3E/LAt3jyy5ICkJMDg==",
+   "dataMd5": "9EgfD8DxzuWXPVEw5TUCRA==",
    "dataUrl": "https://github.com/riadassoum/Fasih/releases/download/voices/Fasih-voice-Zayd-Premium.zip",
    "description": "A premium voice of real recorded speech: the Zayd recordings that PlanetBlindTech shared for Fasih, about 12.5 hours.",
    "gender": "male",
