@@ -33,7 +33,7 @@
  },
  "Aseel Premium": {
   "entry": {
-   "dataMd5": "f6GmUaP+v59WffZkOnC0fA==",
+   "dataMd5": "XYGJfucNV+943zcp1lnhAQ==",
    "dataUrl": "https://github.com/riadassoum/Fasih/releases/download/voices/Fasih-voice-Aseel-Premium.zip",
    "description": "A premium voice of real recorded speech: the Aseel Arabic Dataset (MIT) from PlanetBlindTech's BayanTTS, 10,000 sentences.",
    "gender": "male",
@@ -131,7 +131,7 @@
  },
  "Haytham Premium": {
   "entry": {
-   "dataMd5": "q6zmkWUeK9kYL17EldR5hA==",
+   "dataMd5": "f2rAeLuT9qvqceCEE15Uow==",
    "dataUrl": "https://github.com/riadassoum/Fasih/releases/download/voices/Fasih-voice-Haytham-Premium.zip",
    "description": "A premium voice of real recorded speech: the recordings Haytham was trained on (generated for Fasih with Google's Gemini text-to-speech), about 7.5 hours.",
    "gender": "male",
@@ -180,7 +180,7 @@
  },
  "Jamal Premium": {
   "entry": {
-   "dataMd5": "/vKqCALg4qyxIPa4loX2yQ==",
+   "dataMd5": "fhmqunFHKB3tnEcfIT7Fug==",
    "dataUrl": "https://github.com/riadassoum/Fasih/releases/download/voices/Fasih-voice-Jamal-Premium.zip",
    "description": "A premium voice of real recorded speech: the ClArTTS recordings (MBZUAI) that Jamal was trained on, about 11 hours of Classical Arabic.",
    "gender": "male",
@@ -246,7 +246,7 @@
  },
  "Leen Premium": {
   "entry": {
-   "dataMd5": "yHgXiYnVHLTbOBiIKEhVbg==",
+   "dataMd5": "dUgy3pGxtsDYqUN1yZna4g==",
    "dataUrl": "https://github.com/riadassoum/Fasih/releases/download/voices/Fasih-voice-Leen-Premium.zip",
    "description": "A premium voice of real recorded speech: the Leen Arabic Dataset from PlanetBlindTech's BayanTTS, 10,000 sentences.",
    "gender": "female",
@@ -391,7 +391,7 @@
  },
  "Zayd Premium": {
   "entry": {
-   "dataMd5": "PZDzUX8uXXEfBnhiby6drA==",
+   "dataMd5": "Sz+8JNFHLFWHVRINmaFlSQ==",
    "dataUrl": "https://github.com/riadassoum/Fasih/releases/download/voices/Fasih-voice-Zayd-Premium.zip",
    "description": "A premium voice of real recorded speech: the Zayd recordings that PlanetBlindTech shared for Fasih, about 12.5 hours.",
    "gender": "male",
