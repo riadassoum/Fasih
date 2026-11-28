@@ -1,3 +1,4 @@
+#include <chrono>
 #include <complex>
 /* Fasih unit-selection core (concatenative, non-neural).
    Copyright (C) 2026 Riad Assoum.  GPL-2.0-or-later, like RHVoice. */
@@ -231,6 +232,8 @@ namespace fasih_us
         else if(p[0]=="target") w.target=v;
         else if(p[0]=="join") w.join=v;
         else if(p[0]=="max_cands") w.max_cands=int(v);
+        else if(p[0]=="preselect") w.preselect=int(v);
+        else if(p[0]=="first_piece") w.first_piece=int(v);
         else if(p[0]=="ling") w.ling=v;
         else if(p[0]=="vocoder") w.vocoder=v;
         else if(p[0]=="dur") w.dur=v;
@@ -799,10 +802,14 @@ namespace fasih_us
     std::vector<std::vector<double>> cost(n);
     std::vector<std::vector<int>> back(n);
     const double INF=std::numeric_limits<double>::infinity();
+    static const bool PROF=std::getenv("FASIH_PROFILE")!=nullptr;
+    double ms_tab=0,ms_scan=0,ms_tc=0,ms_vit=0; auto now=[]{ return std::chrono::steady_clock::now(); };
+    auto el=[](auto a,auto b){ return std::chrono::duration<double,std::milli>(b-a).count(); };
     for(size_t i=0;i<n;++i)
       {
         const target& t=T[i];
         if(t.phone<0) continue;
+        auto q0=now();
         const auto& pool=v.candidates(t.phone,t.half,t.neighbour);
         std::vector<std::pair<double,uint32_t>> scored;
         scored.reserve(pool.size()+64);
@@ -811,25 +818,35 @@ namespace fasih_us
         static thread_local std::vector<float> tab; tab.assign(size_t(v.nctx())*256,0.0f);
         for(int k=0;k<v.nctx();++k)
           if(t.known[k]) for(int val=0;val<256;++val) tab[size_t(k)*256+val]=float(feature_cost(v,t,k,uint8_t(val)));
+        auto q1=now(); ms_tab+=el(q0,q1);
         const int NCX=v.nctx();
         const uint8_t* pc=v.candidate_ctx(pool);
-        for(size_t pi=0;pi<pool.size();++pi)
+        static const int PE=std::getenv("FASIH_PRE")?std::atoi(std::getenv("FASIH_PRE")):0;
+        const size_t PRE=PE>0?size_t(PE):size_t(w.preselect);
+        const double base=target_cost_base(v,t);
+        // (an exact branch-and-bound version of this scan was tried: same result, but slower than this
+        //  plain table-lookup loop, so the plain loop stays)
           {
-            uint32_t id=pool[pi];
-            if(exclude_utt>=0&&int64_t(U[id].utt)==exclude_utt) continue;
-            if(U[id].quality==255) continue;   // pruned from this voice (its audio is gone)
-            const uint8_t* cx=pc?pc+pi*NCX:U[id].ctx; float c=0;
-            for(int k=0;k<NCX;++k) c+=tab[size_t(k)*256+cx[k]];
-            scored.push_back({double(c)+target_cost_base(v,t),id});
+            for(size_t pi=0;pi<pool.size();++pi)
+              {
+                uint32_t id=pool[pi];
+                if(exclude_utt>=0&&int64_t(U[id].utt)==exclude_utt) continue;
+                if(U[id].quality==255) continue;   // pruned from this voice (its audio is gone)
+                const uint8_t* cx=pc?pc+pi*NCX:U[id].ctx; float c=0;
+                for(int k=0;k<NCX;++k) c+=tab[size_t(k)*256+cx[k]];
+                scored.push_back({double(c)+base,id});
+              }
           }
-        const size_t PRE=400;
         if(t.pred&&scored.size()>PRE)
           {
             std::nth_element(scored.begin(),scored.begin()+PRE,scored.end());
             scored.resize(PRE);
           }
+        auto q2=now(); ms_scan+=el(q1,q2);
         if(t.pred) for(auto& sc: scored) sc.first=target_cost(v,t,U[sc.second]);
-        size_t K=std::min<size_t>(w.max_cands,scored.size());
+        ms_tc+=el(q2,now());
+        static const int MC=std::getenv("FASIH_MAX_CANDS")?std::atoi(std::getenv("FASIH_MAX_CANDS")):0;
+        size_t K=std::min<size_t>(MC>0?size_t(MC):size_t(w.max_cands),scored.size());
         std::partial_sort(scored.begin(),scored.begin()+K,scored.end());
         scored.resize(K);
         if(i==0&&prev_unit>=0)
@@ -856,6 +873,7 @@ namespace fasih_us
         for(auto& s: scored){cand[i].push_back(s.second); cost[i].push_back(s.first*w.target);}
         back[i].assign(cand[i].size(),-1);
       }
+    auto qv=now();
     // Viterbi. Join features of every candidate are unpacked once per step; previous candidates are
     // visited cheapest first, and since a join never costs less than nothing, the scan stops as soon as
     // a path is already dearer than the best one found: same result as the full search, much faster.
@@ -975,6 +993,7 @@ namespace fasih_us
             b=a;
           }
       }
+    if(PROF){ ms_vit=el(qv,now()); std::fprintf(stderr,"  %zu targets: context table %.1f ms, pool scan %.1f ms, target cost %.1f ms, viterbi+rest %.1f ms\n",n,ms_tab,ms_scan,ms_tc,ms_vit); }
     return res;
   }
 

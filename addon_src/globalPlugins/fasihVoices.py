@@ -160,6 +160,10 @@ class FasihVoiceBundle(addonHandler.AddonBundle):
 		if t.exists():
 			_untranspose_units(str(t), str(path.joinpath("data", "units.bin")))
 			t.unlink()
+		q = path.joinpath("data", "units.bin.q")
+		if q.exists():
+			_unpack_vq_units(str(q), str(path.joinpath("data", "units.bin")))
+			q.unlink()
 
 	@property
 	def manifest(self):
@@ -167,6 +171,53 @@ class FasihVoiceBundle(addonHandler.AddonBundle):
 
 	def __repr__(self):
 		return "Fasih %s" % self._voice["name"]
+
+
+def _unpack_vq_units(src, dst):
+	"""Premium packs carry the unit table with its fixed fields column by column and its join features as
+	codebook indices (FSUQ0003, tools/make_packs.py); this writes the engine's units.bin (FSUV0003)."""
+	import struct
+	with open(src, "rb") as f:
+		d = f.read()
+	if d[:8] != b"FSUQ0003":
+		raise ValueError("not a quantized unit table")
+	nu, nutt, jd, nc, sr = struct.unpack_from("<IIIII", d, 8)
+	D = jd + 1
+	rec = 16 + nc + 2 * D
+	hl = 28 + 4 * jd + 20 * nutt + (nu + 7) // 8      # the header part copied as is
+	p = hl
+	M, nrest = struct.unpack_from("<II", d, p)
+	p += 8
+	groups = []
+	for _ in range(M):
+		g0, gl = struct.unpack_from("<II", d, p)
+		p += 8
+		w = 2 * gl
+		book = [d[p + i * w:p + (i + 1) * w] for i in range(256)]
+		p += 256 * w
+		groups.append((g0, gl, book))
+	fixed = 16 + nc
+	out = bytearray(hl + nu * rec + nrest * 2 * D)
+	out[:8] = b"FSUV0003"
+	out[8:hl] = d[8:hl]
+	mv = memoryview(d)
+	for j in range(fixed):
+		out[hl + j:hl + nu * rec:rec] = mv[p + j * nu:p + (j + 1) * nu]
+	p += fixed * nu
+	ne = nu + nrest
+	rbase = hl + nu * rec
+	for gi, (g0, gl, book) in enumerate(groups):
+		codes = d[p + gi * ne:p + (gi + 1) * ne]
+		w = 2 * gl
+		piece = b"".join(map(book.__getitem__, codes))   # every edge's bytes for this group
+		for j in range(w):
+			col = piece[j::w]
+			out[hl + fixed + 2 * g0 + j:hl + nu * rec:rec] = col[:nu]
+			if nrest:
+				out[rbase + 2 * g0 + j::2 * D] = col[nu:]
+	with open(dst + ".tmp", "wb") as f:
+		f.write(out)
+	os.replace(dst + ".tmp", dst)
 
 
 def _untranspose_units(src, dst):

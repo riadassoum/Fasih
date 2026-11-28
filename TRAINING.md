@@ -41,6 +41,6 @@ The language can be `Arabic`, `English` or `French`. Set `RHV_F0_MIN` and `RHV_F
 ## Using a voice
 
 - A compact voice goes in `voices/Name` (bundled with the add-on), or into a voice pack: `FASIH_ONLY=Name python3 tools/make_packs.py VERSION OUTDIR`.
-- A premium voice becomes a voice pack: `FASIH_ONLY="Name," FASIH_PREMIUM="$HOME/work/name-premium/voice/Name" python3 tools/make_packs.py VERSION OUTDIR` (several voices: separate their folders with `:`). The unit table travels column by column and the add-on restores it exactly, which makes the pack about 14 MB smaller. Upload everything in OUTDIR to the "voices" release; it appears in Tools > Fasih > Download voices.
+- A premium voice becomes a voice pack: `FASIH_ONLY="Name," FASIH_PREMIUM="$HOME/work/name-premium/voice/Name" python3 tools/make_packs.py VERSION OUTDIR` (several voices: separate their folders with `:`). The unit table travels with its fixed fields column by column and its join features vector-quantized (4 bytes per unit edge); the add-on rebuilds it at install. That makes a pack about 30 MB smaller, with joins measured as smooth as before. Upload everything in OUTDIR to the "voices" release; it appears in Tools > Fasih > Download voices.
 
 How the premium engine works, its files and its options: `unit/README.md`. How compact training works: `BUILD-NOTES.md`.

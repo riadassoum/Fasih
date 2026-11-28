@@ -1,3 +1,5 @@
+#include <chrono>
+#include <cstdio>
 /* Fasih unit-selection backend for RHVoice.
    Copyright (C) 2026 Riad Assoum.  GPL-2.0-or-later, like RHVoice. */
 #include <cmath>
@@ -203,11 +205,16 @@ namespace RHVoice
         // spoken last, so the choice is practically that of the whole phrase
         std::vector<std::size_t> cuts{c0};
         {
-          std::size_t last=c0, minlen=voc?8:12;   // the vocoder costs time per piece: start with a shorter one
+          static const int FP=std::getenv("FASIH_FIRST")?std::atoi(std::getenv("FASIH_FIRST")):0;
+          std::size_t last=c0, minlen=FP>0?std::size_t(FP):(voc?8:std::size_t(db->get_weights().first_piece));
           for(std::size_t k=c0+1;k+8<c1;++k)
             {
               const auto& t=T[k];
-              if(t.phone<0||t.half!=0||db->is_closure.empty()||!db->is_closure[t.phone]) continue;
+              if(t.phone<0||t.half!=0||db->is_closure.empty()) continue;
+              // later pieces start at the silent closure of an unvoiced stop; the first may also start at a
+              // voiced stop, whose closure is a quiet voice bar, so the first sound comes sooner
+              const bool first=cuts.size()==1;
+              if(!db->is_closure[t.phone]&&!(first&&!db->is_stop.empty()&&db->is_stop[t.phone])) continue;
               if(k-last<minlen) continue;
               cuts.push_back(k); last=k; minlen=40;
             }
@@ -221,7 +228,9 @@ namespace RHVoice
             std::size_t a0=cuts[ci], a1=cuts[ci+1];
             std::size_t la=std::min<std::size_t>(c1,a1+(ci+2<cuts.size()?10:0));
             std::vector<fasih_us::target> sub(T.begin()+a0,T.begin()+la);
+            auto tp0=std::chrono::steady_clock::now();
             fasih_us::select_result sel=fasih_us::select_units(*db,sub,-1,spoken);
+            auto tp1=std::chrono::steady_clock::now();
             sel.units.resize(a1-a0); sel.pause_ms.resize(a1-a0);
             for(auto id: sel.units) if(id>=0) spoken=id;
             std::vector<float> out; std::vector<size_t> jn;
@@ -237,6 +246,7 @@ namespace RHVoice
               }
             else
             fasih_us::concatenate(*db,sel,out,1.0,&jn);
+            if(std::getenv("FASIH_PROFILE")){ auto tp2=std::chrono::steady_clock::now(); std::fprintf(stderr,"piece %zu units: select %.1f ms, join %.1f ms\n",a1-a0,std::chrono::duration<double,std::milli>(tp1-tp0).count(),std::chrono::duration<double,std::milli>(tp2-tp1).count()); }
             // neural smoothing (can be switched off without restarting: a file named "off" in the vocoder folder)
             if(!db->has_mel()&&voc&&!vocoder_off())
               {

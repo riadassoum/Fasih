@@ -89,6 +89,6 @@ elif [ ! -s "$V/mel.bin" ]; then
   WORKERS=$W python3 "$HERE/build_mel.py" "$V" | tail -n 1
 fi
 python3 "$HERE/compact_voice.py" "$V" | sed 's/^/   /'   # lossless: shared boundaries, 16-bit frame sizes
-[ -s "$V/weights.txt" ] || printf "join_f0 12\nmax_cands 100\nling 0.5\ndur 0.6\nf0 0.6\nspec 0.4\njoin 1.5\njoin_base_edge 3\nvocoder 0\n" > "$V/weights.txt"
+[ -s "$V/weights.txt" ] || printf "join_f0 12\nmax_cands 60\nling 0.5\ndur 0.6\nf0 0.6\nspec 0.4\njoin 1.5\njoin_base_edge 3\nvocoder 0\n" > "$V/weights.txt"
 printf "name=%s\nlanguage=%s\ngender=%s\nformat=3\nrevision=1\n" "$NAME" "$LANG_" "$GENDER" > "$V/voice.info"
 stage "voice ready: $V (audio.pcm and unit_labels.txt are only needed to rebuild; packs leave them out)"

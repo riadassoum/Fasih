@@ -33,7 +33,7 @@
  },
  "Aseel Premium": {
   "entry": {
-   "dataMd5": "XYGJfucNV+943zcp1lnhAQ==",
+   "dataMd5": "P49amDvDej0MJAEnRfH5sw==",
    "dataUrl": "https://github.com/riadassoum/Fasih/releases/download/voices/Fasih-voice-Aseel-Premium.zip",
    "description": "A premium voice of real recorded speech: the Aseel Arabic Dataset (MIT) from PlanetBlindTech's BayanTTS, 10,000 sentences.",
    "gender": "male",
@@ -42,10 +42,10 @@
    "name_ar": "\u0623\u0635\u064a\u0644",
    "quality": "premium",
    "sampleUrl": "https://github.com/riadassoum/Fasih/releases/download/voices/Fasih-sample-Aseel-Premium.wav",
-   "size": 250566330,
+   "size": 230458718,
    "version": "2.0"
   },
-  "sha256": "38aa834b40617db3a1ce0a0693fd23b4cd3bde694316281b38e15f003a680efe",
+  "sha256": "bb22afb408368a50ba94017e586495b8fdbf193db4ea7eb652a50eeded27e40e",
   "version": "2.0"
  },
  "Bassel": {
@@ -131,7 +131,7 @@
  },
  "Haytham Premium": {
   "entry": {
-   "dataMd5": "f2rAeLuT9qvqceCEE15Uow==",
+   "dataMd5": "tJx7IxFx+ekW4dXmlt3P/g==",
    "dataUrl": "https://github.com/riadassoum/Fasih/releases/download/voices/Fasih-voice-Haytham-Premium.zip",
    "description": "A premium voice of real recorded speech: the recordings Haytham was trained on (generated for Fasih with Google's Gemini text-to-speech), about 7.5 hours.",
    "gender": "male",
@@ -140,10 +140,10 @@
    "name_ar": "\u0647\u064a\u062b\u0645",
    "quality": "premium",
    "sampleUrl": "https://github.com/riadassoum/Fasih/releases/download/voices/Fasih-sample-Haytham-Premium.wav",
-   "size": 157590881,
+   "size": 147059803,
    "version": "2.0"
   },
-  "sha256": "5532080a4713ddc8679531f20f489ceb42c7a74d5273c6dcb9b410e9fb9c9ce6",
+  "sha256": "33b0467ed7689f2496c3ebe21390471502b08965420d059e1212f46aa1bbabd9",
   "version": "2.0"
  },
  "Huda": {
@@ -180,7 +180,7 @@
  },
  "Jamal Premium": {
   "entry": {
-   "dataMd5": "fhmqunFHKB3tnEcfIT7Fug==",
+   "dataMd5": "yq4KgB1fYShLhHnf0jSO1Q==",
    "dataUrl": "https://github.com/riadassoum/Fasih/releases/download/voices/Fasih-voice-Jamal-Premium.zip",
    "description": "A premium voice of real recorded speech: the ClArTTS recordings (MBZUAI) that Jamal was trained on, about 11 hours of Classical Arabic.",
    "gender": "male",
@@ -189,10 +189,10 @@
    "name_ar": "\u062c\u0645\u0627\u0644",
    "quality": "premium",
    "sampleUrl": "https://github.com/riadassoum/Fasih/releases/download/voices/Fasih-sample-Jamal-Premium.wav",
-   "size": 209566164,
+   "size": 191348500,
    "version": "2.0"
   },
-  "sha256": "f3c39178ce67f4005722f3616f680285df13b450c50015874fb541c7b4dd6d4d",
+  "sha256": "8c88e7df4df4f1a1886b9f391dec01e5d7edd8041c0cf495a2126dd4fe0ebdc2",
   "version": "2.0"
  },
  "Karim": {
@@ -246,7 +246,7 @@
  },
  "Leen Premium": {
   "entry": {
-   "dataMd5": "dUgy3pGxtsDYqUN1yZna4g==",
+   "dataMd5": "xM5ZD2PdpZvieh3BX2htmw==",
    "dataUrl": "https://github.com/riadassoum/Fasih/releases/download/voices/Fasih-voice-Leen-Premium.zip",
    "description": "A premium voice of real recorded speech: the Leen Arabic Dataset from PlanetBlindTech's BayanTTS, 10,000 sentences.",
    "gender": "female",
@@ -255,10 +255,10 @@
    "name_ar": "\u0644\u064a\u0646",
    "quality": "premium",
    "sampleUrl": "https://github.com/riadassoum/Fasih/releases/download/voices/Fasih-sample-Leen-Premium.wav",
-   "size": 253066570,
+   "size": 232303780,
    "version": "2.0"
   },
-  "sha256": "fc777d4855dcda64c0d8fb1bed24e1cf2aaeba45f129e14a06aa704641693bdb",
+  "sha256": "1021d78dc1d29e91d9d83687ec3d9bbc717d128c760acd6f19cb3de98abcd9ae",
   "version": "2.0"
  },
  "Nabil": {
@@ -391,7 +391,7 @@
  },
  "Zayd Premium": {
   "entry": {
-   "dataMd5": "Sz+8JNFHLFWHVRINmaFlSQ==",
+   "dataMd5": "5oG/3E/LAt3jyy5ICkJMDg==",
    "dataUrl": "https://github.com/riadassoum/Fasih/releases/download/voices/Fasih-voice-Zayd-Premium.zip",
    "description": "A premium voice of real recorded speech: the Zayd recordings that PlanetBlindTech shared for Fasih, about 12.5 hours.",
    "gender": "male",
@@ -400,10 +400,10 @@
    "name_ar": "\u0632\u064a\u062f",
    "quality": "premium",
    "sampleUrl": "https://github.com/riadassoum/Fasih/releases/download/voices/Fasih-sample-Zayd-Premium.wav",
-   "size": 251384025,
+   "size": 231767721,
    "version": "2.0"
   },
-  "sha256": "6a4909974936cae3c1aa49be272f859d5075783b17f2d3dbc3c78e9993995b64",
+  "sha256": "cdaad06a8eefd36111d00d3dcce9374c1d5ee9c41d6818e1341cad4b5f745440",
   "version": "2.0"
  }
 }

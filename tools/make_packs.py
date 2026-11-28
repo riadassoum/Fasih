@@ -81,6 +81,28 @@ for name in sorted(os.listdir(os.path.join(REPO, "voices"))):
         voices[-1]["sampleUrl"] = rec["entry"]["sampleUrl"]
     rec["entry"] = voices[-1]
     print("%-8s %6.1f MB" % (name, len(data) / 1e6))
+def vq_units(path, M=4):
+    """units.bin (FSUV0003) for a pack (FSUQ0003): fixed fields column by column, and each unit edge's join
+    features as M one-byte codebook indices (product vector quantization, unit/vq_units.py). The add-on
+    rebuilds a normal units.bin from it. Join features only steer the search: in tests on held-out text the
+    joins were as smooth as with the full numbers (Rojc & Mlakar 2019 found the same above 50% compression)."""
+    import struct, numpy as np
+    sys.path.insert(0, os.path.join(REPO, "unit"))
+    from vq_units import load, quantize
+    d, nu, D, nc, rec, h = load(path)
+    fx = np.frombuffer(d, np.uint8, nu * rec, h).reshape(nu, rec)
+    jl = fx[:, 16 + nc:].copy().view("<f2").reshape(nu, D)
+    rest = np.frombuffer(d, "<f2", offset=h + nu * rec).reshape(-1, D)
+    X = np.concatenate([jl, rest]).astype(np.float32)
+    groups, books, codes = quantize(X, M)
+    o = [b"FSUQ0003", d[8:h], struct.pack("<II", M, len(rest))]
+    for g, b in zip(groups, books):
+        o += [struct.pack("<II", int(g[0]), len(g)), b.astype("<f2").tobytes()]
+    o.append(fx[:, :16 + nc].T.copy().tobytes())          # the fixed fields, column by column
+    o.append(codes.T.copy().tobytes())                     # codes, group by group (left edges, then the rest)
+    return b"".join(o)
+
+
 def transpose_units(path):
     """units.bin (FSUV0003) with its fixed-size unit records stored column by column (FSUT0003)."""
     import struct
@@ -106,8 +128,8 @@ for src in [x for x in os.environ.get("FASIH_PREMIUM", "").split(os.pathsep) if 
             if not os.path.exists(os.path.join(src, f)):
                 continue
             if f == "units.bin":
-                # column by column it compresses about a third better; the installer restores it exactly
-                z.writestr("data/units.bin.t", transpose_units(os.path.join(src, f)))
+                # fixed fields column by column (about a third smaller), join features vector-quantized
+                z.writestr("data/units.bin.q", vq_units(os.path.join(src, f)))
             else:
                 # the Opus audio does not compress further: store it
                 z.write(os.path.join(src, f), "data/" + f, compress_type=zipfile.ZIP_STORED if f == "audio.opa" else zipfile.ZIP_DEFLATED)
