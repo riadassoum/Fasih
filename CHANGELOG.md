@@ -1,6 +1,10 @@
 # Changelog
 
-## 2.0 (in development)
+## 2.0.1
+
+- **Fasih speaks again on Windows**: in 2.0, every voice stopped speaking and NVDA logged an error for each sentence. This is fixed, and every voice, compact and premium, has been tested with the Windows engine.
+
+## 2.0
 
 ### Voices
 

@@ -100,7 +100,7 @@ make -j"$(nproc)" RHVoice_core || true    # the first link may fail on an outdat
 # zig's linker ignores --export-all-symbols: export the core's symbols with a .def file
 cd src/core
 for f in $(find CMakeFiles/RHVoice_core.dir -name "*.obj"); do nm -g --defined-only "$f" 2>/dev/null; done \
-  | awk '$2 ~ /^[TWDBR]$/ {print $3}' | grep -v '^\.\|^__\|^\.refptr' | sort -u | sed '1i EXPORTS' > core.def
+  | awk '$2 ~ /^[TW]$/ {print $3} $2 ~ /^[DBR]$/ {print $3" DATA"}' | grep -v '^\.\|^__\|^\.refptr' | sort -u -k1,1 | sed '1i EXPORTS' > core.def   # data (vtables, statics) as DATA, not as functions
 grep -q core.def CMakeFiles/RHVoice_core.dir/link.txt || sed -i "s|-Wl,--out-implib|$PWD/core.def -Wl,--out-implib|" CMakeFiles/RHVoice_core.dir/link.txt
 rm -f libRHVoice_core.dll; cd ../..
 make -j"$(nproc)" RHVoice
