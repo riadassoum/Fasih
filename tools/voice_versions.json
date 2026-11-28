@@ -391,7 +391,7 @@
  },
  "Zayd Premium": {
   "entry": {
-   "dataMd5": "W4ErgueyjpyB270hKqTi7A==",
+   "dataMd5": "PZDzUX8uXXEfBnhiby6drA==",
    "dataUrl": "https://github.com/riadassoum/Fasih/releases/download/voices/Fasih-voice-Zayd-Premium.zip",
    "description": "A premium voice of real recorded speech: the Zayd recordings that PlanetBlindTech shared for Fasih, about 12.5 hours.",
    "gender": "male",
@@ -400,10 +400,10 @@
    "name_ar": "\u0632\u064a\u062f",
    "quality": "premium",
    "sampleUrl": "https://github.com/riadassoum/Fasih/releases/download/voices/Fasih-sample-Zayd-Premium.wav",
-   "size": 251384006,
+   "size": 251384025,
    "version": "2.0"
   },
-  "sha256": "bd090dd3a9f4c29806b0d9d4db04e26d3fa29f7788c38bc453e6d3a5d4f55cec",
+  "sha256": "6a4909974936cae3c1aa49be272f859d5075783b17f2d3dbc3c78e9993995b64",
   "version": "2.0"
  }
 }

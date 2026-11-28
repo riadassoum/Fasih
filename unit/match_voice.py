@@ -1,17 +1,18 @@
 """Matches a premium voice to a compact Fasih voice: pace, loudness and tone.
 
-usage: match_voice.py PREMIUM_SAMPLE.wav COMPACT_SAMPLE.wav VOICE_DIR
+usage: match_voice.py PREMIUM_SAMPLE.wav COMPACT_SAMPLE.wav VOICE_DIR [limit_db]
 Both samples speak the same text at default settings. Writes into VOICE_DIR:
   weights.txt  "rate" (speech time, pauses excluded, made equal) and "level_db" (adjusted so the
                active-speech loudness is equal);
   eq.txt       RHVoice equalizer (v1): peaking filters at third-octave centres from 125 Hz to 10 kHz that
-               bring the long-term spectrum of the premium voice to the compact one's, limited to +-4 dB
+               bring the long-term spectrum of the premium voice to the compact one's, limited to +-limit_db (default 4)
                and smoothed across bands, so only the overall tone is matched, never the detail.
 """
 import sys, os, re
 import numpy as np, soundfile as sf, scipy.signal as ss
 
 P, C, vd = sys.argv[1:4]
+LIMIT = float(sys.argv[4]) if len(sys.argv) > 4 else 4.0   # dB per band
 p, sr = sf.read(P); c, _ = sf.read(C)
 
 def active(x):
@@ -38,7 +39,7 @@ for fc in centres:
     g.append(10 * np.log10(Pc[m].mean() / Pp[m].mean()))
 g = np.array(g); g -= np.average(g, weights=np.ones_like(g))  # overall level is handled by level_db
 g = np.convolve(np.pad(g, 1, mode="edge"), [0.25, 0.5, 0.25], "valid")
-g = np.clip(g, -4, 4)
+g = np.clip(g, -LIMIT, LIMIT)
 
 def peaking(fc, gain_db, q=4.3):                    # RBJ peaking EQ; Q 4.3 is about a third of an octave
     A = 10 ** (gain_db / 40); w = 2 * np.pi * fc / sr; al = np.sin(w) / (2 * q)
