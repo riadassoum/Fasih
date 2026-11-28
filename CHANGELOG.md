@@ -11,6 +11,7 @@
 - **Hadi (هادي)**: a male voice from a professional speaker's recordings, the smallest Fasih voice (2.5 MB).
 - **Listen from the internet**: voices added after your copy of Fasih was built play their sample from the internet in the download window, so every voice can be heard before you install it.
 - **Only updated voices are offered as updates**: "Check for updates" no longer offers voices that have not changed.
+- **Voice descriptions in your language**: the download window shows a description of the selected voice, in Arabic when NVDA is in Arabic, and downloaded voices are described in Arabic in NVDA's add-on manager too.
 
 ### Reading
 
@@ -21,6 +22,11 @@
 ### Help
 
 - **Up-to-date help**: the English and Arabic help pages now always match the current version.
+- **Full documentation in Arabic**: I wrote complete documentation in Arabic, in the docs/ar folder of the repository: installing and updating, every voice and where it comes from, with measurements comparing premium and compact voices, every setting, how the code and the engine work, training your own voices, and building the add-on.
+
+### Training your own voices
+
+- **Train from a fresh copy of the repository**: one command (`bash unit/build_engine.sh`) fetches and builds everything training needs, and both training scripts find it on their own. Compact training now finishes a voice exactly like Fasih's own, with its quality settings and modulation postfilter, and works with recordings whose names are not zero-padded. A new script, `unit/prune_voice.sh`, makes a premium voice smaller without an audible difference.
 
 ## 1.3.1
 
