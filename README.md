@@ -4,6 +4,8 @@ Fasih is a set of Arabic voices for NVDA, with a French voice as a companion, bu
 
 Developer: Riad Assoum ([github.com/riadassoum](https://github.com/riadassoum)).
 
+التوثيق الكامل بالعربية: [docs/ar](docs/ar/README.md) (Full documentation in Arabic).
+
 ## The voices
 
 The add-on comes with Riad and Aseel, the English voice Bdl and the French voice Elise. The other nineteen Arabic voices are voice packs: in NVDA's Tools menu, choose Fasih > Download voices, then "Arabic: Fasih voices", and install the ones you want (they become available after NVDA restarts). This keeps the add-on small. Besides these compact voices there are premium voices, Aseel Premium, Haytham Premium, Jamal Premium, Leen Premium and Zayd Premium: they are made of real recorded speech, chosen and joined unit by unit, with no neural vocoder in the way, so they sound like the person, at the cost of a larger download (150 to 235 MB each). Aseel and Leen are built from the datasets PlanetBlindTech published for BayanTTS, with Shamseddin's permission; Leen also has a compact voice.
