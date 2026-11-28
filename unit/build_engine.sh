@@ -20,9 +20,9 @@ if [ ! -d "$RHDIR/src/core" ]; then
   git -C "$RHDIR" checkout -q "$(cat "$REPO/engine/RHVOICE_BASE_COMMIT")"
 fi
 RH=$(cd "$RHDIR" && pwd)
-if [ ! -e "$RH/external/libs/sonic/sonic.c" ] || [ ! -d "$RH/external/libs/boost/libs/config/include" ]; then
+if [ ! -e "$RH/external/libs/sonic/sonic.c" ] || [ ! -d "$RH/external/libs/boost/libs/config/include" ] || [ ! -e "$RH/cmake/thirdParty/sanitizers/cmake/FindSanitizers.cmake" ]; then
   echo "fetching RHVoice's Sonic and Boost submodules"
-  subs=$(git -C "$RH" config -f .gitmodules --get-regexp 'submodule\..*\.path' | awk '{print $2}' | grep -E '^external/libs/(sonic|boost/)')
+  subs=$(git -C "$RH" config -f .gitmodules --get-regexp 'submodule\..*\.path' | awk '{print $2}' | grep -E '^(external/libs/(sonic|boost/)|cmake/thirdParty/|src/third-party/cldr)')
   git -C "$RH" submodule update -q --init --depth 1 $subs
 fi
 OPUS_SRC=${OPUS_SRC:-$REPO/build/opus}
