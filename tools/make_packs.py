@@ -31,6 +31,7 @@ INFO = {
     "Bassel": ("باسل", "male", "Trained on about 5.9 hours read for Fasih by speaker 1 of nipponjo's Arabic FastPitch (tts_arabic), the voice family Sami and Nour come from."),
     "Rana": ("رنا", "female", "Trained on about 7 hours read for Fasih by speaker 2 of nipponjo's Arabic FastPitch (tts_arabic), the voice family Sami and Nour come from."),
     "Haytham": ("هيثم", "male", "Trained on about 7.5 hours generated for Fasih with Google's Gemini text-to-speech and prepared by Riad Assoum: the most natural, widest-ranging Fasih voice."),
+    "Leen": ("لين", "female", "Trained on the Leen Arabic Dataset from PlanetBlindTech's BayanTTS (10,000 sentences), with Shamseddin's permission."),
     "Shahrazad": ("شهرزاد", "female", "A storyteller's voice, trained on Aida Boumaza's LibriVox reading of Alf Layla wa Layla (public domain)."),
 }
 _only = os.environ.get("FASIH_ONLY", "")
@@ -92,7 +93,7 @@ def transpose_units(path):
 
 
 # premium voices: the voice folder itself is data/
-PREMIUM_FILES = ("voice.info", "voice.params", "units.bin", "audio.opa", "mel.bin", "marks.bin", "models.bin", "phonesim.txt", "layout.txt", "phones.txt", "context.txt", "weights.txt")
+PREMIUM_FILES = ("voice.info", "voice.params", "units.bin", "audio.opa", "mel.bin", "marks.bin", "models.bin", "phonesim.txt", "layout.txt", "phones.txt", "context.txt", "weights.txt", "eq.txt")
 for src in [x for x in os.environ.get("FASIH_PREMIUM", "").split(os.pathsep) if x]:   # ":" between folders (";" on Windows), so names may have spaces
     info = dict(l.strip().split("=", 1) for l in open(os.path.join(src, "voice.info"), encoding="utf-8") if "=" in l)
     name = info["name"]
