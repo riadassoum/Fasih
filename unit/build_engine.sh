@@ -1,14 +1,40 @@
 #!/bin/bash
-# build_engine.sh RHVOICE_SRC [linux|windows]
-# Applies Fasih's engine patch and the unit-selection backend to an RHVoice checkout
-# (commit in engine/RHVOICE_BASE_COMMIT) and builds it.
-#   linux   -> RHVOICE_SRC/b   (label maker + test client used by the training tools)
-#   windows -> RHVOICE_SRC/bw  (RHVoice.dll + libRHVoice_core.dll for the add-on; zig 0.13 needed:
-#              pip install ziglang==0.13.0, and libboost-dev for the headers)
-#   OPUS_SRC: an Opus checkout (https://github.com/xiph/opus, v1.5.2), built here for the target
+# build_engine.sh [RHVOICE_SRC] [linux|windows]
+# Builds Fasih's RHVoice engine: Fasih's engine patches and the unit-selection backend applied to RHVoice
+# at the commit in engine/RHVOICE_BASE_COMMIT.
+#   bash unit/build_engine.sh                 everything is fetched into build/ (RHVoice, its Boost and
+#                                             Sonic submodules, Opus 1.5.2) and built for Linux
+#   bash unit/build_engine.sh "" windows      the Windows DLLs for the add-on (zig 0.13 needed:
+#                                             pip install ziglang==0.13.0)
+#   linux   -> RHVOICE_SRC/b   (label maker, test client and library used by the training tools; the
+#                               training scripts look for it in build/rhvoice/b unless RHV_BUILD is set)
+#   windows -> RHVOICE_SRC/bw  (RHVoice.dll + libRHVoice_core.dll)
+#   OPUS_SRC: an Opus checkout (default build/opus, fetched at v1.5.2)
 set -e
-RH=$(cd "$1" && pwd); TARGET=${2:-linux}
 HERE=$(cd "$(dirname "$0")" && pwd); REPO=$(cd "$HERE/.." && pwd)
+TARGET=${2:-linux}
+RHDIR=${1:-$REPO/build/rhvoice}
+if [ ! -d "$RHDIR/src/core" ]; then
+  echo "fetching RHVoice into $RHDIR"
+  git clone -q https://github.com/RHVoice/RHVoice "$RHDIR"
+  git -C "$RHDIR" checkout -q "$(cat "$REPO/engine/RHVOICE_BASE_COMMIT")"
+fi
+RH=$(cd "$RHDIR" && pwd)
+if [ ! -e "$RH/external/libs/sonic/sonic.c" ] || [ ! -d "$RH/external/libs/boost/libs/config/include" ]; then
+  echo "fetching RHVoice's Sonic and Boost submodules"
+  subs=$(git -C "$RH" config -f .gitmodules --get-regexp 'submodule\..*\.path' | awk '{print $2}' | grep -E '^external/libs/(sonic|boost/)')
+  git -C "$RH" submodule update -q --init --depth 1 $subs
+fi
+OPUS_SRC=${OPUS_SRC:-$REPO/build/opus}
+if [ ! -d "$OPUS_SRC/include" ]; then
+  echo "fetching Opus 1.5.2 into $OPUS_SRC"
+  git clone -q --depth 1 -b v1.5.2 https://github.com/xiph/opus "$OPUS_SRC"
+fi
+# Boost headers: the system's if installed, otherwise RHVoice's submodules
+BOOST_FLAGS=""
+if [ ! -f /usr/include/boost/version.hpp ]; then
+  for d in "$RH"/external/libs/boost/libs/*/include; do BOOST_FLAGS="$BOOST_FLAGS -I$d"; done
+fi
 cd "$RH"
 if [ ! -e src/core/us_core.cpp ]; then
   git apply "$REPO/engine/rhvoice-world-vocoder.patch"
@@ -36,20 +62,26 @@ s=s.replace('target_link_libraries(RHVoice_core "${libs2link}")','target_link_li
 open(p,'w').write(s)
 E
 fi
-OPUS=$(cd "${OPUS_SRC:?set OPUS_SRC to an opus checkout}" && pwd)
+OPUS=$(cd "$OPUS_SRC" && pwd)
 if [ "$TARGET" = linux ]; then
   (mkdir -p "$OPUS/bl" && cd "$OPUS/bl" && cmake .. -DCMAKE_BUILD_TYPE=Release -DOPUS_BUILD_PROGRAMS=OFF -DOPUS_BUILD_TESTING=OFF -DCMAKE_POSITION_INDEPENDENT_CODE=ON >/dev/null && make -j"$(nproc)" opus)
   mkdir -p b && cd b
-  cmake .. -DCMAKE_BUILD_TYPE=Release -DENABLE_SONIC=OFF -DWITH_DATA=OFF -DFASIH_OPUS_DIR="$OPUS" -DFASIH_OPUS_LIB="$OPUS/bl/libopus.a" >/dev/null
+  cmake .. -DCMAKE_BUILD_TYPE=Release -DENABLE_SONIC=OFF -DWITH_DATA=OFF -DCMAKE_CXX_FLAGS="-std=gnu++17$BOOST_FLAGS" -DFASIH_OPUS_DIR="$OPUS" -DFASIH_OPUS_LIB="$OPUS/bl/libopus.a" >/dev/null
   make -j"$(nproc)" RHVoice_core RHVoice-make-hts-labels RHVoice-test
   # the unit tools: test client and Opus encoder
   mkdir -p "$HERE/bin"
   gcc -O2 -c -o "$HERE/bin/miniz.o" "$HERE/src/miniz/miniz.c"
   g++ -O2 -std=c++17 -DFASIH_US_OPUS -I"$HERE/src" -I"$OPUS/include" -o "$HERE/bin/fasih-us-cli" "$HERE/src/us_cli.cpp" "$HERE/src/us_core.cpp" "$HERE/src/us_vocoder.cpp" "$HERE/bin/miniz.o" "$OPUS/bl/libopus.a" -lm -ldl -lpthread
   g++ -O2 -std=c++17 -I"$OPUS/include" -o "$HERE/bin/fasih-us-encode" "$HERE/src/us_encode.cpp" "$OPUS/bl/libopus.a" -lm
+  g++ -O2 -std=c++17 -I"$OPUS/include" -o "$HERE/bin/fasih-us-decode" "$HERE/src/us_decode.cpp" "$OPUS/bl/libopus.a" -lm
+  g++ -O2 -std=c++17 -DFASIH_US_OPUS -I"$HERE/src" -I"$OPUS/include" -o "$HERE/bin/fasih-us-usage" "$HERE/src/us_usage.cpp" "$HERE/src/us_core.cpp" "$HERE/src/us_vocoder.cpp" "$HERE/bin/miniz.o" "$OPUS/bl/libopus.a" -lm -ldl -lpthread
+  echo "engine built: $RH/b (the training scripts find it there)"
   exit 0
 fi
-Z="$REPO/tools/zig"; mkdir -p "$RH/boostinc"; ln -sfn /usr/include/boost "$RH/boostinc/boost"
+Z="$REPO/tools/zig"
+if [ -f /usr/include/boost/version.hpp ]; then   # zig does not search /usr/include
+  mkdir -p "$RH/boostinc"; ln -sfn /usr/include/boost "$RH/boostinc/boost"; BOOST_FLAGS="-isystem $RH/boostinc"
+fi
 mkdir -p bw && cd bw
 cat > tc.cmake <<E
 set(CMAKE_SYSTEM_NAME Windows)
@@ -59,7 +91,7 @@ set(CMAKE_CXX_COMPILER $Z/zc++)
 set(CMAKE_AR $Z/zar)
 set(CMAKE_RANLIB $Z/zranlib)
 set(CMAKE_RC_COMPILER $Z/zrc)
-set(CMAKE_CXX_FLAGS "-D_LIBCPP_ENABLE_CXX17_REMOVED_FEATURES -D_LIBCPP_ENABLE_CXX20_REMOVED_FEATURES -D_LIBCPP_ENABLE_CXX17_REMOVED_UNARY_BINARY_FUNCTION -D_LIBCPP_ENABLE_CXX20_REMOVED_NEGATORS -D_LIBCPP_ENABLE_CXX17_REMOVED_BINDERS -D_LIBCPP_ENABLE_CXX17_REMOVED_AUTO_PTR -isystem $RH/boostinc")
+set(CMAKE_CXX_FLAGS "-D_LIBCPP_ENABLE_CXX17_REMOVED_FEATURES -D_LIBCPP_ENABLE_CXX20_REMOVED_FEATURES -D_LIBCPP_ENABLE_CXX17_REMOVED_UNARY_BINARY_FUNCTION -D_LIBCPP_ENABLE_CXX20_REMOVED_NEGATORS -D_LIBCPP_ENABLE_CXX17_REMOVED_BINDERS -D_LIBCPP_ENABLE_CXX17_REMOVED_AUTO_PTR $BOOST_FLAGS")
 E
 echo 'set(CMAKE_SHARED_LINKER_FLAGS "-Wl,--export-all-symbols")' >> tc.cmake
 (mkdir -p "$OPUS/bwin" && cd "$OPUS/bwin" && cmake .. -DCMAKE_TOOLCHAIN_FILE="$RH/bw/tc.cmake" -DCMAKE_BUILD_TYPE=Release -DOPUS_BUILD_PROGRAMS=OFF -DOPUS_BUILD_TESTING=OFF -DOPUS_STACK_PROTECTOR=OFF -DOPUS_FORTIFY_SOURCE=OFF >/dev/null && make -j"$(nproc)" opus)

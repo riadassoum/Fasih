@@ -2,7 +2,8 @@
 # Build the Arabic data-only RHVoice language into $OUT (default ../Arabic)
 set -e
 HERE=$(cd "$(dirname "$0")" && pwd)
-RH=${RH:-/tmp/rh}
+RH=${RH:-$HERE/../build/rhvoice}   # an RHVoice checkout (unit/build_engine.sh fetches one)
+ALB=${ALB:-$RH/data/languages/Albanian}   # RHVoice's Albanian language (git -C $RH submodule update --init data/languages/Albanian)
 OUT=${1:-$HERE/Arabic}
 GEN=$HERE/src
 python3 "$HERE/gen_foma.py" "$GEN" >/dev/null
@@ -15,7 +16,7 @@ for f in g2p syl tok downcase gpos spell numbers key msg lseq; do
 done
 python3 "$RH/src/scripts/general/dtree2bin" phrasing.tree "$OUT/phrasing.dt"
 cp phonemes.xml "$OUT/"
-sed 's/prev_ph_flag_l\|next_ph_flag_l\|ph_flag_l/none/' /tmp/alb/labelling.xml > "$OUT/labelling.xml"
+sed 's/prev_ph_flag_l\|next_ph_flag_l\|ph_flag_l/none/' "$ALB/labelling.xml" > "$OUT/labelling.xml"
 python3 - "$OUT/graph.txt" <<'EOF'
 import sys
 letters = [chr(c) for c in list(range(0x0621, 0x063B)) + list(range(0x0641, 0x064B))] + ["ٱ", "ڤ", "پ", "گ", "چ"]

@@ -21,7 +21,7 @@ mono = sorted(n[:-4] for n in os.listdir(os.path.join(W, "mono")) if n.endswith(
 with open(os.path.join(W, "mono.ssml"), "w", encoding="utf-8") as f:
     f.write('<speak xml:lang="%s">\n' % ("en" if EN else "fr" if FR else "ar") + "".join("<s>" + escape(mark_wasl(text[u])) + "</s>\n" for u in mono) + "</speak>\n")
 os.makedirs(os.path.join(W, "full"), exist_ok=True)
-env = dict(os.environ, RHVOICE_DATA_PATH=os.path.join(ROOT, "data"), RHVOICE_CONFIG_PATH=os.environ.get("RHVOICE_LABEL_CONFIG", "/tmp/labt"))
-r = subprocess.run([os.environ.get("RHVOICE_LABELS", "/tmp/rhb2/src/utils/RHVoice-make-hts-labels"), "-l", os.path.join(W, "mono"),
+env = dict(os.environ, RHVOICE_DATA_PATH=os.path.join(ROOT, "data"), RHVOICE_CONFIG_PATH=os.environ.get("RHVOICE_LABEL_CONFIG", os.path.join(ROOT, "labelcfg")))
+r = subprocess.run([os.environ.get("RHVOICE_LABELS", os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "build", "rhvoice", "b", "src", "utils", "RHVoice-make-hts-labels")), "-l", os.path.join(W, "mono"),
                     os.path.join(W, "mono.ssml"), os.path.join(W, "full")], env=env, capture_output=True, text=True)
 print(len(mono), "utterances; rc", r.returncode, r.stderr[-500:])

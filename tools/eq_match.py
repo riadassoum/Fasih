@@ -1,11 +1,17 @@
-"""eq_match.py REF1,REF2,... TARGET OUT: a gentle tone filter (bass and brightness, +-4 dB) matching TARGET to the median spectrum of the reference voices, all reading the same sentences. Needs the voices in /tmp/prodata and a built libRHVoice."""
+"""eq_match.py REF1,REF2,... TARGET OUT DATA_DIR TEXTS
+A gentle tone filter (bass and brightness, +-4 dB) matching voice TARGET to the median spectrum of the
+reference voices, all reading the same sentences. Writes OUT.npy (for RHV_EQ_MC when the voice is written).
+  DATA_DIR: an RHVoice data folder holding the voices (DATA_DIR/voices/NAME, each with 24000/voice.data)
+  TEXTS:    a text file, one diacritized sentence per line (or a text.tsv: id, duration, text); 12 are used
+Needs the Linux engine from unit/build_engine.sh (or RHVOICE_LIB)."""
 import sys,os,numpy as np,pyworld as pw,pysptk
-REF=sys.argv[1].split(","); TGT=sys.argv[2]; OUT=sys.argv[3]
+REF=sys.argv[1].split(","); TGT=sys.argv[2]; OUT=sys.argv[3]; DATA=os.path.abspath(sys.argv[4]); TXT=sys.argv[5]
+HERE=os.path.dirname(os.path.abspath(__file__)); REPO=os.path.dirname(HERE)
 sys.argv=[sys.argv[0],"/tmp/x",TGT,"/dev/null"]
-src=open("/home/claude/rhv/tools/eval_voice.py").read(); sys.path.insert(0,"/home/claude/rhv/scripts")
-src=src[:src.index("@njit")].replace('os.path.join(root, "data").encode()','"/tmp/prodata".encode()')
-os.environ.setdefault("RHVOICE_LIB","/tmp/rhb2/src/lib/libRHVoice.so"); exec(src)
-T=[l.split("\t")[2].strip() for l in open("/home/claude/newv/kareem/corpus2/text.tsv",encoding="utf-8")][1000:1012]
+src=open(os.path.join(HERE,"eval_voice.py")).read(); sys.path.insert(0,os.path.join(REPO,"scripts"))
+src=src[:src.index("@njit")].replace('os.path.join(root, "data").encode()',repr(DATA)+'.encode()')
+exec(src)
+T=[(l.split("\t")[2] if l.count("\t")>=2 else l).strip() for l in open(TXT,encoding="utf-8") if l.strip()][:12]
 def avg(v):
     global voice; voice=v; M=[]
     for t in T:

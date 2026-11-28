@@ -1,9 +1,10 @@
 """Fine-tune Rawi v3 (Apache-2.0, TigreGotico) on extra vowelled text, CPU only.
 usage: ft.py TRAIN.txt OUT.pth [hours] [lr]"""
+import os
 import sys, json, time, random, unicodedata, math
 import torch, torch.nn as nn
 torch.set_num_threads(2)
-R = "/home/claude/rawift"
+R = os.environ.get("RAWI_FT_DIR", "rawift")   # the fine-tuning workspace (data, checkpoints); see the docstring
 voc = json.load(open(R + "/rawi_v3.vocab.json")); C2I, D2I = voc["char_to_idx"], voc["diac_to_idx"]
 I2D = {v: k for k, v in D2I.items()}
 

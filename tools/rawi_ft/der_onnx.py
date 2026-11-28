@@ -2,7 +2,7 @@
 usage: der_onnx.py TEST.txt MODEL.onnx..."""
 import sys, json, unicodedata, time
 import numpy as np, onnxruntime as ort
-voc = json.load(open("/home/claude/rawift/rawi_v3.vocab.json")); C2I, D2I = voc["char_to_idx"], voc["diac_to_idx"]; I2D = {v: k for k, v in D2I.items()}
+voc = json.load(open(os.path.join(os.environ.get("RAWI_FT_DIR", "rawift"), "rawi_v3.vocab.json"))); C2I, D2I = voc["char_to_idx"], voc["diac_to_idx"]; I2D = {v: k for k, v in D2I.items()}
 H = "ًٌٍَُِّْ"
 def diac(sess, bare):
     t = unicodedata.normalize("NFD", bare); t = "".join(c for c in t if unicodedata.category(c) != "Mn")

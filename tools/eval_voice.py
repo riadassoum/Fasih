@@ -14,7 +14,7 @@ if os.environ.get("RHV_LANG") == "French":
     from fr_prep import prepare as mark_wasl
 root, voice, hold = sys.argv[1:4]
 outdir = sys.argv[4] if len(sys.argv) > 4 else None
-lib = CDLL(os.environ.get("RHVOICE_LIB", "/tmp/rhb2/src/lib/libRHVoice.so"))
+lib = CDLL(os.environ.get("RHVOICE_LIB", os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "build", "rhvoice", "b", "src", "lib", "libRHVoice.so")))
 SR_CB = CFUNCTYPE(c_int, c_int, c_void_p); SPEECH_CB = CFUNCTYPE(c_int, POINTER(c_short), c_uint, c_void_p)
 MARK_CB = CFUNCTYPE(c_int, c_char_p, c_void_p); WORD_CB = CFUNCTYPE(c_int, c_uint, c_uint, c_void_p)
 AUDIO_CB = CFUNCTYPE(c_int, c_char_p, c_void_p); DONE_CB = CFUNCTYPE(None, c_void_p)
@@ -35,7 +35,7 @@ def on_speech(samples, n, ud):
     buf.append(np.ctypeslib.as_array(samples, (n,)).copy()); return 1
 cbs = Callbacks(SR_CB(lambda *a: 1), SPEECH_CB(on_speech), MARK_CB(lambda *a: 1), WORD_CB(lambda *a: 1), WORD_CB(lambda *a: 1),
                 WORD_CB(lambda *a: 1), WORD_CB(lambda *a: 1), AUDIO_CB(lambda *a: 1), DONE_CB(lambda *a: None))
-eng = lib.RHVoice_new_tts_engine(byref(Init(os.path.join(root, "data").encode(), b"/tmp/evalcfg", (c_char_p * 1)(None), cbs, 0)))
+eng = lib.RHVoice_new_tts_engine(byref(Init(os.path.join(root, "data").encode(), __import__("tempfile").mkdtemp().encode(), (c_char_p * 1)(None), cbs, 0)))
 assert eng
 
 def synth(text):

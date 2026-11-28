@@ -1,7 +1,8 @@
 """Export a fine-tuned Rawi v3 to ONNX with the ensemble's interface: input int64 [batch, seq]
 -> gated_cls int64 [batch, seq] (0 = no mark). usage: export.py IN.pth OUT.onnx"""
+import os
 import sys, torch
-sys.path.insert(0, "/home/claude/rawift/work"); from ft import M
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__))); from ft import M
 class G(torch.nn.Module):
     def __init__(s, m): super().__init__(); s.m = m
     def forward(s, x):

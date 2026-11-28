@@ -7,12 +7,12 @@
 #   LANGUAGE: Arabic (default), English or French; GENDER: male (default) or female
 # Premium voices are the real recordings (audio.opa, Opus, OPUS_KBPS default 24), joined directly with
 # no vocoder. SPECTRUM_VOICE=1 makes an experimental spectrum voice (mel.bin, needs the Vocos vocoder).
-# Environment: RHV_BUILD (RHVoice Linux build from build_engine.sh, default ../rhv/b),
+# Environment: RHV_BUILD (RHVoice Linux build from build_engine.sh, default build/rhvoice/b),
 #   RHV_F0_MIN / RHV_F0_MAX (pitch range, default 60-400 Hz), OPUS_KBPS (default 24), WORKERS (2)
 set -euo pipefail
 NAME=${1:?name}; SRC=$(cd "${2:?corpus}" && pwd); R=$(realpath -m "${3:?outdir}"); LANG_=${4:-Arabic}; GENDER=${5:-male}
 HERE=$(cd "$(dirname "$0")" && pwd); REPO=$(cd "$HERE/.." && pwd)
-RB=$(cd "${RHV_BUILD:-$REPO/../rhv/b}" && pwd)
+RB=$(cd "${RHV_BUILD:-$REPO/build/rhvoice/b}" && pwd)
 W=${WORKERS:-2}
 export LD_LIBRARY_PATH="$RB/src/core${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 export RHVOICE_LABELS="$RB/src/utils/RHVoice-make-hts-labels" RHVOICE_LABEL_CONFIG="$R/labelcfg" RHV_LANG="$LANG_"

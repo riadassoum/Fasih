@@ -5,3 +5,4 @@ corpus/
 build/
 out/
 *.nvda-addon
+unit/bin/
