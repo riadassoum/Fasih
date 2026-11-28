@@ -134,8 +134,9 @@ class FasihVoiceBundle(addonHandler.AddonBundle):
 		self.files = {}
 		self._conf = ConfigObj(configspec=addonHandler.AddonManifest.configspec, encoding="utf-8", default_encoding="utf-8")
 		self._conf["name"] = "RHVoice-voice-fasih-%s" % voice["id"]
-		self._conf["summary"] = ("Fasih %s (premium Arabic voice)" if voice.get("quality") == "premium" else "Fasih %s (Arabic voice)") % voice["name"]
-		self._conf["description"] = voice.get("description", self._conf["summary"])
+		# Translators: the summary of a downloaded voice in NVDA's add-on manager; %s is the voice's name
+		self._conf["summary"] = (_("Fasih %s (premium Arabic voice)") if voice.get("quality") == "premium" else _("Fasih %s (Arabic voice)")) % _localized(voice, "name")
+		self._conf["description"] = _localized(voice, "description") or self._conf["summary"]
 		self._conf["author"] = voice.get("author", "Riad Assoum")
 		self._conf["version"] = voice["version"]
 		self._conf["minimumNVDAVersion"] = "2026.1.0"
@@ -218,6 +219,16 @@ def _unpack_vq_units(src, dst):
 	with open(dst + ".tmp", "wb") as f:
 		f.write(out)
 	os.replace(dst + ".tmp", dst)
+
+
+def _ui_lang():
+	return (languageHandler.getLanguage() or "").split("_")[0]
+
+
+def _localized(voice, key):
+	"""A catalogue field in NVDA's language when voices.json has it ("description_ar", "name_ar"...),
+	otherwise the English one."""
+	return voice.get("%s_%s" % (key, _ui_lang())) or voice.get(key, "")
 
 
 def _untranspose_units(src, dst):
@@ -462,6 +473,9 @@ class VoicesDialog(wx.Dialog):
 			self.voiceList.AppendColumn(label, width=150)
 		self.voiceList.Bind(wx.EVT_LIST_ITEM_SELECTED, lambda e: self.updateButtons())
 		sizer.Add(self.voiceList, flag=wx.EXPAND | wx.ALL, border=8)
+		sizer.Add(wx.StaticText(self, label=_("&Description:")), flag=wx.LEFT, border=8)
+		self.descriptionBox = wx.TextCtrl(self, style=wx.TE_MULTILINE | wx.TE_READONLY, size=(480, 70))
+		sizer.Add(self.descriptionBox, flag=wx.EXPAND | wx.ALL, border=8)
 		buttons = wx.BoxSizer(wx.HORIZONTAL)
 		self.installButton = wx.Button(self, label=_("&Install"))
 		self.removeButton = wx.Button(self, label=_("&Remove"))
@@ -499,7 +513,7 @@ class VoicesDialog(wx.Dialog):
 				status = _("Will be installed after restart") if b.isPendingInstall else _("Not installed")
 			label = voice["name"]
 			if lang.get("fasih"):
-				label = "%s (%s, %s)" % (voice.get("name_ar", voice["name"]) if (languageHandler.getLanguage() or "").startswith("ar") else voice["name"],
+				label = "%s (%s, %s)" % (_localized(voice, "name"),
 					_("premium") if voice.get("quality") == "premium" else _("compact"),
 					_("female") if voice.get("gender") == "female" else _("male"))
 			self.voiceList.Append((label, status, b.version))
@@ -514,6 +528,8 @@ class VoicesDialog(wx.Dialog):
 
 	def updateButtons(self):
 		_i, b = self.selected()
+		voice = getattr(b, "_voice", None) if b else None
+		self.descriptionBox.SetValue(_localized(voice, "description") if voice else "")
 		pending = b is None or b.requiresRestart
 		update = bool(b) and b.isInstalled and not pending and _newer(b.version, _installed_version(b))
 		self.installButton.SetLabel(_("&Update") if update else _("&Install"))

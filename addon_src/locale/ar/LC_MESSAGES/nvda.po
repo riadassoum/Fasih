@@ -530,3 +530,12 @@ msgstr "ممتاز"
 
 msgid "compact"
 msgstr "مدمج"
+
+msgid "&Description:"
+msgstr "الو&صف:"
+
+msgid "Fasih %s (premium Arabic voice)"
+msgstr "فصيح %s (صوت عربي ممتاز)"
+
+msgid "Fasih %s (Arabic voice)"
+msgstr "فصيح %s (صوت عربي)"

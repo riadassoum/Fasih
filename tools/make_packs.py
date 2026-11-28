@@ -165,6 +165,11 @@ for name, rec in sorted(REG.items()):
         continue
     voices.append(rec["entry"])
 voices.sort(key=lambda v: (v.get("quality") == "premium", v["name"]))
+# descriptions in Arabic, shown when NVDA's language is Arabic (the add-on falls back to English)
+AR_DESC = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "voice_descriptions_ar.json"), encoding="utf-8"))
+for v in voices:
+    if v["name"] in AR_DESC:
+        v["description_ar"] = AR_DESC[v["name"]]
 json.dump(REG, open(REG_PATH, "w", encoding="utf-8"), indent=1, sort_keys=True)
 json.dump({"version": 1, "voices": voices}, open(os.path.join(OUT, "voices.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
 print("voices.json:", len(voices), "voices")
